@@ -25,8 +25,6 @@ class Gaussian:
         G4_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
         G5_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
 
-        self.crystal = crystal
-
         for key, value in sym_params.items():
             if key == 'G1':
                 self.G1_params = value
@@ -44,33 +42,114 @@ class Gaussian:
                 if key in G1_keywords:
                     pass
                 else:
-                    raise NotImplementedError(f"Unknown parameter: {key}.")
+                    raise NotImplementedError(
+                            f"Unknown parameter: {key}. "\
+                            f"The available parameters are {G1_keywords}.")
+
             self.G1 = self.calculate('G1', crystal, self.G1_params)
+
+        if self.G2_params is not None:
+            for key, value in self.G2_params.items():
+                if key in G2_keywords:
+                    pass
+                else:
+                    raise NotImplementedError(
+                            f"Unknown parameter: {key}. "\
+                            f"The available parameters are {G2_keywords}.")
+            
+            self.G2 = self.calculate('G2', crystal, self.G2_params)
+
+        if self.G3_params is not None:
+            for key, value in self.G3_params.items():
+                if key in G3_keywords:
+                    pass
+                else:
+                    raise NotImplementedError(
+                            f"Unknown parameter: {key}. "\
+                            f"The available parameters are {G3_keywords}.")
+            
+            self.G3 = self.calculate('G3', crystal, self.G3_params)
+
+        if self.G4_params is not None:
+            for key, value in self.G4_params.items():
+                if key in G4_keywords:
+                    pass
+                else:
+                    raise NotImplementedError(
+                            f"Unknown parameter: {key}. "\
+                            f"The available parameters are {G4_keywords}.")
+
+            self.G4 = self.calculate('G4', crystal, self.G4_params)
+
+        if self.G5_params is not None:
+            for key, value in self.G5_params.items():
+                if key in G5_keywords:
+                    pass
+                else:
+                    raise NotImplementedError(
+                            f"Unknown parameter: {key}. "\
+                            f"The available parameters are {G5_keywords}.")
+
+            self.G5 = self.calculate('G5', crystal, self.G5_params)
 
 
     def calculate(self, G_type, crystal, sym_params):
         if G_type == 'G1':
             G = []
-            self.G1_Rc = [6.5]
-            self.G1_cutoff_f = ['Cosine']
+            G1_Rc = [6.5]
+            G1_cutoff_f = ['Cosine']
 
             for key, value in sym_params.items():
                 if key == 'Rc':
                     if isinstance(value, list):
-                        self.G1_Rc = value
+                        G1_Rc = value
                     else:
-                        self.G1_Rc = [value]
+                        G1_Rc = [value]
                 elif key == 'cutoff_f':
                     if isinstance(value, list):
-                        self.G1_cutoff_f = value
+                        G1_cutoff_f = value
                     else:
-                        self.G1_cutoff_f = [value]
+                        G1_cutoff_f = [value]
 
-            for Rc in self.G1_Rc:
-                for cutoff_f in self.G1_cutoff_f:
-                    print(cutoff_f)
+            for Rc in G1_Rc:
+                for cutoff_f in G1_cutoff_f:
                     g = calculate_G1(crystal, cutoff_f, Rc)
                     G.append(g)
+
+        if G_type == 'G2':
+            G = []
+            G2_Rc = [6.5]
+            G2_cutoff_f = ['Cosine']
+            G2_Rs = [0.0]
+
+            for key, value in sym_params.items():
+                if key == 'Rc':
+                    if isinstance(value, list):
+                        G2_Rc = value
+                    else:
+                        G2_Rc = [value]
+                elif key == 'cutoff_f':
+                    if isinstance(value, list):
+                        G2_cutoff_f = value
+                    else:
+                        G2_cutoff_f = [value]
+                elif key == 'Rs':
+                    if isinstance(value, list):
+                        G2_Rs = value
+                    else:
+                        G2_Rs = [value]
+                elif key == 'eta':
+                    if isinstance(value, list):
+                        G2_eta = value
+                    else:
+                        G2_eta = [value]
+
+            for Rc in G2_Rc:
+                for Rs in G2_Rs:
+                    for cutoff_f in G2_cutoff_f:
+                        for eta in G2_eta:
+                            g = calculate_G2(crystal, cutoff_f, Rc, eta, Rs)
+                            G.append(g)
 
         return G            
 
@@ -1112,10 +1191,10 @@ crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
 #print(G5_derivative(crystal))
 
 sym_params = {'G1': {'Rc': [6.5],
-                        'cutoff_f': ['Cosine']}}
-#                'G2': {'eta': [0.05, 0.1, 0.5, 0.75],
-#                        'Rc': [6.5],
-#                        'cutoff_f': None}}
+                        'cutoff_f': ['Cosine']},
+                'G2': {'eta': [0.05, 0.1, 0.5, 0.75],
+                        'Rc': [6.5]}}
 
 gauss = Gaussian(crystal, sym_params)
-#print(gauss.G1)
+print(gauss.G1)
+print(gauss.G2)
