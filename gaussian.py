@@ -25,7 +25,9 @@ class Gaussian:
         G4_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
         G5_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
 
-        for key, value in sym_params:
+        self.crystal = crystal
+
+        for key, value in sym_params.items():
             if key == 'G1':
                 self.G1_params = value
             elif key == 'G2':
@@ -37,12 +39,41 @@ class Gaussian:
             else:
                 self.G5_params = value
 
-        for k, v in self.G1_params
+        if self.G1_params is not None:
+            for key, value in self.G1_params.items():
+                if key in G1_keywords:
+                    pass
+                else:
+                    raise NotImplementedError(f"Unknown parameter: {key}.")
+            self.G1 = self.calculate('G1', crystal, self.G1_params)
 
 
+    def calculate(self, G_type, crystal, sym_params):
+        if G_type == 'G1':
+            G = []
+            self.G1_Rc = [6.5]
+            self.G1_cutoff_f = ['Cosine']
 
-    def calculate(self, sym, eta):
-        pass
+            for key, value in sym_params.items():
+                if key == 'Rc':
+                    if isinstance(value, list):
+                        self.G1_Rc = value
+                    else:
+                        self.G1_Rc = [value]
+                elif key == 'cutoff_f':
+                    if isinstance(value, list):
+                        self.G1_cutoff_f = value
+                    else:
+                        self.G1_cutoff_f = [value]
+
+            for Rc in self.G1_Rc:
+                for cutoff_f in self.G1_cutoff_f:
+                    print(cutoff_f)
+                    g = calculate_G1(crystal, cutoff_f, Rc)
+                    G.append(g)
+
+        return G            
+
 
     def calculate_derivative(self, sym):
         pass
@@ -1073,9 +1104,18 @@ def G5_derivative(crystal, cutoff_f='Cosine',
     return G5D
 
 
-#crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
+crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
 #print(G1_derivative(crystal))
 #print(G2_derivative(crystal))
 #print(G3_derivative(crystal))
 #print(G4_derivative(crystal))
 #print(G5_derivative(crystal))
+
+sym_params = {'G1': {'Rc': [6.5],
+                        'cutoff_f': ['Cosine']}}
+#                'G2': {'eta': [0.05, 0.1, 0.5, 0.75],
+#                        'Rc': [6.5],
+#                        'cutoff_f': None}}
+
+gauss = Gaussian(crystal, sym_params)
+#print(gauss.G1)
