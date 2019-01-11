@@ -5,7 +5,7 @@ from pymatgen.core.structure import Structure
 ################################ Gaussian Class ###############################
 
 
-class Gaussian:
+class SyF:
     """
     Get the all the desired symmetry functions.
 
@@ -13,7 +13,7 @@ class Gaussian:
     ----------
     
     """
-    def __init__(self, crystal, sym_params):
+    def __init__(self, crystal, sym_params, derivative=False):
         self.G1_params = None
         self.G2_params = None
         self.G3_params = None
@@ -1292,18 +1292,18 @@ def G5_derivative(crystal, cutoff_f='Cosine',
     return G5D
 
 
-crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
+#crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
 #print(G1_derivative(crystal))
 #print(G2_derivative(crystal))
 #print(G3_derivative(crystal))
 #print(G4_derivative(crystal))
 #print(G5_derivative(crystal))
 
-sym_params = {'G1': {'Rc': [6.5],
-                        'cutoff_f': ['Cosine']},
-                'G2': {'eta': [0.05, 0.1, 0.5, 0.75],
-                        'Rc': [6.5]}}
+#sym_params = {'G1': {'Rc': [6.5],
+#                        'cutoff_f': ['Cosine']},
+#                'G2': {'eta': [0.05, 0.1, 0.5, 0.75],
+#                        'Rc': [6.5]}}
 
-gauss = Gaussian(crystal, sym_params)
-print(gauss.G1)
-print(gauss.G2)
+#gauss = Gaussian(crystal, sym_params)
+#print(gauss.G1)
+#print(gauss.G2)
