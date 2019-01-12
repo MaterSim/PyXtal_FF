@@ -637,13 +637,12 @@ def calculate_G1(crystal, cutoff_f='Cosine', Rc=6.5):
     
     # Get neighbors information
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
     
     G1 = []
     
     for i in range(n_core):
         G1_core = 0
-        for j in range(n_neighbors):
+        for j in range(len(neighbors[i])):
             Rij = np.linalg.norm(core_cartesians[i] - 
                                  neighbors[i][j][0].coords)
             G1_core += func(Rij)
@@ -653,7 +652,7 @@ def calculate_G1(crystal, cutoff_f='Cosine', Rc=6.5):
 
 
 def G1_derivative(crystal, cutoff_f='Cosine', Rc=6.5, p=1, q=0):
-    '''
+    """
     Calculate the derivative of the G1 symmetry function.
     
     Args:
@@ -671,7 +670,7 @@ def G1_derivative(crystal, cutoff_f='Cosine', Rc=6.5, p=1, q=0):
     Returns:
         G1D: float
             The value of the derivative of the G1 symmetry function.
-    '''
+    """
     # Cutoff functional
     if cutoff_f == 'Cosine':
         func = Cosine(Rc=Rc)
@@ -688,13 +687,12 @@ def G1_derivative(crystal, cutoff_f='Cosine', Rc=6.5, p=1, q=0):
 
     # Get neighbors information
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
 
     G1D = []
 
     for i in range(n_core):
         G1D_core = 0
-        for j in range(n_neighbors):
+        for j in range(len(neighbors[i])):
             Ri = core_cartesians[i]
             Rj = neighbors[i][j][0].coords
             Rij = np.linalg.norm(Rj - Ri)
@@ -752,13 +750,11 @@ def calculate_G2(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0):
     
     # Their neighbors within the cutoff radius
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
-    
     G2 = []
 
     for i in range(n_core):
         G2_core = 0
-        for j in range(n_neighbors):
+        for j in range(len(neighbors[i])):
             Rij = np.linalg.norm(core_cartesians[i] - 
                                  neighbors[i][j][0]._coords)
             G2_core += np.exp(-eta * Rij ** 2. / Rc ** 2.) * func(Rij)
@@ -768,7 +764,7 @@ def calculate_G2(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0):
 
 
 def G2_derivative(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0, p=1, q=0):
-    '''
+    """
     Calculate the derivative of the G2 symmetry function.
     
     Args:
@@ -785,7 +781,7 @@ def G2_derivative(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0, p=1, q=0):
     Returns:
         G2D: float
             The derivative of G2 symmetry function
-    '''
+    """
     # Cutoff functional
     if cutoff_f == 'Cosine':
         func = Cosine(Rc=Rc)
@@ -802,13 +798,12 @@ def G2_derivative(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0, p=1, q=0):
 
     # Their neighbors within the cutoff radius
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
 
     G2D = []
 
     for i in range(n_core):
         G2D_core = 0
-        for j in range(n_neighbors):
+        for j in range(len(neighbors[i])):
             Ri = core_cartesians[i]
             Rj = neighbors[i][j][0]._coords
             Rij = np.linalg.norm(Rj - Ri)
@@ -868,13 +863,12 @@ def calculate_G3(crystal, cutoff_f='Cosine', Rc=6.5, k=10):
     
     # Get neighbors information
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
     
     G3 = []
     
     for i in range(n_core):
         G3_core = 0
-        for j in range(n_neighbors):
+        for j in range(len(neighbors[i])):
             Rij = np.linalg.norm(core_cartesians[i] - 
                                  neighbors[i][j][0].coords)
             G3_core += np.cos(k * Rij / Rc) * func(Rij)
@@ -884,7 +878,7 @@ def calculate_G3(crystal, cutoff_f='Cosine', Rc=6.5, k=10):
 
 
 def G3_derivative(crystal, cutoff_f='Cosine', Rc=6.5, k=10, p=1, q=0):
-    '''
+    """
     Calculate derivative of the G3 symmetry function.
     
     Args:
@@ -900,7 +894,7 @@ def G3_derivative(crystal, cutoff_f='Cosine', Rc=6.5, k=10, p=1, q=0):
     Returns:
         G3D: float
             Derivative of G3 symmetry function
-    '''
+    """
     if cutoff_f == 'Cosine':
         func = Cosine(Rc=Rc)
     else:
@@ -912,13 +906,12 @@ def G3_derivative(crystal, cutoff_f='Cosine', Rc=6.5, k=10, p=1, q=0):
 
     # Get neighbors information
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
 
     G3D = []
 
     for i in range(n_core):
         G3D_core = 0
-        for j in range(n_neighbors):
+        for j in range(len(neighbors[i])):
             Ri = core_cartesians[i]
             Rj = neighbors[i][j][0].coords
             Rij = np.linalg.norm(Rj - Ri)
@@ -982,13 +975,13 @@ def calculate_G4(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     
     # Get neighbors information
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
     
     G4 = []
+
     for i in range(n_core):
         G4_core = 0.0
-        for j in range(n_neighbors-1):
-            for k in range(j+1, n_neighbors):
+        for j in range(len(neighbors[i])-1):
+            for k in range(j+1, len(neighbors[i])):
                 Ri = core_cartesians[i]
                 Rj = neighbors[i][j][0].coords
                 Rk = neighbors[i][k][0].coords
@@ -1060,13 +1053,13 @@ def G4_derivative(crystal, cutoff_f='Cosine',
     
     # Get neighbors information
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
     
     G4D = []
+
     for i in range(n_core):
         G4D_core = 0.0
-        for j in range(n_neighbors-1):
-            for k in range(j+1, n_neighbors):
+        for j in range(len(neighbors[i])-1):
+            for k in range(j+1, len(neighbors[i])):
                 Ri = core_cartesians[i]
                 Rj = neighbors[i][j][0].coords
                 Rk = neighbors[i][k][0].coords
@@ -1175,13 +1168,13 @@ def calculate_G5(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     
     # Get neighbors information
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
     
     G5 = []
+
     for i in range(n_core):
         G5_core = 0.0
-        for j in range(n_neighbors-1):
-            for k in range(j+1, n_neighbors):
+        for j in range(len(neighbors[i])-1):
+            for k in range(j+1, len(neighbors[i])):
                 Rij_vector = core_cartesians[i] - neighbors[i][j][0].coords
                 Rij = np.linalg.norm(Rij_vector)
                 Rik_vector = core_cartesians[i] - neighbors[i][k][0].coords
@@ -1242,13 +1235,13 @@ def G5_derivative(crystal, cutoff_f='Cosine',
     
     # Get neighbors information
     neighbors = crystal.get_all_neighbors(Rc)
-    n_neighbors = len(neighbors[1])
     
     G5D = []
+
     for i in range(n_core):
         G5D_core = 0.0
-        for j in range(n_neighbors-1):
-            for k in range(j+1, n_neighbors):
+        for j in range(len(neighbors[i])-1):
+            for k in range(j+1, len(neighbors[i])):
                 Ri = core_cartesians[i]
                 Rj = neighbors[i][j][0].coords
                 Rk = neighbors[i][k][0].coords
@@ -1294,16 +1287,17 @@ def G5_derivative(crystal, cutoff_f='Cosine',
 
 #crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
 #print(G1_derivative(crystal))
-#print(G2_derivative(crystal))
+#G2_derivative(crystal)
 #print(G3_derivative(crystal))
 #print(G4_derivative(crystal))
 #print(G5_derivative(crystal))
 
-#sym_params = {'G1': {'Rc': [6.5],
-#                        'cutoff_f': ['Cosine']},
-#                'G2': {'eta': [0.05, 0.1, 0.5, 0.75],
-#                        'Rc': [6.5]}}
+#sym_params = {'G2': {'eta': [np.logspace(np.log10(0.05), 
+#                                         np.log10(5.), num=4)]}, 
+#                'G5': {'eta': [0.005],
+#                        'zeta': [1., 4.],
+#                        'lamBda': [1., -1.]}}
 
-#gauss = Gaussian(crystal, sym_params)
+#gauss = SyF(crystal, sym_params)
 #print(gauss.G1)
 #print(gauss.G2)
