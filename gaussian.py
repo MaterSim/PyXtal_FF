@@ -101,12 +101,12 @@ class SyF:
 
             for key, value in sym_params.items():
                 if key == 'Rc':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G1_Rc = value
                     else:
                         G1_Rc = [value]
                 elif key == 'cutoff_f':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G1_cutoff_f = value
                     else:
                         G1_cutoff_f = [value]
@@ -124,31 +124,33 @@ class SyF:
 
             for key, value in sym_params.items():
                 if key == 'Rc':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G2_Rc = value
                     else:
                         G2_Rc = [value]
                 elif key == 'cutoff_f':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G2_cutoff_f = value
                     else:
                         G2_cutoff_f = [value]
                 elif key == 'Rs':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G2_Rs = value
                     else:
                         G2_Rs = [value]
                 elif key == 'eta':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G2_eta = value
                     else:
                         G2_eta = [value]
-
+            
             for Rc in G2_Rc:
                 for Rs in G2_Rs:
                     for cutoff_f in G2_cutoff_f:
                         for eta in G2_eta:
                             g = calculate_G2(crystal, cutoff_f, Rc, eta, Rs)
+                            print(f"This is for eta: {eta}")
+                            print(g)
                             G.append(g)
                             
         elif G_type == 'G3':
@@ -159,17 +161,17 @@ class SyF:
 
             for key, value in sym_params.items():
                 if key == 'Rc':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G3_Rc = value
                     else:
                         G3_Rc = [value]
                 elif key == 'cutoff_f':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G3_cutoff_f = value
                     else:
                         G3_cutoff_f = [value]
                 elif key == 'kappa':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G3_kappa = value
                     else:
                         G3_kappa = [value]
@@ -187,27 +189,27 @@ class SyF:
 
             for key, value in sym_params.items():
                 if key == 'Rc':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G4_Rc = value
                     else:
                         G4_Rc = [value]
                 elif key == 'cutoff_f':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G4_cutoff_f = value
                     else:
                         G4_cutoff_f = [value]
                 elif key == 'eta':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G4_eta = value
                     else:
                         G4_eta = [value]
                 elif key == 'lamBda':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G4_lamBda = value
                     else:
                         G4_lamBda = [value]
                 elif key == 'zeta':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G4_zeta = value
                     else:
                         G4_zeta = [value]
@@ -217,7 +219,12 @@ class SyF:
                     for eta in G4_eta:
                         for lamBda in G4_lamBda:
                             for zeta in G4_zeta:
-                                g = calculate_G4(crystal, cutoff_f, Rc, eta, lamBda, zeta)
+                                g = calculate_G4(crystal, 
+                                                 cutoff_f, 
+                                                 Rc, 
+                                                 eta, 
+                                                 lamBda, 
+                                                 zeta)
                                 G.append(g)
 
         elif G_type == 'G5':
@@ -227,27 +234,27 @@ class SyF:
 
             for key, value in sym_params.items():
                 if key == 'Rc':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G5_Rc = value
                     else:
                         G5_Rc = [value]
                 elif key == 'cutoff_f':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G5_cutoff_f = value
                     else:
                         G5_cutoff_f = [value]
                 elif key == 'eta':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G5_eta = value
                     else:
                         G5_eta = [value]
                 elif key == 'lamBda':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G5_lamBda = value
                     else:
                         G5_lamBda = [value]
                 elif key == 'zeta':
-                    if isinstance(value, list):
+                    if isinstance(value, (list, np.ndarray)):
                         G5_zeta = value
                     else:
                         G5_zeta = [value]
@@ -257,7 +264,12 @@ class SyF:
                     for eta in G5_eta:
                         for lamBda in G5_lamBda:
                             for zeta in G5_zeta:
-                                g = calculate_G5(crystal, cutoff_f, Rc, eta, lamBda, zeta)
+                                g = calculate_G5(crystal, 
+                                                 cutoff_f, 
+                                                 Rc, 
+                                                 eta, 
+                                                 lamBda, 
+                                                 zeta)
                                 G.append(g)
 
 
