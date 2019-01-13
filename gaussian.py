@@ -150,6 +150,7 @@ class SyF:
                         for eta in G2_eta:
                             g = calculate_G2(crystal, cutoff_f, Rc, eta, Rs)
                             G.append(g)
+                            
         elif G_type == 'G3':
             G = []
             G3_Rc = [6.5]
