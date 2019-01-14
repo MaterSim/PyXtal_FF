@@ -57,7 +57,9 @@ class SyF:
                             f"Unknown parameter: {key}. "\
                             f"The available parameters are {G2_keywords}.")
             
-            self.G2 = self.calculate('G2', crystal, self.G2_params)
+            G2 = np.asarray(self.calculate('G2', crystal, self.G2_params))
+            self.G2 = G2.T
+            
 
         if self.G3_params is not None:
             for key, value in self.G3_params.items():
@@ -149,8 +151,6 @@ class SyF:
                     for cutoff_f in G2_cutoff_f:
                         for eta in G2_eta:
                             g = calculate_G2(crystal, cutoff_f, Rc, eta, Rs)
-                            print(f"This is for eta: {eta}")
-                            print(g)
                             G.append(g)
                             
         elif G_type == 'G3':
