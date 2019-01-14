@@ -5,7 +5,7 @@ from pymatgen.core.structure import Structure
 ################################ Gaussian Class ###############################
 
 
-class SyF:
+class Gaussian:
     """
     Get the all the desired symmetry functions.
 
@@ -58,6 +58,7 @@ class SyF:
                             f"The available parameters are {G2_keywords}.")
             
             G2 = np.asarray(self.calculate('G2', crystal, self.G2_params))
+            G2 = self.reshaping(G2, crystal)
             self.G2 = G2.T
             
 
@@ -280,6 +281,12 @@ class SyF:
         pass
                
 
+    def reshaping(self, arr, crystal):
+        m, n = arr.shape
+        m, n = int(m * n / crystal.num_sites), crystal.num_sites
+        arr = np.reshape(np.ravel(arr), (m, n))
+
+        return arr
 
 ############################# Auxiliary Functions #############################
 
@@ -757,21 +764,26 @@ def calculate_G2(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0):
     else:
         raise NotImplementedError('Unknown cutoff functional: %s' %cutoff_f)
     
+    # Get elements in the crystal structure
+    elements = crystal.symbol_set
+    
     # Get positions of core atoms
     n_core = crystal.num_sites
     core_cartesians = crystal.cart_coords
-    
+
     # Their neighbors within the cutoff radius
     neighbors = crystal.get_all_neighbors(Rc)
     G2 = []
-
-    for i in range(n_core):
-        G2_core = 0
-        for j in range(len(neighbors[i])):
-            Rij = np.linalg.norm(core_cartesians[i] - 
-                                 neighbors[i][j][0]._coords)
-            G2_core += np.exp(-eta * Rij ** 2. / Rc ** 2.) * func(Rij)
-        G2.append(G2_core)
+    
+    for elem in elements:
+        for i in range(n_core):   
+            G2_core = 0
+            for j in range(len(neighbors[i])):
+                if elem == neighbors[i][j][0].species_string:
+                    Rij = np.linalg.norm(core_cartesians[i] - 
+                                        neighbors[i][j][0]._coords)
+                    G2_core += np.exp(-eta * Rij ** 2. / Rc ** 2.) * func(Rij)
+            G2.append(G2_core)
     
     return G2
 
