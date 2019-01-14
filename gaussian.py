@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
 from pymatgen.core.structure import Structure
 
 
@@ -58,8 +59,7 @@ class Gaussian:
                             f"The available parameters are {G2_keywords}.")
             
             G2 = np.asarray(self.calculate('G2', crystal, self.G2_params))
-            G2 = self.reshaping(G2, crystal)
-            self.G2 = G2.T
+            self.G2 = self.reshaping(G2, crystal)
             
 
         if self.G3_params is not None:
@@ -93,8 +93,8 @@ class Gaussian:
                             f"Unknown parameter: {key}. "\
                             f"The available parameters are {G5_keywords}.")
 
-            self.G5 = self.calculate('G5', crystal, self.G5_params)
-
+            G5 = np.asarray(self.calculate('G5', crystal, self.G5_params))
+            self.G5 = self.reshaping(G5, crystal)
 
     def calculate(self, G_type, crystal, sym_params):
         if G_type == 'G1':
@@ -263,8 +263,8 @@ class Gaussian:
             for Rc in G5_Rc:
                 for cutoff_f in G5_cutoff_f:
                     for eta in G5_eta:
-                        for lamBda in G5_lamBda:
-                            for zeta in G5_zeta:
+                        for zeta in G5_zeta:
+                            for lamBda in G5_lamBda:
                                 g = calculate_G5(crystal, 
                                                  cutoff_f, 
                                                  Rc, 
@@ -286,7 +286,7 @@ class Gaussian:
         m, n = int(m * n / crystal.num_sites), crystal.num_sites
         arr = np.reshape(np.ravel(arr), (m, n))
 
-        return arr
+        return arr.T
 
 ############################# Auxiliary Functions #############################
 
@@ -1187,7 +1187,11 @@ def calculate_G5(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     else:
         raise NotImplementedError('Unknown cutoff functional: %s' %cutoff_f)
     
-    # Get core atoms information
+    # Get elements in the crystal structure
+    elements = crystal.symbol_set
+    elements = list(itertools.combinations_with_replacement(elements, 2))
+    
+    #Get core atoms information
     n_core = crystal.num_sites
     core_cartesians = crystal.cart_coords
     
@@ -1196,21 +1200,28 @@ def calculate_G5(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     
     G5 = []
 
-    for i in range(n_core):
-        G5_core = 0.0
-        for j in range(len(neighbors[i])-1):
-            for k in range(j+1, len(neighbors[i])):
-                Rij_vector = core_cartesians[i] - neighbors[i][j][0].coords
-                Rij = np.linalg.norm(Rij_vector)
-                Rik_vector = core_cartesians[i] - neighbors[i][k][0].coords
-                Rik = np.linalg.norm(Rik_vector)
-                cos_ijk = np.dot(Rij_vector, Rik_vector)/ Rij / Rik
-                term = (1. + lamBda * cos_ijk) ** zeta
-                term *= np.exp(-eta * (Rij ** 2. + Rik ** 2.) / Rc ** 2.)
-                term *= func(Rij) * func(Rik)
-                G5_core += term
-        G5_core *= 2. ** (1. - zeta)
-        G5.append(G5_core)
+    for elem in elements:
+        for i in range(n_core):
+            G5_core = 0.0
+            for j in range(len(neighbors[i])-1):
+                for k in range(j+1, len(neighbors[i])):
+                    n1 = neighbors[i][j][0]
+                    n2 = neighbors[i][k][0]
+                    if (elem[0] == n1.species_string \
+                        and elem[1] == n2.species_string) or \
+                        (elem[1] == n1.species_string and \
+                         elem[0] == n2.species_string):
+                        Rij_vector = core_cartesians[i] - n1.coords
+                        Rij = np.linalg.norm(Rij_vector)
+                        Rik_vector = core_cartesians[i] - n2.coords
+                        Rik = np.linalg.norm(Rik_vector)
+                        cos_ijk = np.dot(Rij_vector, Rik_vector)/ Rij / Rik
+                        term = (1. + lamBda * cos_ijk) ** zeta
+                        term *= np.exp(-eta * (Rij ** 2. + Rik ** 2.) / Rc ** 2.)
+                        term *= func(Rij) * func(Rik)
+                        G5_core += term
+            G5_core *= 2. ** (1. - zeta)
+            G5.append(G5_core)
         
     return G5
 
@@ -1311,11 +1322,6 @@ def G5_derivative(crystal, cutoff_f='Cosine',
 
 
 #crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
-#print(G1_derivative(crystal))
-#G2_derivative(crystal)
-#print(G3_derivative(crystal))
-#print(G4_derivative(crystal))
-#print(G5_derivative(crystal))
 
 #sym_params = {'G2': {'eta': [np.logspace(np.log10(0.05), 
 #                                         np.log10(5.), num=4)]}, 
