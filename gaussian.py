@@ -15,11 +15,17 @@ class Gaussian:
     
     """
     def __init__(self, crystal, sym_params, derivative=False):
+        self.crystal = crystal
         self.G1_params = None
         self.G2_params = None
         self.G3_params = None
         self.G4_params = None
         self.G5_params = None
+        self.G1_parameters = []
+        self.G2_parameters = []
+        self.G3_parameters = []
+        self.G4_parameters = []
+        self.G5_parameters = []
         G1_keywords = ['Rc', 'cutoff_f']
         G2_keywords = ['eta', 'Rc', 'cutoff_f', 'Rs']
         G3_keywords = ['kappa', 'Rc', 'cutoff_f']
@@ -29,14 +35,19 @@ class Gaussian:
         for key, value in sym_params.items():
             if key == 'G1':
                 self.G1_params = value
+                self.G1_parameters = self.get_parameters('G1', self.G1_params)
             elif key == 'G2':
                 self.G2_params = value
+                self.G2_parameters = self.get_parameters('G2', self.G2_params)
             elif key == 'G3':
                 self.G3_params = value
+                self.G3_parameters = self.get_parameters('G3', self.G3_params)
             elif key == 'G4':
                 self.G4_params = value
+                self.G4_parameters = self.get_parameters('G4', self.G4_params)
             else:
                 self.G5_params = value
+                self.G5_parameters = self.get_parameters('G5', self.G5_params)
 
         if self.G1_params is not None:
             for key, value in self.G1_params.items():
@@ -59,8 +70,7 @@ class Gaussian:
                             f"The available parameters are {G2_keywords}.")
             
             G2 = np.asarray(self.calculate('G2', crystal, self.G2_params))
-            self.G2 = self.reshaping(G2, crystal)
-            
+            self.G2 = self.reshaping(G2)
 
         if self.G3_params is not None:
             for key, value in self.G3_params.items():
@@ -94,7 +104,7 @@ class Gaussian:
                             f"The available parameters are {G5_keywords}.")
 
             G5 = np.asarray(self.calculate('G5', crystal, self.G5_params))
-            self.G5 = self.reshaping(G5, crystal)
+            self.G5 = self.reshaping(G5)
 
     def calculate(self, G_type, crystal, sym_params):
         if G_type == 'G1':
@@ -218,8 +228,8 @@ class Gaussian:
             for Rc in G4_Rc:
                 for cutoff_f in G4_cutoff_f:
                     for eta in G4_eta:
-                        for lamBda in G4_lamBda:
-                            for zeta in G4_zeta:
+                        for zeta in G4_zeta:
+                            for lamBda in G4_lamBda:
                                 g = calculate_G4(crystal, 
                                                  cutoff_f, 
                                                  Rc, 
@@ -232,6 +242,9 @@ class Gaussian:
             G = []
             G5_Rc = [6.5]
             G5_cutoff_f = ['Cosine']
+            G5_eta = []
+            G5_zeta = []
+            G5_lamBda = []
 
             for key, value in sym_params.items():
                 if key == 'Rc':
@@ -279,14 +292,105 @@ class Gaussian:
 
     def calculate_derivative(self, sym):
         pass
-               
 
-    def reshaping(self, arr, crystal):
+
+    def get_parameters(self, G_type, params):
+        D = []
+        keys = list(params.keys())
+        
+        if G_type == 'G2':
+            elements = self.crystal.symbol_set
+
+            for key, value in params.items():
+                if key == 'eta':
+                    eta = value
+
+            for e in eta:
+                for elem in elements:
+                    d = {}
+                    d['type'] = 'G2'
+                    d['element'] = elem
+                    d['eta'] = e
+                    D.append(d)
+
+        elif G_type == 'G4':
+            elements = self.crystal.symbol_set
+            elements = list(itertools.combinations_with_replacement(elements, 2))
+
+            for key, value in params.items():
+                if key == 'eta':
+                    eta = value
+                elif key == 'zeta':
+                    zeta = value
+                else:
+                    lamBda = value
+
+            for e in eta:
+                for z in zeta:
+                    for l in lamBda:
+                        for elem in elements:
+                            d = {}
+                            d['type'] = 'G4'
+                            d['elements'] = elem
+                            d['eta'] = e
+                            d['zeta'] = z
+                            d['lamBda'] = l
+                            D.append(d)
+        
+        elif G_type == 'G5':
+            elements = self.crystal.symbol_set
+            elements = list(itertools.combinations_with_replacement(elements, 2))
+
+            for key, value in params.items():
+                if key == 'eta':
+                    eta = value
+                elif key == 'zeta':
+                    zeta = value
+                else:
+                    lamBda = value
+
+            for e in eta:
+                for z in zeta:
+                    for l in lamBda:
+                        for elem in elements:
+                            d = {}
+                            d['type'] = 'G5'
+                            d['elements'] = elem
+                            d['eta'] = e
+                            d['zeta'] = z
+                            d['lamBda'] = l
+                            D.append(d)
+        
+        return D
+
+
+    def print_parameters(self):
+        if self.G1_parameters != []:
+            for i in self.G1_parameters:
+                print(i)
+        if self.G2_parameters != []:
+            for i in self.G2_parameters:
+                print(i)
+        if self.G3_parameters != []:
+            for i in self.G3_parameters:
+                print(i)
+        if self.G4_parameters != []:
+            for i in self.G4_parameters:
+                print(i)
+        if self.G5_parameters != []:
+            for i in self.G5_parameters:
+                print(i)
+
+        return ''
+
+
+    def reshaping(self, arr):
         m, n = arr.shape
-        m, n = int(m * n / crystal.num_sites), crystal.num_sites
+        m, n = int(m * n / self.crystal.num_sites), self.crystal.num_sites
         arr = np.reshape(np.ravel(arr), (m, n))
 
         return arr.T
+
 
 ############################# Auxiliary Functions #############################
 
