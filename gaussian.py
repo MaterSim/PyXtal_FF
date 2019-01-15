@@ -364,24 +364,25 @@ class Gaussian:
         return D
 
 
-    def print_parameters(self):
+    def G_parameters(self):
+        G_parameters = []
         if self.G1_parameters != []:
             for i in self.G1_parameters:
-                print(i)
+                G_parameters.append(i)
         if self.G2_parameters != []:
             for i in self.G2_parameters:
-                print(i)
+                G_parameters.append(i)
         if self.G3_parameters != []:
             for i in self.G3_parameters:
-                print(i)
+                G_parameters.append(i)
         if self.G4_parameters != []:
             for i in self.G4_parameters:
-                print(i)
+                G_parameters.append(i)
         if self.G5_parameters != []:
             for i in self.G5_parameters:
-                print(i)
+                G_parameters.append(i)
 
-        return ''
+        return G_parameters
 
 
     def reshaping(self, arr):
