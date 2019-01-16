@@ -12,10 +12,23 @@ class Gaussian:
 
     Parameters
     ----------
-    
+    crystal: object
+        Pymatgen crystal structure object.
+    sys_params: dict
+        Dictionary of symmetry parameters.
+        i.e. {'G2': {'eta': [0.05, 0.1]}}
+    derivative: bool
+        to calculate derivative.
     """
     def __init__(self, crystal, sym_params, derivative=False):
         self.crystal = crystal
+        G1_keywords = ['Rc', 'cutoff_f']
+        G2_keywords = ['eta', 'Rc', 'cutoff_f', 'Rs']
+        G3_keywords = ['kappa', 'Rc', 'cutoff_f']
+        G4_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
+        G5_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
+
+
         self.G1_params = None
         self.G2_params = None
         self.G3_params = None
@@ -26,12 +39,6 @@ class Gaussian:
         self.G3_parameters = []
         self.G4_parameters = []
         self.G5_parameters = []
-        G1_keywords = ['Rc', 'cutoff_f']
-        G2_keywords = ['eta', 'Rc', 'cutoff_f', 'Rs']
-        G3_keywords = ['kappa', 'Rc', 'cutoff_f']
-        G4_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
-        G5_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
-
         for key, value in sym_params.items():
             if key == 'G1':
                 self.G1_params = value
@@ -49,6 +56,7 @@ class Gaussian:
                 self.G5_params = value
                 self.G5_parameters = self.get_parameters('G5', self.G5_params)
 
+        self.G1 = []
         if self.G1_params is not None:
             for key, value in self.G1_params.items():
                 if key in G1_keywords:
@@ -58,8 +66,9 @@ class Gaussian:
                             f"Unknown parameter: {key}. "\
                             f"The available parameters are {G1_keywords}.")
 
-            self.G1 = self.calculate('G1', crystal, self.G1_params)
+            self.G1 = self.calculate('G1', self.G1_params)
 
+        self.G2 = []
         if self.G2_params is not None:
             for key, value in self.G2_params.items():
                 if key in G2_keywords:
@@ -69,9 +78,10 @@ class Gaussian:
                             f"Unknown parameter: {key}. "\
                             f"The available parameters are {G2_keywords}.")
             
-            G2 = np.asarray(self.calculate('G2', crystal, self.G2_params))
+            G2 = np.asarray(self.calculate('G2', self.G2_params))
             self.G2 = self.reshaping(G2)
-
+        
+        self.G3 = []
         if self.G3_params is not None:
             for key, value in self.G3_params.items():
                 if key in G3_keywords:
@@ -81,8 +91,9 @@ class Gaussian:
                             f"Unknown parameter: {key}. "\
                             f"The available parameters are {G3_keywords}.")
             
-            self.G3 = self.calculate('G3', crystal, self.G3_params)
+            self.G3 = self.calculate('G3', self.G3_params)
 
+        self.G4 = []
         if self.G4_params is not None:
             for key, value in self.G4_params.items():
                 if key in G4_keywords:
@@ -92,8 +103,10 @@ class Gaussian:
                             f"Unknown parameter: {key}. "\
                             f"The available parameters are {G4_keywords}.")
 
-            self.G4 = self.calculate('G4', crystal, self.G4_params)
+            G4 = np.asarray(self.calculate('G4', self.G4_params))
+            self.G4 = self.reshaping(G4)
 
+        self.G5 = []
         if self.G5_params is not None:
             for key, value in self.G5_params.items():
                 if key in G5_keywords:
@@ -103,10 +116,18 @@ class Gaussian:
                             f"Unknown parameter: {key}. "\
                             f"The available parameters are {G5_keywords}.")
 
-            G5 = np.asarray(self.calculate('G5', crystal, self.G5_params))
+            G5 = np.asarray(self.calculate('G5', self.G5_params))
             self.G5 = self.reshaping(G5)
 
-    def calculate(self, G_type, crystal, sym_params):
+        self.G_parameters = self.get_G_parameters()
+        self.G = self.get_Gs()
+    
+
+    def get_statistics(self):
+        pass
+
+
+    def calculate(self, G_type, sym_params):
         if G_type == 'G1':
             G = []
             G1_Rc = [6.5]
@@ -126,7 +147,7 @@ class Gaussian:
 
             for Rc in G1_Rc:
                 for cutoff_f in G1_cutoff_f:
-                    g = calculate_G1(crystal, cutoff_f, Rc)
+                    g = calculate_G1(self.crystal, cutoff_f, Rc)
                     G.append(g)
 
         elif G_type == 'G2':
@@ -161,7 +182,9 @@ class Gaussian:
                 for Rs in G2_Rs:
                     for cutoff_f in G2_cutoff_f:
                         for eta in G2_eta:
-                            g = calculate_G2(crystal, cutoff_f, Rc, eta, Rs)
+                            g = calculate_G2(self.crystal, 
+                                             cutoff_f, Rc, 
+                                             eta, Rs)
                             G.append(g)
                             
         elif G_type == 'G3':
@@ -188,10 +211,11 @@ class Gaussian:
                         G3_kappa = [value]
 
             for Rc in G3_Rc:
-                for cutoff_f in G3_cutoff_f:
-                    for kappa in G3_kappa:
-                        g = calculate_G3(crystal, cutoff_f, Rc, kappa)
-                        G.append(g)
+                for Rs in G3_Rs:
+                    for cutoff_f in G3_cutoff_f:
+                        for kappa in G3_kappa:
+                            g = calculate_G3(self.crystal, cutoff_f, Rc, kappa)
+                            G.append(g)
 
         elif G_type == 'G4':
             G = []
@@ -230,7 +254,7 @@ class Gaussian:
                     for eta in G4_eta:
                         for zeta in G4_zeta:
                             for lamBda in G4_lamBda:
-                                g = calculate_G4(crystal, 
+                                g = calculate_G4(self.crystal, 
                                                  cutoff_f, 
                                                  Rc, 
                                                  eta, 
@@ -278,7 +302,7 @@ class Gaussian:
                     for eta in G5_eta:
                         for zeta in G5_zeta:
                             for lamBda in G5_lamBda:
-                                g = calculate_G5(crystal, 
+                                g = calculate_G5(self.crystal, 
                                                  cutoff_f, 
                                                  Rc, 
                                                  eta, 
@@ -315,7 +339,8 @@ class Gaussian:
 
         elif G_type == 'G4':
             elements = self.crystal.symbol_set
-            elements = list(itertools.combinations_with_replacement(elements, 2))
+            elements = list(itertools.combinations_with_replacement(elements, 
+                                                                    2))
 
             for key, value in params.items():
                 if key == 'eta':
@@ -339,7 +364,8 @@ class Gaussian:
         
         elif G_type == 'G5':
             elements = self.crystal.symbol_set
-            elements = list(itertools.combinations_with_replacement(elements, 2))
+            elements = list(itertools.combinations_with_replacement(elements, 
+                                                                    2))
 
             for key, value in params.items():
                 if key == 'eta':
@@ -364,8 +390,9 @@ class Gaussian:
         return D
 
 
-    def G_parameters(self):
+    def get_G_parameters(self):
         G_parameters = []
+
         if self.G1_parameters != []:
             for i in self.G1_parameters:
                 G_parameters.append(i)
@@ -393,7 +420,45 @@ class Gaussian:
         return arr.T
 
 
+    def get_Gs(self, Gs='all'):
+        if Gs == 'all':
+            Gs = []
+
+            if self.G1 != []:
+                Gs = self.G1
+
+            if self.G2 != []:
+                if Gs != []:
+                    Gs = np.hstack((Gs, self.G2))
+                else:
+                    Gs = self.G2
+
+            if self.G3 != []:
+                if Gs != []:
+                    Gs = np.hstack((Gs, self.G3))
+                else:
+                    Gs = self.G3
+
+            if self.G4 != []:
+                if Gs != []:
+                    Gs = np.hstack((Gs, self.G4))
+                else:
+                    Gs = self.G4
+
+            if self.G5 != []:
+                if Gs != []:
+                    Gs = np.hstack((Gs, self.G5))
+                else:
+                    Gs = self.G5
+        
+        else:
+            pass
+
+        return Gs
+
+
 ############################# Auxiliary Functions #############################
+
 
 def distance(arr):
     """
@@ -546,6 +611,7 @@ def dcos_dRpq(a, b, c, Ra, Rb, Rc, p, q):
 
 ############################## Cutoff Functional ##############################
 
+
 """
 This script provides three cutoff functionals:
     1. Cosine
@@ -575,7 +641,8 @@ class Cosine(object):
     def __init__(self, Rc):
         
         self.Rc = Rc
-        
+
+
     def __call__(self, Rij):
         """
         Args:
@@ -589,7 +656,8 @@ class Cosine(object):
             return 0.0
         else:
             return (0.5 * (np.cos(np.pi * Rij / self.Rc) + 1.))
-        
+
+
     def derivative(self, Rij):
         """
         Calculate derivative (dF/dRij) of the Cosine functional with respect
@@ -605,7 +673,8 @@ class Cosine(object):
             return 0.0
         else:
             return (-0.5 * np.pi / self.Rc * np.sin(np.pi * Rij / self.Rc))
-        
+
+
     def todict(self):
         return {'name': 'Cosine',
                 'kwargs': {'Rc': self.Rc}}
@@ -626,7 +695,8 @@ class Polynomial(object):
     def __init__(self, Rc, gamma=4):
         self.gamma = gamma
         self.Rc = Rc
-        
+
+
     def __call__(self, Rij):
         """
         Args:
@@ -641,7 +711,8 @@ class Polynomial(object):
             value = 1. + self.gamma * (Rij / self.Rc) ** (self.gamma + 1) - \
                 (self.gamma + 1) * (Rij / self.Rc) ** self.gamma
             return value
-        
+
+
     def derivative(self, Rij):
         """
         Derivative (dF/dRij) of the Polynomial functional with respect to Rij.
@@ -659,7 +730,8 @@ class Polynomial(object):
             value = (self.gamma * (self.gamma + 1) / self.Rc) * \
                 (ratio ** self.gamma - ratio ** (self.gamma - 1))
         return value
-    
+
+
     def todict(self):
         return {'name': 'Polynomial',
                 'kwargs': {'Rc': self.Rc,
@@ -682,7 +754,8 @@ class TangentH(object):
     def __init__(self, Rc):
         
         self.Rc = Rc
-        
+
+
     def __call__(self, Rij):
         """
         Args:
@@ -696,7 +769,8 @@ class TangentH(object):
             return 0.0
         else:
             return ((np.tanh(1.0 - (Rij / self.Rc))) ** 3)
-        
+
+
     def derivative(self, Rij):
         """
         Calculate derivative (dF/dRij) of the hyperbolic Tangent functional 
@@ -713,7 +787,8 @@ class TangentH(object):
         else:
             return (-3.0 / self.Rc * ((np.tanh(1.0 - (Rij / self.Rc))) ** 2 - \
                      (np.tanh(1.0 - (Rij / self.Rc))) ** 4))
-        
+
+
     def todict(self):
         return {'name': 'TanH',
                 'kwargs': {'Rc': self.Rc
@@ -1099,6 +1174,10 @@ def calculate_G4(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     else:
         raise NotImplementedError('Unknown cutoff functional: %s' %cutoff_f)
     
+    # Get elements in the crystal structure
+    elements = crystal.symbol_set
+    elements = list(itertools.combinations_with_replacement(elements, 2))
+
     # Get core atoms information
     n_core = crystal.num_sites
     core_cartesians = crystal.cart_coords
@@ -1107,32 +1186,38 @@ def calculate_G4(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     neighbors = crystal.get_all_neighbors(Rc)
     
     G4 = []
-
-    for i in range(n_core):
-        G4_core = 0.0
-        for j in range(len(neighbors[i])-1):
-            for k in range(j+1, len(neighbors[i])):
-                Ri = core_cartesians[i]
-                Rj = neighbors[i][j][0].coords
-                Rk = neighbors[i][k][0].coords
-                
-                Rij_vector = Rj - Ri
-                Rij = np.linalg.norm(Rij_vector)
-                
-                Rik_vector = Rk - Ri
-                Rik = np.linalg.norm(Rik_vector)
-                
-                Rjk_vector = Rk - Rj
-                Rjk = np.linalg.norm(Rjk_vector)
-                
-                cos_ijk = np.dot(Rij_vector, Rik_vector)/ Rij / Rik
-                term = (1. + lamBda * cos_ijk) ** zeta
-                term *= np.exp(-eta * (Rij ** 2. + Rik ** 2. + Rjk ** 2.) /
-                               Rc ** 2.)
-                term *= func(Rij) * func(Rik) * func(Rjk)
-                G4_core += term
-        G4_core *= 2. ** (1. - zeta)
-        G4.append(G4_core)
+    
+    for elem in elements:
+        for i in range(n_core):
+            G4_core = 0.0
+            for j in range(len(neighbors[i])-1):
+                for k in range(j+1, len(neighbors[i])):
+                    n1 = neighbors[i][j][0].species_string
+                    n2 = neighbors[i][k][0].species_string
+                    if (elem[0] == n1 and elem[1] == n2) or \
+                        (elem[1] == n1 and elem[0] == n2):
+                        Ri = core_cartesians[i]
+                        Rj = neighbors[i][j][0].coords
+                        Rk = neighbors[i][k][0].coords
+                    
+                        Rij_vector = Rj - Ri
+                        Rij = np.linalg.norm(Rij_vector)
+                    
+                        Rik_vector = Rk - Ri
+                        Rik = np.linalg.norm(Rik_vector)
+                    
+                        Rjk_vector = Rk - Rj
+                        Rjk = np.linalg.norm(Rjk_vector)
+                    
+                        cos_ijk = np.dot(Rij_vector, Rik_vector)/ Rij / Rik
+                        term = (1. + lamBda * cos_ijk) ** zeta
+                        term *= np.exp(-eta * 
+                                       (Rij ** 2. + Rik ** 2. + Rjk ** 2.) /
+                                       Rc ** 2.)
+                        term *= func(Rij) * func(Rik) * func(Rjk)
+                        G4_core += term
+            G4_core *= 2. ** (1. - zeta)
+            G4.append(G4_core)
         
     return G4
 
@@ -1322,7 +1407,8 @@ def calculate_G5(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
                         Rik = np.linalg.norm(Rik_vector)
                         cos_ijk = np.dot(Rij_vector, Rik_vector)/ Rij / Rik
                         term = (1. + lamBda * cos_ijk) ** zeta
-                        term *= np.exp(-eta * (Rij ** 2. + Rik ** 2.) / Rc ** 2.)
+                        term *= np.exp(-eta * 
+                                       (Rij ** 2. + Rik ** 2.) / Rc ** 2.)
                         term *= func(Rij) * func(Rik)
                         G5_core += term
             G5_core *= 2. ** (1. - zeta)
@@ -1426,14 +1512,15 @@ def G5_derivative(crystal, cutoff_f='Cosine',
     return G5D
 
 
-#crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
+crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
 
-#sym_params = {'G2': {'eta': [np.logspace(np.log10(0.05), 
-#                                         np.log10(5.), num=4)]}, 
-#                'G5': {'eta': [0.005],
-#                        'zeta': [1., 4.],
-#                        'lamBda': [1., -1.]}}
+sym_params = {'G2': {'eta': np.logspace(np.log10(0.05), 
+                                         np.log10(5.), num=4)}, 
+                'G5': {'eta': [0.005],
+                        'zeta': [1., 4.],
+                        'lamBda': [1., -1.]}}
 
-#gauss = SyF(crystal, sym_params)
-#print(gauss.G1)
-#print(gauss.G2)
+gauss = Gaussian(crystal, sym_params)
+print(gauss.G)
+for i in gauss.G_parameters:
+    print(i)
