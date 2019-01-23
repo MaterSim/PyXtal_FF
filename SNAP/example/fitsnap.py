@@ -1,4 +1,5 @@
 # This is a tester
+# This is to run lammps with python
 
 from ase.io import read, write
 from ase import Atoms, Atom
