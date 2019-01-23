@@ -1,3 +1,5 @@
+# This is a tester
+
 from ase.io import read, write
 from ase import Atoms, Atom
 from ase.calculators.lammpsrun import LAMMPS
