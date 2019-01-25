@@ -8,6 +8,7 @@ from ase.calculators.lammpsrun import LAMMPS
 data = read('../../POSCARs/POSCAR-NaCl')
 
 calc = LAMMPS()
-data.set_calculator(calc)
+pi = data.set_calculator(calc)
 
-print(data.write_lammps_in())
+data.get_potential_energy()
+data.write_lammps_in(lammps_data='data.lammps')

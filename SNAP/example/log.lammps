@@ -1,0 +1,29 @@
+LAMMPS (4 Jan 2019)
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread. (src/comm.cpp:87)
+  using 1 OpenMP thread(s) per MPI task
+# LAMMPS testing for calculating bispectrum components
+
+# Initialize
+
+clear
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread. (src/comm.cpp:87)
+  using 1 OpenMP thread(s) per MPI task
+units metal
+dimension 3
+boundary p p p
+atom_style atomic
+atom_modify map array
+
+# Generating box and atomic postions
+
+read_data data.lammps
+  orthogonal box = (0 0 0) to (5.69169 5.69169 5.69169)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  8 atoms
+
+# Calculate the bispectrum
+
+compute b all sna/atom 1.4 0.99363 6 2.0 2.4 0.75 1.0 diagonal 3 rmin0 0.0
+
+Total wall time: 0:00:00
