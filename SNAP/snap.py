@@ -1,4 +1,5 @@
 # Running Bispectrum Calculations with LAMMPS
+# Pymatgen based
 
 import subprocess
 
