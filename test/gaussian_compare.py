@@ -1,3 +1,5 @@
+# Comparing our gaussian code with AMP
+
 import numpy as np
 
 from ase.calculators.emt import EMT
