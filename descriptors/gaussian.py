@@ -122,7 +122,7 @@ class Gaussian:
 
         self.G_parameters = self.get_G_parameters()
         self.G = self.get_Gs()
-        self.Gs = self.get_statistics(self.G)
+        #self.Gs = self.get_statistics(self.G)
     
 
     def get_statistics(self, Gs):
@@ -132,7 +132,7 @@ class Gaussian:
         Gs_kurtosis = kurtosis(Gs, axis=0)
         Gs_covariance = np.cov(Gs.T)
 
-        return Gs_covariance
+        return None
         
 
 
@@ -839,7 +839,10 @@ def calculate_G1(crystal, cutoff_f='Cosine', Rc=6.5):
         func = TangentH(Rc=Rc)
     else:
         raise NotImplementedError('Unknown cutoff functional: %s' %cutoff_f)
-        
+     
+    # Get elements in the crystal structure
+    elements = crystal.symbol_set
+
     # Get core atoms information
     n_core = crystal.num_sites
     core_cartesians = crystal.cart_coords
@@ -849,13 +852,15 @@ def calculate_G1(crystal, cutoff_f='Cosine', Rc=6.5):
     
     G1 = []
     
-    for i in range(n_core):
-        G1_core = 0
-        for j in range(len(neighbors[i])):
-            Rij = np.linalg.norm(core_cartesians[i] - 
-                                 neighbors[i][j][0].coords)
-            G1_core += func(Rij)
-        G1.append(G1_core)
+    for elem in elements:
+        for i in range(n_core):
+            G1_core = 0
+            for j in range(len(neighbors[i])):
+                if elem == neighbors[i][j][0].species_string:
+                    Rij = np.linalg.norm(core_cartesians[i] - 
+                                         neighbors[i][j][0].coords)
+                    G1_core += func(Rij)
+            G1.append(G1_core)
     
     return G1
 
@@ -962,6 +967,7 @@ def calculate_G2(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0):
 
     # Their neighbors within the cutoff radius
     neighbors = crystal.get_all_neighbors(Rc)
+    
     G2 = []
     
     for elem in elements:
@@ -970,7 +976,7 @@ def calculate_G2(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0):
             for j in range(len(neighbors[i])):
                 if elem == neighbors[i][j][0].species_string:
                     Rij = np.linalg.norm(core_cartesians[i] - 
-                                        neighbors[i][j][0]._coords)
+                                         neighbors[i][j][0]._coords)
                     G2_core += np.exp(-eta * Rij ** 2. / Rc ** 2.) * func(Rij)
             G2.append(G2_core)
     
@@ -1071,22 +1077,27 @@ def calculate_G3(crystal, cutoff_f='Cosine', Rc=6.5, k=10):
     else:
         raise NotImplementedError('Unknown cutoff functional: %s' %cutoff_f)
     
+    # Get elements in the crystal structure
+    elements = crystal.symbol_set
+    
     # Get core atoms information
     n_core = crystal.num_sites
     core_cartesians = crystal.cart_coords
     
     # Get neighbors information
     neighbors = crystal.get_all_neighbors(Rc)
-    
+
     G3 = []
-    
-    for i in range(n_core):
-        G3_core = 0
-        for j in range(len(neighbors[i])):
-            Rij = np.linalg.norm(core_cartesians[i] - 
-                                 neighbors[i][j][0].coords)
-            G3_core += np.cos(k * Rij / Rc) * func(Rij)
-        G3.append(G3_core)
+
+    for elem in elements:
+        for i in range(n_core):
+            G3_core = 0
+            for j in range(len(neighbors[i])):
+                if elem == neighbors[i][j][0].species_string:
+                    Rij = np.linalg.norm(core_cartesians[i] - 
+                                         neighbors[i][j][0]._coords)
+                    G3_core += np.cos(k * Rij / Rc) * func(Rij)
+            G3.append(G3_core)
     
     return G3
 
@@ -1521,16 +1532,15 @@ def G5_derivative(crystal, cutoff_f='Cosine',
     return G5D
 
 
-crystal = Structure.from_file('POSCARs/POSCAR-NaCl')
+#crystal = Structure.from_file('../POSCARs/POSCAR-NaCl')
 
-sym_params = {'G2': {'eta': np.logspace(np.log10(0.05), 
-                                         np.log10(5.), num=4)}, 
-                'G5': {'eta': [0.005],
-                        'zeta': [1., 4.],
-                        'lamBda': [1., -1.]}}
+#sym_params = {'G1': {'Rc': np.logspace(np.log10(0.05), 
+#                                         np.log10(5.), num=4)}}
+#                'G5': {'eta': [0.005],
+#                        'zeta': [1., 4.],
+#                        'lamBda': [1., -1.]}}
 
-gauss = Gaussian(crystal, sym_params)
-print(gauss.G)
-for i in gauss.G_parameters:
-    print(i)
-print(gauss.Gs)
+#gauss = Gaussian(crystal, sym_params)
+#print(gauss.G)
+#for i in gauss.G_parameters:
+#    print(i)
