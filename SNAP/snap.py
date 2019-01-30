@@ -70,20 +70,21 @@ class bispectrum(object):
         return data
 
     def get_lammps_input(self, input_file):
-        sna = f"{self.rcutfac} {self.rfac0} {self.twojmax} "
+        sna = f"1 {self.rfac0} {self.twojmax} "
         for R in self.Rs:
+            R *= self.rcutfac
             sna += f"{R} "
         for W in self.Ws:
             sna += f"{W} "
-        sna += f"diagonal {self.diagonal} rmin0 {self.rmin0}"
+        sna += f"diagonal {self.diagonal} rmin0 {self.rmin0} "
 
-        self.compute_cmds[0] += sna
-        self.compute_cmds[1] += sna
-        self.compute_cmds[2] += sna
+        self.compute_cmds[0] += sna + "bzeroflag 0"
+        self.compute_cmds[1] += sna + "bzeroflag 0"
+        self.compute_cmds[2] += sna + "bzeroflag 0"
 
         for el in self.ele:
             self.compute_cmds[-1] += f"{el} "
-        
+
         self.CMDS = self.pre_cmds + self.compute_cmds + self.post_cmds
 
         with open(input_file, 'w') as f:
@@ -96,4 +97,4 @@ s = Structure.from_spacegroup(225, Lattice.cubic(5.69169),
                                       [[0, 0, 0], [0, 0, 0.5]])
 profile = dict(Na=dict(r=0.3, w=0.9), Cl=dict(r=0.7, w=3.0))
 
-L = bispectrum(s, 5.0, 3, profile)
+L = bispectrum(s, 5.0, 3, profile, diagonal=3)
