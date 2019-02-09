@@ -23,26 +23,28 @@ class assembler(object):
             self.sna.append(sum/(i+1))
         self.sna = np.hstack((bias_weight, self.sna))
         self.sna = np.ravel(self.sna)
-        print(f"This is self.sna:\n{self.sna}")
+        #print(f"This is self.sna:\n{self.sna}")
         
 
         # SNAD
         snad = self._read_dump("dump.snad")
         snad = np.split(np.asarray(snad), len(atom_type), axis=1)
-        self.snad = []
+        depth, rows, columns = np.shape(snad)
+        x, y, z = int(columns/3), int(columns*2/3), columns
 
+        self.snad = []
         for i in range(len(atom_type)):
             temp = []
             for j in range(len(elements)):
-                temp.append(snad[i][j][0:5]) 
-                temp.append(snad[i][j][5:10])
-                temp.append(snad[i][j][10:15])
+                temp.append(snad[i][j][0:x])   # x-direction
+                temp.append(snad[i][j][x:y])  # y-direction
+                temp.append(snad[i][j][y:z]) # z-direction
             if self.snad == []:
                 self.snad = np.hstack((np.zeros((len(temp), 1)), temp))
             else:
                 temp = np.hstack((np.zeros((len(temp), 1)), temp))
                 self.snad = np.hstack((self.snad,temp))
-        print(f"This is self.snad:\n{self.snad}")
+        #print(f"This is self.snad:\n{self.snad}")
 
 
         # SNAV
@@ -60,17 +62,17 @@ class assembler(object):
         self.snav = self.snav / volume * 160.21766208 # eV to GPa
         #print(f"This is self.snav:\n{self.snav}")
 
-        print(self.sna.shape)
-        print(self.snad.shape)
-        print(self.snav.shape)
         if force == False and stress == False:
-            self.bispectrum_coefficients = self.sna
+            all = [self.sna]
         if force == True:
-            self.bispectrum_coefficients = np.concatenate(([self.sna], self.snad))
+            all = np.concatenate(([self.sna], self.snad))
         if stress == True:
-            self.bispectrum_coefficients = np.concatenate((all, self.snav))
+            all = np.concatenate((all, self.snav))
+        
+        #print(f"This is all:\n{all}")
+        self.bispectrum_coefficients = all
 
-    
+        # Remove the dump files after usage due to write error.
         os.remove("dump.element")
         os.remove("dump.sna")
         os.remove("dump.snad")

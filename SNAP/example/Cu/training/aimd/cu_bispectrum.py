@@ -1,5 +1,7 @@
+import numpy as np
 import json
 from pymatgen import Structure
+
 from snap import bispectrum
 from assembler import assembler
 
@@ -37,9 +39,11 @@ profile = dict(Cu=dict(r=1.0, w=1.0))
 
 for i in range(len(structures)):
     bispectrum(structures[i], 4.6, 6, profile, diagonal=3)
-    bispec = assembler(atom_type=['Cu'], volume=volumes[i], force=True, stress=True)
-    sna.append(bispec.bispectrum_coefficients)
-
+    bispec = assembler(atom_type=['Cu'], volume=volumes[i], force=False, stress=False)
+    if sna == []:
+        sna = bispec.bispectrum_coefficients
+    else:
+        sna = np.vstack((sna, bispec.bispectrum_coefficients))
 
 # Apply linear regression and evaluate
 
@@ -47,7 +51,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 
-X_train, X_test, y_train, y_test = train_test_split(sna, energies, test_size=0.4, random_state=107)
+X_train, X_test, y_train, y_test = train_test_split(sna, energies, test_size=0.4, random_state=13)
 
 reg = LinearRegression().fit(X_train, y_train)
 predict_train = reg.predict(X_train)
