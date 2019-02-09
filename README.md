@@ -1,5 +1,7 @@
 # FF-MAP (Force-Field Machine-learning interAtomic Potential)
 
+# This is an ongoing project
+
 ## Introduction
 
 In representing a material, Cartesian coordinates are not a suitable choice as descriptors. Symmetry functions are descriptors that are invariant with respect to translation and rotation. Symmetry functions also works well for the construction of high-dimensional neural network potential energy surfaces. 
