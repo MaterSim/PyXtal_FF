@@ -32,7 +32,7 @@ class bispectrum(object):
 
     """
     def __init__(self, structures, rcutfac, twojmax, element_profile, rfac0=0.99363, rmin0=0, diagonal=3):
-        self.exe = 'lmp_serial'
+        self.exe = '../lmp_serial'
         self.pre_cmds = ['units metal',
                          'atom_style charge',
                          'box tilt large',

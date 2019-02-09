@@ -1,15 +1,17 @@
+import sys
 import numpy as np
 import json
 from pymatgen import Structure
 
-from snap import bispectrum
-from assembler import assembler
+sys.path.append("../")
+from descriptors.snap import bispectrum
+from utilities.assembler import assembler
 
 
 # Read json file and convert them to pymatgen structure object 
 # and the corresponding energies and volumes.
 
-with open("AIMD.json") as f:
+with open("../datasets/Cu/training/AIMD.json") as f:
     data = json.load(f)
 
 structures = []
