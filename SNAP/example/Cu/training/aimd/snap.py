@@ -7,6 +7,26 @@ import numpy as np
 from pymatgen.io.lammps.data import LammpsData
 
 
+def make_js(twojmax, diagonal):
+    js = []
+    for j1 in range(0, twojmax + 1):
+        if diagonal == 2:
+            js.append([j1, j1, j1])
+        elif diagonal == 1:
+            for j in range(0, min(twojmax, 2 * j1) + 1, 2):
+                js.append([j1, j1, j])
+        elif diagonal == 0:
+            for j2 in range(0, j1 + 1):
+                for j in range(j1 - j2, min(twojmax, j1 + j2) + 1, 2):
+                    js.append([j1, j2, j])
+        elif diagonal == 3:
+            for j2 in range(0, j1 + 1):
+                for j in range(j1 - j2, min(twojmax, j1 + j2) + 1, 2):
+                    if j >= j1:
+                        js.append([j1, j2, j])
+    return js
+
+
 class bispectrum(object):
     """
 
@@ -52,6 +72,7 @@ class bispectrum(object):
         
         os.remove("data.0")
         os.remove("in.sna")
+        os.remove("log.lammps")
 
     
     def calculate(self):
@@ -93,10 +114,8 @@ class bispectrum(object):
                 f.write("%s\n" %line)
 
 #from pymatgen import Lattice, Structure
-
 #s = Structure.from_spacegroup(225, Lattice.cubic(5.69169),
 #                                      ['Na', 'Cl'],
 #                                      [[0, 0, 0], [0, 0, 0.5]])
 #profile = dict(Na=dict(r=0.3, w=0.9), Cl=dict(r=0.7, w=3.0))
-
 #L = bispectrum(s, 5.0, 3, profile, diagonal=3)
