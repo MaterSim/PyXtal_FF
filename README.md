@@ -1,4 +1,4 @@
-# FF-MAP (Force Field Machine-learning interAtomic Potential)
+# FF-MAP (Force-Field Machine-learning interAtomic Potential)
 
 ## Introduction
 
