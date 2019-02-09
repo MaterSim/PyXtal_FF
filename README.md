@@ -11,8 +11,7 @@ There are 5 types of symmetry functions:
 2. G_2 = 
 3. G_3 =
 4. G_4 = 
-5. G_5 = 
-
+5. G_5 =
 
 ## Test
 Predicting formation energy of Cu:
@@ -22,3 +21,7 @@ cd test/
 ```
 python cu_bispectrum.py
 ```
+
+## Dependencies
+You need lammps to run the snap descriptor.
+Also, you need to tell the snap.py to find your lammps executable.
