@@ -1,36 +1,71 @@
-from pprint import pprint
 import json
 from pymatgen import Structure
 from snap import bispectrum
+from assembler import assembler
+
+
+# Read json file and convert them to pymatgen structure object 
+# and the corresponding energies and volumes.
 
 with open("AIMD.json") as f:
     data = json.load(f)
 
-
 structures = []
 energies = []
-lattice = data[0]['structure']['lattice']['matrix']
+volumes = []
 
-for struc in data[0:1]:
+for struc in data:
     lat = struc['structure']['lattice']['matrix']
     species = []
-    position = []
+    positions = []
     for site in struc['structure']['sites']:
         species.append(site['label'])
-        position.append(site['xyz'])
+        positions.append(site['xyz'])
+
+    structure = Structure(lat, species, positions)
     
-    structures.append(Structure(lat, species, position))
+    structures.append(structure)
     energies.append(struc['outputs']['energy'])
+    volumes.append(structure.volume)
 
-profile = dict(Cu=dict(r=0.5, w=1.0))
 
-from pymatgen import Lattice, Structure
+# Get bispectrum coefficients for all structures
 
-s = Structure.from_spacegroup(225, Lattice.cubic(5.69169),
-                                      ['Na', 'Cl'],
-                                      [[0, 0, 0], [0, 0, 0.5]])
-profile = dict(Na=dict(r=0.5, w=0.9), Cl=dict(r=0.5, w=3.0))
+sna = []
 
-L = bispectrum(s, 6, 2, profile, diagonal=3)
+profile = dict(Cu=dict(r=1.0, w=1.0))
 
-#b = bispectrum(structures[0], 5.0, 3, profile, diagonal=3)
+for i in range(len(structures)):
+    bispectrum(structures[i], 4.6, 6, profile, diagonal=3)
+    bispec = assembler(atom_type=['Cu'], volume=volumes[i], force=True, stress=True)
+    sna.append(bispec.bispectrum_coefficients)
+
+
+# Apply linear regression and evaluate
+
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, y_train, y_test = train_test_split(sna, energies, test_size=0.4, random_state=107)
+
+reg = LinearRegression().fit(X_train, y_train)
+predict_train = reg.predict(X_train)
+predict_test = reg.predict(X_test)
+
+r2_train = reg.score(X_train, y_train)
+mae_train = mean_squared_error(y_train, predict_train)
+r2_test = reg.score(X_test, y_test)
+mae_test = mean_squared_error(y_test, predict_test)
+
+
+# Print
+import pandas as pd
+
+d = {'train_r2': [r2_train], 
+     'train_mae': [mae_train],
+     'test_r2': [r2_test],
+     'test_mae': [mae_test]}
+
+df = pd.DataFrame(d)
+print(df)
