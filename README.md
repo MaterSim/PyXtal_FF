@@ -10,3 +10,13 @@ There are 5 types of symmetry functions:
 3. G_3 =
 4. G_4 = 
 5. G_5 = 
+
+
+## Test
+Predicting formation energy of Cu:
+```
+cd test/
+```
+```
+python cu_bispectrum.py
+```
