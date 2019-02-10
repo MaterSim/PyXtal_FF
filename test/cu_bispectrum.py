@@ -12,8 +12,6 @@ from utilities.assembler import assembler
 # Read json file and convert them to pymatgen structure object 
 # and the corresponding energies and volumes.
 
-with open("../datasets/Cu/training/AIMD.json") as f:
-    data = json.load(f)
 
 structures = []
 energies = []
