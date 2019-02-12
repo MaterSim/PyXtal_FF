@@ -29,9 +29,36 @@ def make_js(twojmax, diagonal):
 
 class bispectrum(object):
     """
-
+    This class prepares a lammps input file and calls the lammps executable 
+    to calculate bispectrum coefficients of a given structure.
+    
+    Parameters
+    ----------
+    structure: object
+        Pymatgen crystal structure object.
+    rcutfac: float
+        Scale factor applied to all cutoff radii
+    twojmax: int
+        Band limit for bispectrum components
+    element_profile: dict
+        Elemental descriptions of each atom type in the structure.
+        i.e. dict(Na=dict(r=0.3, w=0.9), Cl=dict(r=0.7, w=3.0))
+    rfac0: float
+        Parameter in distance to angle conversion (0 < rcutfac < 1).
+        Default value: 0.99363.
+    rmin0: float
+        Parameter in distance to angle conversion.
+        Default value: 0.
+    diagonal: int
+        diagonal value = 0 or 1 or 2 or 3.
+        0 = all j1, j2, j <= twojmax, j2 <= j1
+        1 = subset satisfying j1 == j2
+        2 = subset satisfying j1 == j2 == j3
+        3 = subset satisfying j2 <= j1 <= j
     """
-    def __init__(self, structures, rcutfac, twojmax, element_profile, rfac0=0.99363, rmin0=0, diagonal=3):
+    def __init__(self, structure, rcutfac, twojmax, element_profile, 
+                 rfac0=0.99363, rmin0=0., diagonal=3):
+        # Need to specify self.exe to find lammps executable.
         self.exe = '../lmp_serial'
         self.pre_cmds = ['units metal',
                          'atom_style charge',
@@ -51,7 +78,7 @@ class bispectrum(object):
         self.input_file = 'in.sna'
 
 
-        self.structures = structures
+        self.structure = structure
         self.rcutfac = rcutfac
         self.twojmax = twojmax
         self.elements = element_profile.keys()
@@ -65,7 +92,8 @@ class bispectrum(object):
         
         self.rfac0 = rfac0
         self.rmin0 = rmin0
-        assert diagonal in range(4), 'Invalid diagonal style, must be 0, 1, 2, or 3.'
+        assert diagonal in range(4), \
+            'Invalid diagonal style, must be 0, 1, 2, or 3.'
         self.diagonal = diagonal
         
         self.calculate()
@@ -76,22 +104,40 @@ class bispectrum(object):
 
     
     def calculate(self):
+        """
+        Call the lammps executable to compute bispectrum coefficients
+        """
         data = self.get_lammps_data(self.structures, self.elements)
         data.write_file('data.0')
         self.get_lammps_input(self.input_file)
-        p = subprocess.Popen([self.exe, '-in', self.input_file], stdout=subprocess.PIPE)
+        p = subprocess.Popen([self.exe, '-in', self.input_file], 
+                             stdout=subprocess.PIPE)
         stdout = p.communicate()[0]
         rc = p.returncode
         if rc != 0:
-            raise RuntimeError("LAMMPS didn't work properly")
+            error_msg = 'LAMMPS exited with return code %d' % rc
+            msg = stdout.decode("utf-8").split('\n')[:-1]
+            try:
+                error = [i for i, m in enumerate(msg)
+                        if m.startswith('ERROR')][0]
+                error_msg += ', '.join([e for e in msg[error:]])
+            except:
+                error_msg += msg[-1]
+            raise RuntimeError(msg[-1])
         
 
     def get_lammps_data(self, structure, elements):
+        """
+        Convert Pymatgen structure object to lammps dump file.
+        """
         data = LammpsData.from_structure(structure, elements)
  
         return data
 
     def get_lammps_input(self, input_file):
+        """
+        Create lammps input file.
+        """
         sna = f"1 {self.rfac0} {self.twojmax} "
         for R in self.Rs:
             R *= self.rcutfac
