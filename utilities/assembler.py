@@ -37,8 +37,8 @@ class assembler(object):
                     sum += sna[i]
             self.sna.append(sum/(i+1))
         self.sna = np.hstack((bias_weight, self.sna))
-        self.sna = np.ravel(self.sna)
-        all = [self.sna]
+        self.sna = [np.ravel(self.sna)]
+        all = self.sna
         #print(f"This is self.sna:\n{self.sna}")
         
 
