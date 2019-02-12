@@ -61,7 +61,7 @@ class assembler(object):
                 else:
                     temp = np.hstack((np.zeros((len(temp), 1)), temp))
                     self.snad = np.hstack((self.snad,temp))
-            all = np.concatenate(([self.sna], self.snad))
+            all = np.concatenate((self.sna, self.snad))
             #print(f"This is self.snad:\n{self.snad}")
 
 
