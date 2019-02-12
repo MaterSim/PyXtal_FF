@@ -77,7 +77,7 @@ class bispectrum(object):
         self.post_cmds = ['run 0']
         self.input_file = 'in.sna'
 
-
+        
         self.structure = structure
         self.rcutfac = rcutfac
         self.twojmax = twojmax
@@ -107,7 +107,7 @@ class bispectrum(object):
         """
         Call the lammps executable to compute bispectrum coefficients
         """
-        data = self.get_lammps_data(self.structures, self.elements)
+        data = self.get_lammps_data(self.structure, self.elements)
         data.write_file('data.0')
         self.get_lammps_input(self.input_file)
         p = subprocess.Popen([self.exe, '-in', self.input_file], 
