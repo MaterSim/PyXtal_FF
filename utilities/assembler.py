@@ -2,7 +2,22 @@ import os
 import numpy as np
 
 class assembler(object):
-
+    """
+    A class to gather all bispectrum components, including force and stress
+    bispectrum. 
+    
+    Parameters
+    ----------
+    atom_type: list of str
+        String of all atom types in the structure, i.e. ['Na', 'Cl']
+    volume: float
+        Volume of a crystal structure. Volume is used to convert the stress
+        bispectrum components from eV to GPa.
+    force: bool
+        If true, return force bispectrum components.
+    stress: bool
+        If true, return stress bispectrum components
+    """
     def __init__(self, atom_type, volume, force=True, stress=True):
         
         elements = self._read_dump("dump.element", dtype='str')
@@ -23,51 +38,50 @@ class assembler(object):
             self.sna.append(sum/(i+1))
         self.sna = np.hstack((bias_weight, self.sna))
         self.sna = np.ravel(self.sna)
+        all = [self.sna]
         #print(f"This is self.sna:\n{self.sna}")
         
 
         # SNAD
-        snad = self._read_dump("dump.snad")
-        snad = np.split(np.asarray(snad), len(atom_type), axis=1)
-        depth, rows, columns = np.shape(snad)
-        x, y, z = int(columns/3), int(columns*2/3), columns
-
-        self.snad = []
-        for i in range(len(atom_type)):
-            temp = []
-            for j in range(len(elements)):
-                temp.append(snad[i][j][0:x])   # x-direction
-                temp.append(snad[i][j][x:y])  # y-direction
-                temp.append(snad[i][j][y:z]) # z-direction
-            if self.snad == []:
-                self.snad = np.hstack((np.zeros((len(temp), 1)), temp))
-            else:
-                temp = np.hstack((np.zeros((len(temp), 1)), temp))
-                self.snad = np.hstack((self.snad,temp))
-        #print(f"This is self.snad:\n{self.snad}")
+        if force == True:
+            snad = self._read_dump("dump.snad")
+            snad = np.split(np.asarray(snad), len(atom_type), axis=1)
+            depth, rows, columns = np.shape(snad)
+            x, y, z = int(columns/3), int(columns*2/3), columns
+        
+            self.snad = []
+            for i in range(len(atom_type)):
+                temp = []
+                for j in range(len(elements)):
+                    temp.append(snad[i][j][0:x])   # x-direction
+                    temp.append(snad[i][j][x:y])  # y-direction
+                    temp.append(snad[i][j][y:z]) # z-direction
+                if self.snad == []:
+                    self.snad = np.hstack((np.zeros((len(temp), 1)), temp))
+                else:
+                    temp = np.hstack((np.zeros((len(temp), 1)), temp))
+                    self.snad = np.hstack((self.snad,temp))
+            all = np.concatenate(([self.sna], self.snad))
+            #print(f"This is self.snad:\n{self.snad}")
 
 
         # SNAV
-        snav = self._read_dump("dump.snav")
-        snav = np.asarray(snav)
-        snav = np.split(snav.sum(axis=0), len(atom_type))
-        self.snav = []
-        for i in range(len(atom_type)):
-            temp = np.reshape(snav[i], (6,len(sna[0])))
-            if self.snav == []:
-                self.snav = np.hstack((np.zeros((len(temp), 1)), temp))
-            else:
-                temp = np.hstack((np.zeros((len(temp), 1)), temp))
-                self.snav = np.hstack((self.snav, temp))
-        self.snav = self.snav / volume * 160.21766208 # eV to GPa
-        #print(f"This is self.snav:\n{self.snav}")
-
-        if force == False and stress == False:
-            all = [self.sna]
-        if force == True:
-            all = np.concatenate(([self.sna], self.snad))
         if stress == True:
+            snav = self._read_dump("dump.snav")
+            snav = np.asarray(snav)
+            snav = np.split(snav.sum(axis=0), len(atom_type))
+            
+            self.snav = []
+            for i in range(len(atom_type)):
+                temp = np.reshape(snav[i], (6,len(sna[0])))
+                if self.snav == []:
+                    self.snav = np.hstack((np.zeros((len(temp), 1)), temp))
+                else:
+                    temp = np.hstack((np.zeros((len(temp), 1)), temp))
+                    self.snav = np.hstack((self.snav, temp))
+            self.snav = self.snav / volume * 160.21766208 # eV to GPa
             all = np.concatenate((all, self.snav))
+            #print(f"This is self.snav:\n{self.snav}")
         
         #print(f"This is all:\n{all}")
         self.bispectrum_coefficients = all
