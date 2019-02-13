@@ -1,0 +1,3 @@
+
+pair_style snap
+pair_coeff * * Mo.snapcoeff Mo Mo.snapparam Mo
