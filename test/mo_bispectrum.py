@@ -19,8 +19,11 @@ Rc = 4.615858
 twojmax = 6
 diagonal = 3
 force = True
-stress = True
+stress = False
 save = False
+w_energy = 1537.72250
+w_force = 1.61654910
+w_stress = 0.
 
 
 class Cu_bispectrum(object):
@@ -28,12 +31,16 @@ class Cu_bispectrum(object):
     
     """
     def __init__(self, files, profile, Rc, twojmax, diagonal, 
+                 w_energy, w_force, w_stress, 
                  force=False, stress=False, save=False):
         self.files = files
         self.profile = profile
         self.Rc = Rc
         self.twojmax = twojmax
         self.diagonal = diagonal
+        self.w_energy = w_energy
+        self.w_force = w_force
+        self.w_stress = w_stress
         self.force = force
         self.stress = stress
         self.save = save
@@ -49,6 +56,7 @@ class Cu_bispectrum(object):
         y = []
         self.volumes = []
         n_atoms = []
+        weights = []
 
         
         for file in files:
@@ -68,6 +76,7 @@ class Cu_bispectrum(object):
                 # append energies in y
                 y.append(struc['data']['energy_per_atom'])
                 n_atoms.append(structure.num_sites)
+                weights.append(self.w_energy)
                 
                 # append force in y
                 if self.force == True:                    
@@ -75,12 +84,14 @@ class Cu_bispectrum(object):
                     for f in fs:
                         y.append(f)
                         n_atoms.append(1.)
+                        weights.append(self.w_force)
                     # append stress in y
                     if self.stress == True:
                         ss = np.ravel(struc['data']['virial_stress'])
                         for s in ss:
                             y.append(s)
-                            n_atoms.append(1.0)
+                            n_atoms.append(1.)
+                            weights.append(self.w_stress)
 
                 self.volumes.append(structure.volume)
 
@@ -88,7 +99,7 @@ class Cu_bispectrum(object):
         t = round(time1 - time0, 2)
         print(f"The time it takes to convert json files to structures: {t} s")
 
-        return structures, np.vstack((y, n_atoms))
+        return structures, np.vstack((y, n_atoms, weights))
     
     
     def convert_to_bispectrum(self, save):
@@ -121,6 +132,7 @@ class Cu_bispectrum(object):
         time0 = time.time()
         ts = 0.4
         rs = 107
+
         X_train, X_test, y_train, y_test = train_test_split(self.X, 
                                                             self.y[0], 
                                                             test_size=ts, 
@@ -130,16 +142,24 @@ class Cu_bispectrum(object):
                                                              self.y[1], 
                                                              test_size=ts, 
                                                              random_state=rs)
+       
+        # To obtain weights
+        _, _, weights_train, weights_test = train_test_split(self.X,
+                                                           self.y[2], 
+                                                           test_size=ts, 
+                                                           random_state=rs)
 
-        reg = LinearRegression().fit(X_train, y_train)
+        reg = LinearRegression().fit(X_train, y_train, weights_train)
         
         # Evaluate training dataset
         mae_E_train, r2_E_train, mae_F_train, r2_F_train = \
-            self.evaluate_mae_rsquare(reg, n_atoms_train, X_train, y_train)
+            self.evaluate_mae_rsquare(reg, n_atoms_train, X_train, y_train,
+                                      weights_train)
             
         # Evaluate test dataset
         mae_E_test, r2_E_test, mae_F_test, r2_F_test = \
-            self.evaluate_mae_rsquare(reg, n_atoms_test, X_test, y_test)
+            self.evaluate_mae_rsquare(reg, n_atoms_test, X_test, y_test,
+                                      weights_test)
             
         # Print train
         print(f"Score for training dataset")
@@ -164,7 +184,7 @@ class Cu_bispectrum(object):
         print(f"The time it takes to perform linear regression: {t} s")
         
         
-    def evaluate_mae_rsquare(self, regression, n_atoms, X, y):
+    def evaluate_mae_rsquare(self, regression, n_atoms, X, y, weights):
         """
         Evaluate the train or test dataset.
         
@@ -174,32 +194,32 @@ class Cu_bispectrum(object):
         """
         X_forces, X_energies = [], []
         y_forces, y_energies = [], []
+        w_forces, w_energies = [], []
         natoms = []
         for i, atom in enumerate(n_atoms):
             if atom == 1.:
                 X_forces.append(X[i])
                 y_forces.append(y[i])
+                w_forces.append(weights[i])
             else:
                 X_energies.append(X[i])
                 y_energies.append(y[i])
                 natoms.append(atom)
+                w_energies.append(weights[i])
                 
         # Evaluate energy
         yp_energies = regression.predict(X_energies)
         mae_energies = mean_absolute_error(y_energies, yp_energies)
-        r2_energies = regression.score(X_energies, y_energies)
+        r2_energies = regression.score(X_energies, y_energies, w_energies)
         
         # Evaluate force
         yp_forces = regression.predict(X_forces)
         mae_forces = mean_absolute_error(y_forces, yp_forces)
-        r2_forces = regression.score(X_forces, y_forces)
+        r2_forces = regression.score(X_forces, y_forces, w_forces)
         
         return mae_energies, r2_energies, mae_forces, r2_forces        
 
         
 if __name__ == '__main__':
-    Cu_bispectrum(files, profile, Rc, twojmax, diagonal, force, stress)
-    
-#d = {'train_r2': [r2_train],'train_mae': [mae_train], 'test_r2': [r2_test], 'test_mae': [mae_test]}
-#df = pd.DataFrame(d)
-#print(df)
+    Cu_bispectrum(files, profile, Rc, twojmax, diagonal, 
+                  w_energy, w_force, w_stress, force, stress, save)
