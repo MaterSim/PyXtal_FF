@@ -14,7 +14,7 @@ import pandas as pd
 
 directory = "../datasets/Mo/training/"
 files = ["AIMD_NPT.json", "AIMD_NVT.json"]#, "Elastic.json", "GB.json", "Surface.json", "Vacancy.json"]
-profile = dict(Mo=dict(r=1.0, w=1.0))
+profile = dict(Mo=dict(r=0.5, w=1.0))
 Rc = 4.615858
 twojmax = 6
 diagonal = 3
@@ -22,7 +22,7 @@ force = True
 stress = False
 save = False
 w_energy = 1537.72250
-w_force = 1.61654910
+w_force = 20.61654910
 w_stress = 0.
 
 ########################### From UCSD #########################################
@@ -47,10 +47,12 @@ class Cu_bispectrum(object):
         self.stress = stress
         self.save = save
         
-#        self.structures, self.y = self.get_structures_energies()
-#        self.X = self.convert_to_bispectrum(self.save)
+        self.structures, self.y = self.get_structures_energies()
+        self.X = self.convert_to_bispectrum(self.save)
+        print(self.X[0:3])
         self.UCSD()
-        self.linear_regression()
+        print(self.X[0:3])
+#        self.linear_regression()
     
     
     def UCSD(self):
@@ -145,7 +147,7 @@ class Cu_bispectrum(object):
         for i in range(len(self.structures)):
             bispectrum(self.structures[i], self.Rc, self.twojmax, self.profile,
                        diagonal=self.diagonal)
-            bispec = assembler(atom_type=['Cu'], volume=self.volumes[i], 
+            bispec = assembler(atom_type=['Mo'], volume=self.volumes[i], 
                                force=self.force, stress=self.stress)
             if snap == []:
                 snap = bispec.bispectrum_coefficients
@@ -176,12 +178,12 @@ class Cu_bispectrum(object):
                                                             random_state=rs)
         # To obtain # of atoms in a unit cell
         _, _, n_atoms_train, n_atoms_test = train_test_split(self.X, 
-                                                             self.y[2], 
+                                                             self.y[1], 
                                                              test_size=ts, 
                                                              random_state=rs)
         # To obtain weights
         _, _, weights_train, weights_test = train_test_split(self.X,
-                                                           self.y[1], 
+                                                           self.y[2], 
                                                            test_size=ts, 
                                                            random_state=rs)
 

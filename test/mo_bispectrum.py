@@ -6,6 +6,7 @@ from pymatgen import Structure
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 sys.path.append("../")
 from descriptors.snap import bispectrum
@@ -13,8 +14,8 @@ from utilities.assembler import assembler
 import pandas as pd
 
 directory = "../datasets/Mo/training/"
-files = ["AIMD_NPT.json"] #"AIMD_NVT.json", "Elastic.json", "GB.json", "Surface.json", "Vacancy.json"]
-profile = dict(Mo=dict(r=1.0, w=1.0))
+files = ["AIMD_NPT.json", "AIMD_NVT.json"] #"GB.json", "Surface.json", "Vacancy.json", "Elastic.json"]
+profile = dict(Mo=dict(r=0.5, w=1.0))
 Rc = 4.615858
 twojmax = 6
 diagonal = 3
@@ -23,10 +24,10 @@ stress = False
 save = False
 w_energy = 1537.72250
 w_force = 1.61654910
-w_stress = 0.
+w_stress = 0.036796
 
 
-class Cu_bispectrum(object):
+class Mo_bispectrum(object):
     """
     
     """
@@ -63,7 +64,7 @@ class Cu_bispectrum(object):
             with open(directory+file) as f:
                 data = json.load(f)
         
-            for struc in data[:5]:
+            for struc in data:
                 lat = struc['structure']['lattice']['matrix']
                 species = []
                 positions = []
@@ -109,7 +110,7 @@ class Cu_bispectrum(object):
         for i in range(len(self.structures)):
             bispectrum(self.structures[i], self.Rc, self.twojmax, self.profile,
                        diagonal=self.diagonal)
-            bispec = assembler(atom_type=['Cu'], volume=self.volumes[i], 
+            bispec = assembler(atom_type=['Mo'], volume=self.volumes[i], 
                                force=self.force, stress=self.stress)
             if snap == []:
                 snap = bispec.bispectrum_coefficients
@@ -131,7 +132,10 @@ class Cu_bispectrum(object):
         """
         time0 = time.time()
         ts = 0.4
-        rs = 107
+        rs = 13
+        
+        scaler = StandardScaler()
+        self.X = scaler.fit_transform(self.X, self.y[0])
 
         X_train, X_test, y_train, y_test = train_test_split(self.X, 
                                                             self.y[0], 
@@ -142,7 +146,6 @@ class Cu_bispectrum(object):
                                                              self.y[1], 
                                                              test_size=ts, 
                                                              random_state=rs)
-       
         # To obtain weights
         _, _, weights_train, weights_test = train_test_split(self.X,
                                                            self.y[2], 
@@ -221,5 +224,5 @@ class Cu_bispectrum(object):
 
         
 if __name__ == '__main__':
-    Cu_bispectrum(files, profile, Rc, twojmax, diagonal, 
+    Mo_bispectrum(files, profile, Rc, twojmax, diagonal, 
                   w_energy, w_force, w_stress, force, stress, save)
