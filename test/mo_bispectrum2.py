@@ -22,7 +22,7 @@ force = True
 stress = False
 save = False
 w_energy = 1537.72250
-w_force = 20.61654910
+w_force = 1.61654910
 w_stress = 0.
 
 ########################### From UCSD #########################################
@@ -85,7 +85,7 @@ class Cu_bispectrum(object):
                 x = np.vstack((e_des, f_des))
                 self.X = np.vstack((self.X,x))
                 
-        self.y = np.vstack((y,w,n_atoms))        
+        self.y = np.vstack((y,n_atoms,w))        
         
         
     def get_structures_energies(self):
