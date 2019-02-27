@@ -34,132 +34,70 @@ class gaussian:
         self.G4_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
         self.G5_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
 
-        self.G_types = ['G1', 'G2', 'G3', 'G4', 'G5']
+        self.G_types = [] # e.g. ['G2', 'G4']
 
-        self.G1_params = None
-        self.G2_params = None
-        self.G3_params = None
-        self.G4_params = None
-        self.G5_params = None
-        self.G1_parameters = []
-        self.G2_parameters = []
-        self.G3_parameters = []
-        self.G4_parameters = []
-        self.G5_parameters = []
+        self.G1_parameters = None
+        self.G2_parameters = None
+        self.G3_parameters = None
+        self.G4_parameters = None
+        self.G5_parameters = None
         for key, value in self.symmetry_parameters.items():
             if key == 'G1':
-                self.G1_params = value
-                self.G1_parameters = self.get_parameters('G1', self.G1_params)
+                self.G1_parameters = value
+                self.G_types.append(key)
             elif key == 'G2':
-                self.G2_params = value
-                self.G2_parameters = self.get_parameters('G2', self.G2_params)
+                self.G2_parameters = value
+                self.G_types.append(key)
             elif key == 'G3':
-                self.G3_params = value
-                self.G3_parameters = self.get_parameters('G3', self.G3_params)
+                self.G3_parameters = value
+                self.G_types.append(key)
             elif key == 'G4':
-                self.G4_params = value
-                self.G4_parameters = self.get_parameters('G4', self.G4_params)
+                self.G4_parameters = value
+                self.G_types.append(key)
             else:
-                self.G5_params = value
-                self.G5_parameters = self.get_parameters('G5', self.G5_params)
+                self.G5_parameters = value
+                self.G_types.append(key)
         
-
+        
         self.G1 = []
-        if self.G1_params is not None:
-            for key, value in self.G1_params.items():
-                if key in G1_keywords:
-                    pass
-                else:
-                    raise NotImplementedError(
-                            f"Unknown parameter: {key}. "\
-                            f"The available parameters are {G1_keywords}.")
+        if self.G1_parameters is not None:
+            self._check_sanity(self.G1_parameters, self.G1_keywords)
 
-            G1 = np.asarray(self.calculate('G1', self.G1_params, derivative))
+            G1 = np.asarray(self.calculate('G1', self.G1_parameters, self.derivative))
             self.G1 = self.reshaping(G1)
 
         self.G2 = []
-        if self.G2_params is not None:
-            for key, value in self.G2_params.items():
-                if key in G2_keywords:
-                    pass
-                else:
-                    raise NotImplementedError(
-                            f"Unknown parameter: {key}. "\
-                            f"The available parameters are {G2_keywords}.")
+        if self.G2_parameters is not None:
+            self._check_sanity(self.G2_parameters, self.G2_keywords)
             
-            G2, G2D = self.calculate('G2', self.G2_params, derivative)
+            G2, G2D = self.calculate('G2', self.G2_parameters, self.derivative)
             self.G2 = self.reshaping(np.asarray(G2))
             self.G2_derivative = G2D
         
         self.G3 = []
-        if self.G3_params is not None:
-            for key, value in self.G3_params.items():
-                if key in G3_keywords:
-                    pass
-                else:
-                    raise NotImplementedError(
-                            f"Unknown parameter: {key}. "\
-                            f"The available parameters are {G3_keywords}.")
+        if self.G3_parameters is not None:
+            self._check_sanity(self.G3_parameters, self.G3_keywords)
             
-            G3 = np.asarray(self.calculate('G3', self.G3_params, derivative))
+            G3 = np.asarray(self.calculate('G3', self.G3_parameters, self.derivative))
             self.G3 = self.reshaping(G3)
 
         self.G4 = []
-        if self.G4_params is not None:
-            for key, value in self.G4_params.items():
-                if key in G4_keywords:
-                    pass
-                else:
-                    raise NotImplementedError(
-                            f"Unknown parameter: {key}. "\
-                            f"The available parameters are {G4_keywords}.")
+        if self.G4_parameters is not None:
+            self._check_sanity(self.G4_parameters, self.G4_keywords)
 
-            G4 = np.asarray(self.calculate('G4', self.G4_params, derivative))
+            G4 = np.asarray(self.calculate('G4', self.G4_parameters, self.derivative))
             self.G4 = self.reshaping(G4)
 
         self.G5 = []
-        if self.G5_params is not None:
-            for key, value in self.G5_params.items():
-                if key in G5_keywords:
-                    pass
-                else:
-                    raise NotImplementedError(
-                            f"Unknown parameter: {key}. "\
-                            f"The available parameters are {G5_keywords}.")
+        if self.G5_parameters is not None:
+            self._check_sanity(self.G4_parameters, self.G4_keywords)
 
-            G5 = np.asarray(self.calculate('G5', self.G5_params, derivative))
+
+            G5 = np.asarray(self.calculate('G5', self.G5_parameters, self.derivative))
             self.G5 = self.reshaping(G5)
 
-        self.G_parameters = self.get_G_parameters()
-        self.G = self.get_all_G()
-
-
-    def _check_sanity(self, symmetry_parameters, G_type):
-        """
-
-        """
-        G_params = None
-        G_parameters = []
-
-        for key, value in symmetry_parameters.items():
-            if key == 'G2':
-                G_params = value
-                G_parameters = self.get_parameters('G2', G_params)
-
-        print(G_parameters)
+#        self.Gs = self.get_all_G()
     
-
-    def get_statistics(self, Gs):
-        Gs_mean = np.mean(Gs, axis=0)
-        Gs_std = np.std(Gs, axis=0)
-        Gs_skew = skew(Gs, axis=0)
-        Gs_kurtosis = kurtosis(Gs, axis=0)
-        Gs_covariance = np.cov(Gs.T)
-
-        return None
-    
-
-
 
     def calculate(self, G_type, sym_params, derivative=False):
         # Get elements in the crystal structure
@@ -397,17 +335,6 @@ class gaussian:
             return G, Gd
 
 
-    def get_offsets(self, crystal, cutoff):
-        image = AseAtomsAdaptor.get_atoms(crystal)
-        nl = NeighborList(cutoffs=[cutoff / 2.] * len(image),
-                          self_interaction=False,
-                          bothways=True,
-                          skin=0.)
-        nl.update(image)
-
-        return [nl.get_neighbors(index) for index in range(len(image))]
-
-
     def get_parameters(self, G_type, params):
         """
         Function to get symmetry functions parameters: eta, zeta, etc.
@@ -418,7 +345,6 @@ class gaussian:
         """
         # Need to finish G1 and G3.
         D = []
-        keys = list(params.keys())
         
         if G_type == 'G2':
             elements = self.crystal.symbol_set
@@ -488,27 +414,27 @@ class gaussian:
         return D
 
 
-    def get_G_parameters(self):
-        G_parameters = []
-
-        if self.G1_parameters != []:
-            for i in self.G1_parameters:
-                G_parameters.append(i)
-        if self.G2_parameters != []:
-            for i in self.G2_parameters:
-                G_parameters.append(i)
-        if self.G3_parameters != []:
-            for i in self.G3_parameters:
-                G_parameters.append(i)
-        if self.G4_parameters != []:
-            for i in self.G4_parameters:
-                G_parameters.append(i)
-        if self.G5_parameters != []:
-            for i in self.G5_parameters:
-                G_parameters.append(i)
-
-        return G_parameters
-
+#    def get_G_parameters(self):
+#        G_parameters = []
+#
+#        if self.G1_parameters != []:
+#            for i in self.G1_parameters:
+#                G_parameters.append(i)
+#        if self.G2_parameters != []:
+#            for i in self.G2_parameters:
+#                G_parameters.append(i)
+#        if self.G3_parameters != []:
+#            for i in self.G3_parameters:
+#                G_parameters.append(i)
+#        if self.G4_parameters != []:
+#            for i in self.G4_parameters:
+#                G_parameters.append(i)
+#        if self.G5_parameters != []:
+#            for i in self.G5_parameters:
+#                G_parameters.append(i)
+#
+#        return G_parameters
+        
 
     def reshaping(self, arr):
         m, n = arr.shape
@@ -553,6 +479,19 @@ class gaussian:
             pass
 
         return Gs
+    
+    
+    def _check_sanity(self, G_parameters, G_keywords):
+        """
+        Check if any of the parameters in the keywords.
+        """        
+        for key, value in G_parameters.items():
+            if key in G_keywords:
+                pass
+            else:
+                raise NotImplementedError(
+                        f"Unknown parameter: {key}. "\
+                        f"The available parameters are {self.G5_keywords}.")
 
 
 ############################# Auxiliary Functions #############################
@@ -1616,13 +1555,34 @@ def G5_derivative(crystal, cutoff_f='Cosine',
     return G5D
 
 
-#crystal = Structure.from_file('../POSCARs/POSCAR-NaCl')
+crystal = Structure.from_file('../POSCARs/POSCAR-NaCl')
 
-#sym_params = {'G2': {'eta': np.logspace(np.log10(0.05), 
-#                                         np.log10(5.), num=4)}}
+sym_params = {'G2': {'eta': np.logspace(np.log10(0.05), 
+                                         np.log10(5.), num=4)}}
 #                'G5': {'eta': [0.005],
 #                        'zeta': [1., 4.],
 #                        'lamBda': [1., -1.]}}
 
-#gauss = gaussian(crystal, sym_params, derivative=True)
+gauss = gaussian(crystal, sym_params, derivative=True)
 #print(gauss.G2_derivative)
+
+
+#    def get_statistics(self, Gs):
+#        Gs_mean = np.mean(Gs, axis=0)
+#        Gs_std = np.std(Gs, axis=0)
+#        Gs_skew = skew(Gs, axis=0)
+#        Gs_kurtosis = kurtosis(Gs, axis=0)
+#        Gs_covariance = np.cov(Gs.T)
+#
+#        return None
+
+
+#    def get_offsets(self, crystal, cutoff):
+#        image = AseAtomsAdaptor.get_atoms(crystal)
+#        nl = NeighborList(cutoffs=[cutoff / 2.] * len(image),
+#                          self_interaction=False,
+#                          bothways=True,
+#                          skin=0.)
+#        nl.update(image)
+#
+#        return [nl.get_neighbors(index) for index in range(len(image))]
