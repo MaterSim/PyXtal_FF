@@ -134,12 +134,10 @@ class gaussian:
                     zetas = [value]
                     
         if derivative:
-            n_core = self.crystal.num_sites
+            core_elements = [site.species_string for site in self.crystal.sites]
             neighbors = self.crystal.get_all_neighbors(r=max(Rc),
                                                        include_index=True,
-                                                       include_image=True)
-            elements = self.crystal.symbol_set
-                    
+                                                       include_image=True)              
 
         if G_type == 'G1':
             for rc in Rc:
@@ -154,20 +152,23 @@ class gaussian:
                         for eta in etas:
                             g = calculate_G2(self.crystal, co, rc, eta, rs)
                             G.append(g)
-            
+
             if derivative:
-                for i in range(n_core):
-                    for direction in range(3):
-                        for neigh in neighbors[i]:
-                            if neigh[3] == (0, 0, 0):
-                                print(neigh[2])
-                                gd = []
-                                for eta in etas:
-                                    for elem in elements:
-                                        gd.append(G2_derivative(self.crystal, elem, neigh[2], cutoff_f='Cosine', Rc=Rc[0], eta=eta, Rs=Rs[0], p=i, q=direction))
+                for i, neigh in enumerate(neighbors):
+                    for q in range(3):
+                        gd = G2_derivative(crystal=self.crystal, i=i, element=core_elements[i], ni=neigh, 
+                                           cutoff_f='Cosine', Rc=6.5, 
+                                           eta=etas, Rs=0.0, p=i, q=q)
+                        Gd.append(gd)
+                        for n in neigh:
+                            if n[3] == (0.0, 0.0, 0.0):
+                                gd = G2_derivative(crystal=self.crystal, i=n[2], 
+                                                   element=n[0].species_string, 
+                                                   ni=neighbors[n[2]], 
+                                                   cutoff_f='Cosine', Rc=6.5, 
+                                                   eta=etas, Rs=0.0, p=i, q=q)
                                 Gd.append(gd)
-                                                
-                                
+                print(Gd)
                             
                             
         elif G_type == 'G3':
@@ -484,10 +485,10 @@ def dcos_dRpq(a, b, c, Ra, Rb, Rc, p, q):
         Position of the first atom.
     Rc: list of floats
         Postition of the second atom.
-    m: int
+    p: int
         Atom that is experiencing force.
-    l: int
-        Direction of the force.
+    q: int
+        Direction of force. x = 0, y = 1, and z = 2.
         
     Returns
     -------
@@ -499,16 +500,16 @@ def dcos_dRpq(a, b, c, Ra, Rb, Rc, p, q):
     Rab = np.linalg.norm(Rab_vector)
     Rac = np.linalg.norm(Rac_vector)
     
-    term_one = 1 / (Rab * Rac) * \
+    f_term = 1 / (Rab * Rac) * \
             np.dot(dRab_dRpq_vector(a, b, p, q), Rac_vector)
-    term_second = 1 / (Rab * Rac) * \
+    s_term = 1 / (Rab * Rac) * \
                     np.dot(Rab_vector, dRab_dRpq_vector(a, c, p, q))
-    term_third = np.dot(Rab_vector, Rac_vector) / Rab ** 2 / Rac * \
+    t_term = np.dot(Rab_vector, Rac_vector) / Rab ** 2 / Rac * \
                     dRab_dRpq(a, b, Ra, Rb, p, q)
-    term_fourth = np.dot(Rab_vector, Rac_vector) / Rab / Rac ** 2 * \
+    f_term = np.dot(Rab_vector, Rac_vector) / Rab / Rac ** 2 * \
                     dRab_dRpq(a, c, Ra, Rc, p, q)
                     
-    return (term_one + term_second - term_third - term_fourth)
+    return (f_term + s_term - t_term - f_term)
 
 
 ############################## Cutoff Functional ##############################
@@ -876,7 +877,7 @@ def calculate_G2(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0):
     return G2
 
 
-def G2_derivative(crystal, element, i, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0, p=1, q=0):
+def G2_derivative(crystal, element, i, ni, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0, p=1, q=0):
     """
     Calculate the derivative of the G2 symmetry function.
     
@@ -907,20 +908,28 @@ def G2_derivative(crystal, element, i, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0,
     
     # Get positions of core atoms
     core_cartesians = crystal.cart_coords
+    Ri = core_cartesians[i]
 
     # Their neighbors within the cutoff radius
-    neighbors = crystal.get_all_neighbors(Rc)
+    elements = crystal.symbol_set
 
-    G2D = 0
-    for j in range(len(neighbors[i])):
-        if element == neighbors[i][j][0].species_string:
-            Ri = core_cartesians[i]
-            Rj = neighbors[i][j][0]._coords
-            Rij = np.linalg.norm(Rj - Ri)
-            G2D += np.exp(-eta * (Rij - Rs)**2) * \
-                    dRab_dRpq(i, j, Ri, Rj, p, q) * \
-                    (-2 * eta * (Rij - Rs) * func(Rij) + 
-                    func.derivative(Rij))
+    G2D = []
+    for e in eta:
+        for elem in elements:
+            g2D = 0
+            for count in range(len(ni)):
+                symbol = ni[count][0].species_string
+                Rj = ni[count][0]._coords
+                j = ni[count][2]
+                if elem == symbol:
+                    dRabdRpq = dRab_dRpq(i, j, Ri, Rj, p, q)
+                    if dRabdRpq != 0:
+                        Rij = np.linalg.norm(Rj - Ri)
+                        g2D += np.exp(-e * (Rij - Rs)**2. / Rc**2.) * \
+                                dRabdRpq * \
+                                (-2. * e * (Rij - Rs) * func(Rij) / Rc**2. + 
+                                func.derivative(Rij))
+            G2D.append(g2D)
 
     return G2D
 
