@@ -87,9 +87,10 @@ class gaussian:
 
         self.G5 = []
         if self.G5_parameters is not None:
-            self._check_sanity(self.G4_parameters, self.G4_keywords)
-            G5 = np.asarray(self.calculate('G5', self.G5_parameters, self.derivative))
-            self.G5 = self.reshaping(G5)
+            self._check_sanity(self.G5_parameters, self.G5_keywords)
+            G5, G5D = self.calculate('G5', self.G5_parameters, self.derivative)
+            self.G5 = self.reshaping(np.asarray(G5))
+            self.G5_derivative = G5D
     
 
     def calculate(self, G_type, symmetry_parameters, derivative=False):
@@ -217,7 +218,22 @@ class gaussian:
                                 G.append(g)
             
             if derivative:
-                pass
+                for i, neigh in enumerate(neighbors):
+                    for q in range(3):
+                        gd = G5_derivative(crystal=self.crystal, i=i, element=core_elements[i], ni=neigh, 
+                                           cutoff_f='Cosine', Rc=6.5, 
+                                           eta=etas, lamBda=lamBdas, zeta=zetas, p=i, q=q)
+                        Gd.append(gd)
+#                        for n in neigh:
+#                            if n[3] == (0.0, 0.0, 0.0):
+#                                gd = G5_derivative(crystal=self.crystal, i=n[2], 
+#                                                   element=n[0].species_string, 
+#                                                   ni=neighbors[n[2]], 
+#                                                   cutoff_f='Cosine', Rc=6.5, 
+#                                                   eta=etas, lamBda=lamBdas, zeta=zetas, p=i, q=q)
+#                                Gd.append(gd)
+                                
+        print(Gd)
 
         return G, Gd
 
@@ -1364,7 +1380,7 @@ def calculate_G5(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     return G5
 
 
-def G5_derivative(crystal, cutoff_f='Cosine', 
+def G5_derivative(crystal, i, element, ni, cutoff_f='Cosine', 
                   Rc=6.5, eta=2, lamBda=1, zeta=1, p=1, q=0):
     """
     Calculate the derivative of the G5 symmetry function.
@@ -1403,58 +1419,66 @@ def G5_derivative(crystal, cutoff_f='Cosine',
     else:
         raise NotImplementedError('Unknown cutoff functional: %s' %cutoff_f)
         
-    # Get core atoms information
-    n_core = crystal.num_sites
+    # Get positions of core atoms
     core_cartesians = crystal.cart_coords
+    Ri = core_cartesians[i]
+
+    # Their neighbors within the cutoff radius
+    elements = crystal.symbol_set
+    elements = list(itertools.combinations_with_replacement(elements, 2))
     
-    # Get neighbors information
-    neighbors = crystal.get_all_neighbors(Rc)
+    counts = range(len(ni))
     
     G5D = []
-
-    for i in range(n_core):
-        G5D_core = 0.0
-        for j in range(len(neighbors[i])-1):
-            for k in range(j+1, len(neighbors[i])):
-                Ri = core_cartesians[i]
-                Rj = neighbors[i][j][0].coords
-                Rk = neighbors[i][k][0].coords
-                
-                Rij_vector = Rj - Ri
-                Rik_vector = Rk - Ri
-                Rij = np.linalg.norm(Rij_vector)
-                Rik = np.linalg.norm(Rik_vector)
-                
-                cos_ijk = np.dot(Rij_vector, Rik_vector)/ Rij / Rik
-                dcos_ijk = dcos_dRpq(i, j, k, Ri, Rj, Rk, p, q)
-                
-                cutoff = func(Rij) * func(Rik)
-                cutoff_Rij_derivative = func.derivative(Rij) * \
-                                        dRab_dRpq(i, j, Ri, Rj, p, q)
-                cutoff_Rik_derivative = func.derivative(Rik) * \
-                                        dRab_dRpq(i, k, Ri, Rk, p, q)
-
-                lamBda_term = 1 + lamBda * cos_ijk
-                
-                first_term = -2 * eta / Rc ** 2 * lamBda_term * \
-                                (Rij * dRab_dRpq(i, j, Ri, Rj, p, q) + 
-                                 Rik * dRab_dRpq(i, k, Ri, Rk, p, q))
-                first_term += lamBda * zeta * dcos_ijk
-                first_term *= cutoff
-                
-                second_term = lamBda_term * \
-                                (cutoff_Rij_derivative * func(Rik) + 
-                                 cutoff_Rik_derivative * func(Rij))
+    for e in eta:
+        for z in zeta:
+            for l in lamBda:
+                for elem in elements:
+                    g5D = 0
+                    for j in counts:
+                        for k in counts[(j+1):]:
+                            n1 = ni[j][0].species_string
+                            n2 = ni[k][0].species_string
+                            if (elem[0] == n1 and elem[1] == n2) or \
+                                (elem[1] == n1 and elem[0] == n2):
+                                Rj = ni[j][0].coords
+                                Rk = ni[k][0].coords
                                 
-                term = first_term + second_term
-                term *= lamBda_term ** (zeta - 1)
-                term *= np.exp(-eta * (Rij ** 2. + Rik ** 2.) /
-                               Rc ** 2.)
+                                Rij_vector = Rj - Ri
+                                Rik_vector = Rk - Ri
+                                Rij = np.linalg.norm(Rij_vector)
+                                Rik = np.linalg.norm(Rik_vector)
                                 
-                G5D_core += term
-
-        G5D_core *= 2. ** (1. - zeta)
-        G5D.append(G5D_core)
+                                cos_ijk = np.dot(Rij_vector, Rik_vector) / Rij / Rik
+                                dcos_ijk = dcos_dRpq(i, ni[j][2], ni[k][2], Ri, Rj, Rk, p, q)
+                                
+                                cutoff = func(Rij) * func(Rik)
+                                cutoff_Rij_derivative = func.derivative(Rij) * \
+                                                        dRab_dRpq(i, ni[j][2], Ri, Rj, p, q)
+                                cutoff_Rik_derivative = func.derivative(Rik) * \
+                                                        dRab_dRpq(i, ni[k][2], Ri, Rk, p, q)
+                
+                                lamBda_term = 1. + l * cos_ijk
+                                
+                                first_term = -2 * e / Rc ** 2 * lamBda_term * \
+                                                (Rij * dRab_dRpq(i, ni[j][2], Ri, Rj, p, q) + 
+                                                 Rik * dRab_dRpq(i, ni[k][2], Ri, Rk, p, q))
+                                first_term += l * z * dcos_ijk
+                                first_term *= cutoff
+                                
+                                second_term = lamBda_term * \
+                                                (cutoff_Rij_derivative * func(Rik) + 
+                                                 cutoff_Rik_derivative * func(Rij))
+                                                
+                                term = first_term + second_term
+                                term *= lamBda_term ** (z - 1.)
+                                term *= np.exp(-e * (Rij ** 2. + Rik ** 2.) /
+                                               Rc ** 2.)
+                                                
+                                g5D += term
+            
+                    g5D *= 2. ** (1. - z)
+                    G5D.append(g5D)
         
     return G5D
 
