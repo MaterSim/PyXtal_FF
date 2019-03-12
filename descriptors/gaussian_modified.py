@@ -23,7 +23,6 @@ class symf:
     def __init__(self, crystal, symmetry_parameters, derivative=False):
         self.crystal = crystal
         self.symmetry_parameters = symmetry_parameters
-        self.derivative = derivative
 
         self.G1_keywords = ['Rc', 'functional']
         self.G2_keywords = ['eta', 'Rc', 'Rs', 'functional']
@@ -129,14 +128,14 @@ class symf:
                                                             include_index=True,
                                                             include_image=True)
 
-        elif G_type == 'G2':
+        if G_type == 'G2':
             for i in range(n_core):
                 g = []
                 for eta in etas:
                     for ele in e_types:
                         g.append(G2(self.crystal, 
                                     i=i,
-                                    element=ele,
+                                    e_type=ele,
                                     functional=functional,
                                     Rc=Rc, eta=eta, Rs=Rs))
                 G.append(g)
@@ -144,37 +143,37 @@ class symf:
             if derivative:
                 for i in range(n_core):
                     for q in range(3):
-                        gd = []
+                        gp = []
                         for eta in etas:
-                            for elem in e_types:
-                                gd.append(G2(crystal=self.crystal, 
-                                             i=i, 
-                                             e_type=elem,
-                                             ni=neighbors_info[i], 
-                                             functional='Cosine', 
-                                             Rc=Rc,
-                                             eta=eta, 
-                                             Rs=Rs,
-                                             p=i, q=q))
-                        Gp.append(gd)
+                            for ele in e_types:
+                                gp.append(G2_prime(crystal=self.crystal, 
+                                                   i=i, 
+                                                   e_type=ele,
+                                                   ni=neighbors_info[i], 
+                                                   functional='Cosine',
+                                                   Rc=Rc,
+                                                   eta=eta, 
+                                                   Rs=Rs,
+                                                   p=i, q=q))
+                        Gp.append(gp)
                         
                         for n in neighbors_info[i]:
                             if n[3] == (0.0, 0.0, 0.0):
-                                gd = []
+                                gp = []
                                 for eta in etas:
-                                    for elem in e_types:
+                                    for ele in e_types:
                                         ni = neighbors_info[n[2]]
                                         prime = G2_prime(crystal=self.crystal,
                                                          i=n[2],
-                                                         e_type=elem,
+                                                         e_type=ele,
                                                          ni=ni,
-                                                         cutoff_f='Cosine', 
+                                                         functional='Cosine', 
                                                          Rc=Rc, 
                                                          eta=eta, 
                                                          Rs=Rs, 
                                                          p=i, q=q)
-                                        gd.append(prime)
-                                Gp.append(gd)
+                                        gp.append(prime)
+                                Gp.append(gp)
                             
                             
 #        elif G_type == 'G3':
