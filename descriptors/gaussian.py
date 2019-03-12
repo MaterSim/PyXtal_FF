@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.stats import skew, kurtosis
 import itertools
 
 
@@ -1600,6 +1599,7 @@ def G5_prime(crystal, i, ep_type, ni, functional='Cosine',
     return G5p
 
 
+# Test run
 from pymatgen.core.structure import Structure
 
 crystal = Structure.from_file('../datasets/POSCARs/POSCAR-NaCl')
