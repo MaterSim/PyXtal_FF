@@ -1,13 +1,12 @@
 import numpy as np
 from scipy.stats import skew, kurtosis
 import itertools
-from pymatgen.core.structure import Structure
 
 
 ################################ Gaussian Class ###############################
 
 
-class gaussian:
+class symf:
     """
     Get the all the desired symmetry functions.
 
@@ -15,26 +14,26 @@ class gaussian:
     ----------
     crystal: object
         Pymatgen crystal structure object.
-    sys_params: dict
+    symmetry_parameters: dict
         Dictionary of symmetry parameters.
         i.e. {'G2': {'eta': [0.05, 0.1]}}
     derivative: bool
-        to calculate derivative.
+        If True, calculate the derivatives of symmetry functions.
     """
     def __init__(self, crystal, symmetry_parameters, derivative=False):
         self.crystal = crystal
         self.symmetry_parameters = symmetry_parameters
-#        print(symmetry_parameters)
         self.derivative = derivative
 
-        self.G1_keywords = ['Rc', 'cutoff_f']
-        self.G2_keywords = ['eta', 'Rc', 'cutoff_f', 'Rs']
-        self.G3_keywords = ['kappa', 'Rc', 'cutoff_f']
-        self.G4_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
-        self.G5_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'cutoff_f']
+        self.G1_keywords = ['Rc', 'functional']
+        self.G2_keywords = ['eta', 'Rc', 'Rs', 'functional']
+        self.G3_keywords = ['kappa', 'Rc', 'functional']
+        self.G4_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'functional']
+        self.G5_keywords = ['eta', 'lamBda', 'zeta', 'Rc', 'functional']
 
         self.G_types = [] # e.g. ['G2', 'G4']
 
+        # Setting up parameters for each of the symmetry function type.
         self.G1_parameters = None
         self.G2_parameters = None
         self.G3_parameters = None
@@ -57,64 +56,49 @@ class gaussian:
                 self.G5_parameters = value
                 self.G_types.append(key)
         
-        
-        self.G1 = []
         if self.G1_parameters is not None:
             self._check_sanity(self.G1_parameters, self.G1_keywords)
+            G1, G1D = self.calculate('G1', self.G1_parameters, derivative)
+            self.G1 = self.reshaping(np.asarray(G1))
+            self.G1_derivative = G1D
 
-            G1 = np.asarray(self.calculate('G1', self.G1_parameters, self.derivative))
-            self.G1 = self.reshaping(G1)
-
-        self.G2 = []
         if self.G2_parameters is not None:
             self._check_sanity(self.G2_parameters, self.G2_keywords)
-            G2, G2D = self.calculate('G2', self.G2_parameters, self.derivative)
-            self.G2 = self.reshaping(np.asarray(G2))
-            self.G2_derivative = G2D
+            self.G2, self.G2D = self.calculate('G2', self.G2_parameters,
+                                               derivative)
         
-        self.G3 = []
         if self.G3_parameters is not None:
             self._check_sanity(self.G3_parameters, self.G3_keywords)
-            G3 = np.asarray(self.calculate('G3', self.G3_parameters, self.derivative))
-            self.G3 = self.reshaping(G3)
+            G3, G3D = self.calculate('G3', self.G3_parameters, derivative)
+            self.G3 = self.reshaping(np.asarray(G3))
+            self.G3_derivative = G3D
 
-        self.G4 = []
         if self.G4_parameters is not None:
             self._check_sanity(self.G4_parameters, self.G4_keywords)
-            G4, G4D = self.calculate('G4', self.G4_parameters, self.derivative)
+            G4, G4D = self.calculate('G4', self.G4_parameters, derivative)
             self.G4 = self.reshaping(np.asarray(G4))
             self.G4_derivative = G4D
 
-        self.G5 = []
         if self.G5_parameters is not None:
             self._check_sanity(self.G5_parameters, self.G5_keywords)
-            G5, G5D = self.calculate('G5', self.G5_parameters, self.derivative)
+            G5, G5D = self.calculate('G5', self.G5_parameters, derivative)
             self.G5 = self.reshaping(np.asarray(G5))
             self.G5_derivative = G5D
     
 
     def calculate(self, G_type, symmetry_parameters, derivative=False):
-        G, Gd = [], []
-        Rc = [6.5]
-        cutoff_f = ['Cosine']
-        Rs = [0.]
+        G, Gp = [], []
+        Rc = 6.5
+        functional = 'Cosine'
+        Rs = 0.
         
         for key, value in symmetry_parameters.items():
             if key == 'Rc':
-                if isinstance(value, (list, np.ndarray)):
-                    Rc = value
-                else:
-                    Rc = [value]
-            elif key == 'cutoff_f':
-                if isinstance(value, (list, np.ndarray)):
-                    cutoff_f = value
-                else:
-                    cutoff_f = [value]
+                Rc = value
+            elif key == 'functional':
+                functional = value
             elif key == 'Rs':
-                if isinstance(value, (list, np.ndarray)):
-                    Rs = value
-                else:
-                    Rs = [value]
+                Rs = value
             elif key == 'eta':
                 if isinstance(value, (list, np.ndarray)):
                     etas = value
@@ -135,107 +119,125 @@ class gaussian:
                     zetas = value
                 else:
                     zetas = [value]
-                    
-        if derivative:
-            core_elements = [site.species_string for site in self.crystal.sites]
-            neighbors = self.crystal.get_all_neighbors(r=max(Rc),
-                                                       include_index=True,
-                                                       include_image=True)              
+        
+        n_core = self.crystal.num_sites
+        e_types = self.crystal.symbol_set # element types, i.e. ['Na', 'Cl']
 
-        if G_type == 'G1':
-            for rc in Rc:
-                for co in cutoff_f:
-                    g = calculate_G1(self.crystal, co, rc)
-                    G.append(g)
+        if derivative:
+            core_elements = [s.species_string for s in self.crystal.sites]
+            neighbors_info = self.crystal.get_all_neighbors(r=Rc,
+                                                            include_index=True,
+                                                            include_image=True)
 
         elif G_type == 'G2':
-            for rc in Rc:
-                for rs in Rs:
-                    for co in cutoff_f:
+            for i in range(n_core):
+                g = []
+                for eta in etas:
+                    for ele in e_types:
+                        g.append(G2(self.crystal, 
+                                    i=i,
+                                    element=ele,
+                                    functional=functional,
+                                    Rc=Rc, eta=eta, Rs=Rs))
+                G.append(g)
+
+            if derivative:
+                for i in range(n_core):
+                    for q in range(3):
+                        gd = []
                         for eta in etas:
-                            g = calculate_G2(self.crystal, co, rc, eta, rs)
-                            G.append(g)
-
-            if derivative:
-                for i, neigh in enumerate(neighbors):
-                    for q in range(3):
-                        gd = G2_derivative(crystal=self.crystal, i=i, element=core_elements[i], ni=neigh, 
-                                           cutoff_f='Cosine', Rc=6.5, 
-                                           eta=etas, Rs=0.0, p=i, q=q)
-                        Gd.append(gd)
-                        for n in neigh:
+                            for elem in e_types:
+                                gd.append(G2(crystal=self.crystal, 
+                                             i=i, 
+                                             e_type=elem,
+                                             ni=neighbors_info[i], 
+                                             functional='Cosine', 
+                                             Rc=Rc,
+                                             eta=eta, 
+                                             Rs=Rs,
+                                             p=i, q=q))
+                        Gp.append(gd)
+                        
+                        for n in neighbors_info[i]:
                             if n[3] == (0.0, 0.0, 0.0):
-                                gd = G2_derivative(crystal=self.crystal, i=n[2], 
-                                                   element=n[0].species_string, 
-                                                   ni=neighbors[n[2]], 
-                                                   cutoff_f='Cosine', Rc=6.5, 
-                                                   eta=etas, Rs=0.0, p=i, q=q)
-                                Gd.append(gd)
+                                gd = []
+                                for eta in etas:
+                                    for elem in e_types:
+                                        ni = neighbors_info[n[2]]
+                                        prime = G2_prime(crystal=self.crystal,
+                                                         i=n[2],
+                                                         e_type=elem,
+                                                         ni=ni,
+                                                         cutoff_f='Cosine', 
+                                                         Rc=Rc, 
+                                                         eta=eta, 
+                                                         Rs=Rs, 
+                                                         p=i, q=q)
+                                        gd.append(prime)
+                                Gp.append(gd)
                             
                             
-        elif G_type == 'G3':
-            for rc in Rc:
-                for rs in Rs:
-                    for co in cutoff_f:
-                        for kappa in kappas:
-                            g = calculate_G3(self.crystal, co, rc, kappa)
-                            G.append(g)
-                                                    
-
-        elif G_type == 'G4':
-            for rc in Rc:
-                for co in cutoff_f:
-                    for eta in etas:
-                        for zeta in zetas:
-                            for lb in lamBdas:
-                                g = calculate_G4(self.crystal, co, rc, eta, lb, 
-                                                 zeta)
-                                G.append(g)
-            if derivative:
-                for i, neigh in enumerate(neighbors):
-                    for q in range(3):
-                        gd = G4_derivative(crystal=self.crystal, i=i, element=core_elements[i], ni=neigh, 
-                                           cutoff_f='Cosine', Rc=6.5, 
-                                           eta=etas, lamBda=lamBdas, zeta=zetas, p=i, q=q)
-                        Gd.append(gd)
-                        for n in neigh:
-                            if n[3] == (0.0, 0.0, 0.0):
-                                gd = G4_derivative(crystal=self.crystal, i=n[2], 
-                                                   element=n[0].species_string, 
-                                                   ni=neighbors[n[2]], 
-                                                   cutoff_f='Cosine', Rc=6.5, 
-                                                   eta=etas, lamBda=lamBdas, zeta=zetas, p=i, q=q)
-                                Gd.append(gd)
-
-        elif G_type == 'G5':
-            for rc in Rc:
-                for co in cutoff_f:
-                    for eta in etas:
-                        for zeta in zetas:
-                            for lb in lamBdas:
-                                g = calculate_G5(self.crystal, co, rc, eta, lb, 
-                                                 zeta)
-                                G.append(g)
-            
-            if derivative:
-                for i, neigh in enumerate(neighbors):
-                    for q in range(3):
-                        gd = G5_derivative(crystal=self.crystal, i=i, element=core_elements[i], ni=neigh, 
-                                           cutoff_f='Cosine', Rc=6.5, 
-                                           eta=etas, lamBda=lamBdas, zeta=zetas, p=i, q=q)
-                        Gd.append(gd)
+#        elif G_type == 'G3':
+#            for rc in Rc:
+#                for rs in Rs:
+#                    for co in cutoff_f:
+#                        for kappa in kappas:
+#                            g = calculate_G3(self.crystal, co, rc, kappa)
+#                            G.append(g)
+#                                                    
+#
+#        elif G_type == 'G4':
+#            for rc in Rc:
+#                for co in cutoff_f:
+#                    for eta in etas:
+#                        for zeta in zetas:
+#                            for lb in lamBdas:
+#                                g = calculate_G4(self.crystal, co, rc, eta, lb, 
+#                                                 zeta)
+#                                G.append(g)
+#            if derivative:
+#                for i, neigh in enumerate(neighbors_info):
+#                    for q in range(3):
+#                        gd = G4_derivative(crystal=self.crystal, i=i, element=core_elements[i], ni=neigh, 
+#                                           cutoff_f='Cosine', Rc=6.5, 
+#                                           eta=etas, lamBda=lamBdas, zeta=zetas, p=i, q=q)
+#                        Gd.append(gd)
+#                        for n in neigh:
+#                            if n[3] == (0.0, 0.0, 0.0):
+#                                gd = G4_derivative(crystal=self.crystal, i=n[2], 
+#                                                   element=n[0].species_string, 
+#                                                   ni=neighbors_info[n[2]], 
+#                                                   cutoff_f='Cosine', Rc=6.5, 
+#                                                   eta=etas, lamBda=lamBdas, zeta=zetas, p=i, q=q)
+#                                Gd.append(gd)
+#
+#        elif G_type == 'G5':
+#            for rc in Rc:
+#                for co in cutoff_f:
+#                    for eta in etas:
+#                        for zeta in zetas:
+#                            for lb in lamBdas:
+#                                g = calculate_G5(self.crystal, co, rc, eta, lb, 
+#                                                 zeta)
+#                                G.append(g)
+#            
+#            if derivative:
+#                for i, neigh in enumerate(neighbors_info):
+#                    for q in range(3):
+#                        gd = G5_derivative(crystal=self.crystal, i=i, element=core_elements[i], ni=neigh, 
+#                                           cutoff_f='Cosine', Rc=6.5, 
+#                                           eta=etas, lamBda=lamBdas, zeta=zetas, p=i, q=q)
+#                        Gd.append(gd)
 #                        for n in neigh:
 #                            if n[3] == (0.0, 0.0, 0.0):
 #                                gd = G5_derivative(crystal=self.crystal, i=n[2], 
 #                                                   element=n[0].species_string, 
-#                                                   ni=neighbors[n[2]], 
+#                                                   ni=neighbors_info[n[2]], 
 #                                                   cutoff_f='Cosine', Rc=6.5, 
 #                                                   eta=etas, lamBda=lamBdas, zeta=zetas, p=i, q=q)
 #                                Gd.append(gd)
-                                
-        print(Gd)
 
-        return G, Gd
+        return G, Gp
 
 
     def get_parameters(self, G_type, params):
@@ -674,9 +676,7 @@ class Polynomial(object):
     def todict(self):
         return {'name': 'Polynomial',
                 'kwargs': {'Rc': self.Rc,
-                           'gamma': self.gamma
-                           }
-                }
+                           'gamma': self.gamma}}
                         
 
 class TangentH(object):
@@ -730,15 +730,13 @@ class TangentH(object):
 
     def todict(self):
         return {'name': 'TanH',
-                'kwargs': {'Rc': self.Rc
-                           }
-                }
+                'kwargs': {'Rc': self.Rc}}
 
 
 ############################# Symmetry Functions ##############################
                 
 
-def calculate_G1(crystal, cutoff_f='Cosine', Rc=6.5):
+def G1(crystal, cutoff_f='Cosine', Rc=6.5):
     """
     Calculate G1 symmetry function.
     The most basic radial symmetry function using only the cutoff functional,
@@ -795,7 +793,7 @@ def calculate_G1(crystal, cutoff_f='Cosine', Rc=6.5):
     return G1
 
 
-def G1_derivative(crystal, cutoff_f='Cosine', Rc=6.5, p=1, q=0):
+def G1_prime(crystal, cutoff_f='Cosine', Rc=6.5, p=1, q=0):
     """
     Calculate the derivative of the G1 symmetry function.
     
@@ -847,7 +845,8 @@ def G1_derivative(crystal, cutoff_f='Cosine', Rc=6.5, p=1, q=0):
     return G1D
 
 
-def calculate_G2(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0):
+def G2(crystal, i, e_type, functional='Cosine', 
+                 Rc=6.5, eta=2, Rs=0.0):
     """
     Calculate G2 symmetry function.
     G2 function is a better choice to describe the radial feature of atoms in
@@ -862,7 +861,11 @@ def calculate_G2(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0):
     ----------
     crystal: object
         Pymatgen crystal structure object.
-    cutoff_f: str
+    i: int
+        The index of core element.
+    e_type: str
+        The allowed element presents in the symmetry function calculation.
+    functional: str
         Cutoff functional. Default is Cosine functional.
     Rc: float
         Cutoff radius which the symmetry function will be calculated.
@@ -875,102 +878,100 @@ def calculate_G2(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0):
 
     Returns
     -------
-    G2 : an array of floats
+    G2 : float
         G2 symmetry value.
     """
     # Cutoff functional
-    if cutoff_f == 'Cosine':
+    if functional == 'Cosine':
         func = Cosine(Rc=Rc)
-    elif cutoff_f == 'Polynomial':
+    elif functional == 'Polynomial':
         func = Polynomial(Rc=Rc)
-    elif cutoff_f == 'TangentH':
+    elif functional == 'TangentH':
         func = TangentH(Rc=Rc)
     else:
-        raise NotImplementedError('Unknown cutoff functional: %s' %cutoff_f)
-    
-    # Get elements in the crystal structure
-    elements = crystal.symbol_set
-    
+        raise NotImplementedError('Unknown cutoff functional: %s' %functional)
+        
     # Get positions of core atoms
-    n_core = crystal.num_sites
-    core_cartesians = crystal.cart_coords
+    Ri = crystal.cart_coords[i]
 
     # Their neighbors within the cutoff radius
     neighbors = crystal.get_all_neighbors(Rc)
-    
-    G2 = []
-    
-    for elem in elements:
-        for i in range(n_core):   
-            G2_core = 0
-            for j in range(len(neighbors[i])):
-                if elem == neighbors[i][j][0].species_string:
-                    Rij = np.linalg.norm(core_cartesians[i] - 
-                                         neighbors[i][j][0]._coords)
-                    G2_core += np.exp(-eta * Rij ** 2. / Rc ** 2.) * func(Rij)
-            G2.append(G2_core)
+        
+    G2 = 0
+    for j in range(len(neighbors[i])):
+        if e_type == neighbors[i][j][0].species_string:
+            Rj = neighbors[i][j][0]._coords
+            Rij = np.linalg.norm(Ri - Rj)
+            G2 += np.exp(-eta * Rij ** 2. / Rc ** 2.) * func(Rij)
     
     return G2
 
 
-def G2_derivative(crystal, element, i, ni, cutoff_f='Cosine', Rc=6.5, eta=2, Rs=0.0, p=1, q=0):
+def G2_prime(crystal, i, e_type, ni, functional='Cosine', 
+                  Rc=6.5, eta=2, Rs=0.0, p=1, q=0):
     """
     Calculate the derivative of the G2 symmetry function.
     
-    Args:
-        crystal: object
-            Pymatgen crystal structure object
-        cutoff_f: str
-            Cutoff functonal. Default cosine functional
-        Rc: float
-            Cutoff radius for symmetry function, defauly 6.5 angstoms
-        eta: float
-            The parameter for the G2 symmetry function
-        Rs: float
-            Determine the shift from the center of the gaussian, default= 0
-    Returns:
-        G2D: float
-            The derivative of G2 symmetry function
+    Parameters
+    ----------
+    crystal: object
+        Pymatgen crystal structure object.
+    i: int
+        The index of core element.
+    e_types: str
+        The allowed element presents in the symmetry function calculation.
+    ni: array of neighbors information
+        Neighbors information of the core element.
+    functional: str
+        Cutoff functional. Default is Cosine functional.
+    Rc: float
+        Cutoff radius which the symmetry function will be calculated.
+        Default value is 6.5 as suggested by Behler.
+    eta: float
+        The parameter of G2 symmetry function.
+    Rs: float
+        Determine the shift from the center of the Gaussian.
+        Default value is zero.
+    p: int
+        The atom that the force is acting on.
+    q: int
+        Direction of force.
+        
+    Returns
+    -------
+    G2D : float
+        The derivative of G2 symmetry value.
     """
     # Cutoff functional
-    if cutoff_f == 'Cosine':
+    if functional == 'Cosine':
         func = Cosine(Rc=Rc)
-    elif cutoff_f == 'Polynomial':
+    elif functional == 'Polynomial':
         func = Polynomial(Rc=Rc)
-    elif cutoff_f == 'TangentH':
+    elif functional == 'TangentH':
         func = TangentH(Rc=Rc)
     else:
-        raise NotImplementedError('Unknown cutoff functional: %s' %cutoff_f)
+        raise NotImplementedError('Unknown cutoff functional: %s' %functional)
     
-    # Get positions of core atoms
-    core_cartesians = crystal.cart_coords
-    Ri = core_cartesians[i]
+    Ri = crystal.cart_coords[i]
 
-    # Their neighbors within the cutoff radius
-    elements = crystal.symbol_set
-
-    G2D = []
-    for e in eta:
-        for elem in elements:
-            g2D = 0
-            for count in range(len(ni)):
-                symbol = ni[count][0].species_string
-                Rj = ni[count][0]._coords
-                j = ni[count][2]
-                if elem == symbol:
-                    dRabdRpq = dRab_dRpq(i, j, Ri, Rj, p, q)
-                    if dRabdRpq != 0:
-                        Rij = np.linalg.norm(Rj - Ri)
-                        g2D += np.exp(-e * (Rij - Rs)**2. / Rc**2.) * \
-                                dRabdRpq * \
-                                (-2. * e * (Rij - Rs) * func(Rij) / Rc**2. + 
-                                func.derivative(Rij))
-            G2D.append(g2D)
+    G2D = 0
+    for count in range(len(ni)):
+        symbol = ni[count][0].species_string
+        Rj = ni[count][0]._coords
+        j = ni[count][2]
+        if e_type == symbol:
+            dRabdRpq = dRab_dRpq(i, j, Ri, Rj, p, q)
+            if dRabdRpq != 0:
+                Rij = np.linalg.norm(Rj - Ri)
+                G2D += np.exp(-eta * (Rij - Rs)**2. / Rc**2.) * \
+                        dRabdRpq * \
+                        (-2. * eta * (Rij - Rs) * func(Rij) / Rc**2. + 
+                        func.derivative(Rij))
 
     return G2D
 
 
-def calculate_G3(crystal, cutoff_f='Cosine', Rc=6.5, k=10):
+def G3(crystal, cutoff_f='Cosine', Rc=6.5, k=10):
     """
     Calculate G3 symmetry function.
     G3 function is a damped cosine functions with a period length described by
@@ -1036,7 +1037,7 @@ def calculate_G3(crystal, cutoff_f='Cosine', Rc=6.5, k=10):
     return G3
 
 
-def G3_derivative(crystal, cutoff_f='Cosine', Rc=6.5, k=10, p=1, q=0):
+def G3_prime(crystal, cutoff_f='Cosine', Rc=6.5, k=10, p=1, q=0):
     """
     Calculate derivative of the G3 symmetry function.
     
@@ -1082,7 +1083,7 @@ def G3_derivative(crystal, cutoff_f='Cosine', Rc=6.5, k=10, p=1, q=0):
     return G3D
 
 
-def calculate_G4(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
+def G4(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     """
     Calculate G4 symmetry function.
     G4 function is an angular function utilizing the cosine funtion of the
@@ -1176,7 +1177,7 @@ def calculate_G4(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     return G4
 
 
-def G4_derivative(crystal, i, element, ni, cutoff_f='Cosine', 
+def G4_prime(crystal, i, element, ni, cutoff_f='Cosine', 
                   Rc=6.5, eta=2, lamBda=1, zeta=1, p=1, q=0):
     """
     Calculate the derivative of the G4 symmetry function.
@@ -1293,7 +1294,7 @@ def G4_derivative(crystal, i, element, ni, cutoff_f='Cosine',
     return G4D
     
 
-def calculate_G5(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
+def G5(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     """
     Calculate G5 symmetry function.
     G5 function is also an angular function utilizing the cosine funtion of the
@@ -1380,7 +1381,7 @@ def calculate_G5(crystal, cutoff_f='Cosine', Rc=6.5, eta=2, lamBda=1, zeta=1):
     return G5
 
 
-def G5_derivative(crystal, i, element, ni, cutoff_f='Cosine', 
+def G5_prime(crystal, i, element, ni, cutoff_f='Cosine', 
                   Rc=6.5, eta=2, lamBda=1, zeta=1, p=1, q=0):
     """
     Calculate the derivative of the G5 symmetry function.
@@ -1483,16 +1484,19 @@ def G5_derivative(crystal, i, element, ni, cutoff_f='Cosine',
     return G5D
 
 
-#crystal = Structure.from_file('../POSCARs/POSCAR-NaCl')
-#
+#from pymatgen.core.structure import Structure
+
+#crystal = Structure.from_file('../datasets/POSCARs/POSCAR-NaCl')
+
 #sym_params = {'G2': {'eta': np.logspace(np.log10(0.05), 
-#                                         np.log10(5.), num=4)}}
+#                                         np.log10(5.), num=4),
+#                    'Rc': 6.5}}
 #                'G5': {'eta': [0.005],
 #                        'zeta': [1., 4.],
 #                        'lamBda': [1., -1.]}}
 
-#gauss = gaussian(crystal, sym_params, derivative=True)
-#print(gauss.G2_derivative)
+#gauss = symf(crystal, sym_params, derivative=False)
+#print(gauss.G2p)
 
 
 #    def get_statistics(self, Gs):
@@ -1503,3 +1507,9 @@ def G5_derivative(crystal, i, element, ni, cutoff_f='Cosine',
 #        Gs_covariance = np.cov(Gs.T)
 #
 #        return None
+
+#        if G_type == 'G1':
+#            for rc in Rc:
+#                for co in cutoff_f:
+#                    g = calculate_G1(self.crystal, co, rc)
+#                    G.append(g)
