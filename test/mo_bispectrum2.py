@@ -13,9 +13,9 @@ from utilities.assembler import assembler
 import pandas as pd
 
 directory = "../datasets/Mo/training/"
-files = ["AIMD_NPT.json", "AIMD_NVT.json"]#, "Elastic.json", "GB.json", "Surface.json", "Vacancy.json"]
+files = ["AIMD_NPT.json"] #"AIMD_NVT.json"]
 profile = dict(Mo=dict(r=0.5, w=1.0))
-Rc = 4.615858
+Rc = 4.6158
 twojmax = 6
 diagonal = 3
 force = True
@@ -28,9 +28,10 @@ w_stress = 0.
 ########################### From UCSD #########################################
 
 
-class Cu_bispectrum(object):
+class Mo_bispectrum(object):
     """
-    
+    Predicting the correlation bt. bispectrum components and dft energies 
+    and forces with linear regression.   
     """
     def __init__(self, files, profile, Rc, twojmax, diagonal, 
                  w_energy, w_force, w_stress, 
@@ -47,68 +48,32 @@ class Cu_bispectrum(object):
         self.stress = stress
         self.save = save
         
-        self.structures, self.y = self.get_structures_energies()
+        self.structures, self.y = self.get_structures_energies_forces_stress()
         self.X = self.convert_to_bispectrum(self.save)
-        print(self.X[0:3])
-        self.UCSD()
-        print(self.X[0:3])
-#        self.linear_regression()
+        self.linear_regression()
     
     
-    def UCSD(self):
-        
-        for file in files:
-            with open(directory+file) as f:
-                datas = json.load(f)
-                
-        X = []
-        y = []
-        n_atoms = []
-        w = []
-        for i, data in enumerate(datas):
-            y.append(data['data']['energy_per_atom'])
-            w.append(data['weights']['energy'])
-            n_atoms.append(49.)
-            fs = np.ravel(data['data']['forces'])
-            for f in fs:
-                y.append(f)
-                w.append(data['weights']['force'])
-                n_atoms.append(1.)
-                
-            e_des = data['optimized parameters']['bispectrum coefficients']['energy descriptor']
-            f_des = data['optimized parameters']['bispectrum coefficients']['force descriptor']
-                
-            if i == 0:
-                self.X = np.vstack((e_des, f_des))
-                
-            else:
-                x = np.vstack((e_des, f_des))
-                self.X = np.vstack((self.X,x))
-                
-        self.y = np.vstack((y,n_atoms,w))        
-        
-        
-    def get_structures_energies(self):
+    def get_structures_energies_forces_stress(self):
         time0 = time.time()
         structures = []
         y = []
         self.volumes = []
         n_atoms = []
         weights = []
-
         
         for file in files:
             with open(directory+file) as f:
                 data = json.load(f)
         
-            for struc in data[:5]:
+            for struc in data:
                 lat = struc['structure']['lattice']['matrix']
                 species = []
                 positions = []
                 for site in struc['structure']['sites']:
                     species.append(site['label'])
                     positions.append(site['xyz'])
-                structure = Structure(lat, species, positions)
+                fcoords = np.dot(positions, np.linalg.inv(lat))
+                structure = Structure(lat, species, fcoords)
                 structures.append(structure)
                 
                 # append energies in y
@@ -143,11 +108,11 @@ class Cu_bispectrum(object):
     def convert_to_bispectrum(self, save):
         time0 = time.time()
         
-        snap = []        
+        snap = []
         for i in range(len(self.structures)):
             bispectrum(self.structures[i], self.Rc, self.twojmax, self.profile,
                        diagonal=self.diagonal)
-            bispec = assembler(atom_type=['Mo'], volume=self.volumes[i], 
+            bispec = assembler(atom_type=['Mo'], volume=self.volumes[i],
                                force=self.force, stress=self.stress)
             if snap == []:
                 snap = bispec.bispectrum_coefficients
@@ -168,8 +133,8 @@ class Cu_bispectrum(object):
         perform linear regression
         """
         time0 = time.time()
-        ts = 0.2
-        rs = 103
+        ts = 0.4
+        rs = 7
 
 
         X_train, X_test, y_train, y_test = train_test_split(self.X, 
@@ -245,7 +210,7 @@ class Cu_bispectrum(object):
                 y_energies.append(y[i])
                 natoms.append(atom)
                 w_energies.append(weights[i])
-                
+               
         # Evaluate energy
         yp_energies = regression.predict(X_energies)
         mae_energies = mean_absolute_error(y_energies, yp_energies)
@@ -260,5 +225,5 @@ class Cu_bispectrum(object):
 
         
 if __name__ == '__main__':
-    Cu_bispectrum(files, profile, Rc, twojmax, diagonal, 
+    Mo_bispectrum(files, profile, Rc, twojmax, diagonal, 
                   w_energy, w_force, w_stress, force, stress, save)
