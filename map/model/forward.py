@@ -1,30 +1,34 @@
 import numpy as np
 
-def forward(hiddenlayers, fingerprint, weight, fprange,
-                            activation='tanh'):
+def forward(hiddenlayers, descriptor, weight, desrange, activation='tanh'):
     """
-    This is the Neural Network architecture. The input is given as 
-    fingerprint, and the output is the corresponding energy about a 
-    specific atom. The sum of these energy is the total energy of the 
+    This function is the Neural Network architecture. The input is given as 
+    the descriptor, and the output is calculated for the corresponding energy about a 
+    specific atom. The sum of these energies is the total energy of the 
     crystal.
 
     Parameters
     ----------
     hiddenlayers: tuple
         (3,3) means 2 layers with 3 nodes each.
-    fingerprint: array
-        The descriptor
-    weight: array
+    descriptor: array
+        The descriptor.
+    weight: dict
         The Neural Network weights.
+    desrange: array
+        The range of the descriptor. This is used for scaling.
     activation:
         The activation function.
+
+
     """
     layer = 0
+    fingerprint = descriptor
     len_fp = len(fingerprint)
     for _ in range(len_fp):
-        if (fprange[_][1] - fprange[_][0] > (10.**(-8.))):
-            fingerprint[_] = -1.0 + 2.0 * ((fingerprint[_] - fprange[_][0]) /
-                                           (fprange[_][1] - fprange[_][0]))
+        if (desrange[_][1] - desrange[_][0] > (10.**(-8.))):
+            fingerprint[_] = -1.0 + 2.0 * ((fingerprint[_] - desrange[_][0]) /
+                                           (desrange[_][1] - desrange[_][0]))
     
     out = {}
     lin = {}
@@ -34,6 +38,8 @@ def forward(hiddenlayers, fingerprint, weight, fprange,
     for _ in range(len_fp):
         temp[0, _] = fingerprint[_]
     out[0] = temp
+
+    # Neural Network Architecture
     for i, hl in enumerate(hiddenlayers):
         layer += 1
         lin[i+1] = np.dot(temp, weight[i+1])
@@ -43,16 +49,15 @@ def forward(hiddenlayers, fingerprint, weight, fprange,
         temp[0, hl] = 1.0
         for _ in range(hl):
             temp[0, _] = out[i+1][0][_]
-
-
-
+    
+    # The output (i.e. energies)
     lin[layer+1] = np.dot(temp, weight[layer+1])
     if activation == 'tanh':
         out[layer+1] = np.tanh(lin[layer+1])
 
     return out
 
-
+"""
 fprange = [[5.684992851444012, 5.6849928514440125], [0.2106192000039041, 0.8243158479011873], [5.390166558890311, 5.3901665588903125], [0.19175430208750674, 0.7807053382256871], [4.256043075034482, 4.2560430750344835], [0.12440779985226418, 0.6519559354010992], [1.6822001930225576, 1.682200193022558], [0.008416147189561756, 0.33004677211841793]]
 
 weight = {}
@@ -62,7 +67,8 @@ weight[3] = [[-0.01718971813634451], [-0.21564170180939723], [0.7822144419375192
 
 fingerprint = [5.684992851444012, 0.2106192000039041, 5.390166558890312, 0.19175430208750674, 4.256043075034483, 0.12440779985226418, 1.6822001930225576, 0.01734595164908539]
 
-out = forward(hiddenlayers=(3, 3), fingerprint=fingerprint, weight=weight, fprange=fprange,
+out = forward(hiddenlayers=(3, 3), descriptor=fingerprint, weight=weight, desrange=fprange,
                             activation='tanh')
 
 print(out)
+"""
