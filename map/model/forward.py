@@ -19,7 +19,11 @@ def forward(hiddenlayers, descriptor, weight, desrange, activation='tanh'):
         The range of the descriptor. This is used for scaling.
     activation:
         The activation function.
-
+    
+    Returns
+    -------
+    dict
+        Outputs of Neural Network nodes.
 
     """
     layer = 0
@@ -45,6 +49,10 @@ def forward(hiddenlayers, descriptor, weight, desrange, activation='tanh'):
         lin[i+1] = np.dot(temp, weight[i+1])
         if activation == 'tanh':
             out[i+1] = np.tanh(lin[i+1])
+        elif activation == 'sigmoid':
+            out[i+1] = 1. / (1. + np.exp(-lin[i+1]))
+        elif activation == 'linear':
+            out[i+1] = lin[i+1]
         temp = np.zeros((1, hl+1))
         temp[0, hl] = 1.0
         for _ in range(hl):
@@ -54,6 +62,10 @@ def forward(hiddenlayers, descriptor, weight, desrange, activation='tanh'):
     lin[layer+1] = np.dot(temp, weight[layer+1])
     if activation == 'tanh':
         out[layer+1] = np.tanh(lin[layer+1])
+    elif activation == 'sigmoid':
+        out[layer+1] = 1. / (1. + np.exp(-lin[layer+1]))
+    elif activation == 'linear':
+        out[layer+1] = lin[layer+1]
 
     return out
 
