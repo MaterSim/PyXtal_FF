@@ -1,3 +1,6 @@
+from .forward import forward
+from .activation_scaling import activation_scaling
+
 def calculate_atomic_energy(descriptor, index, symbol):
     """
     This function calculate the atomic energy of a crystal. The input is given as 
@@ -17,4 +20,6 @@ def calculate_atomic_energy(descriptor, index, symbol):
     float
         Energy.
     """
+    # I need to put this in Neural Network Class.
+
 

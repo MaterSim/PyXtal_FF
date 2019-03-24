@@ -2,7 +2,7 @@ import numpy as np
 
 def forward(hiddenlayers, descriptor, weight, desrange, activation='tanh'):
     """
-    This function is the Neural Network architecture. The input is given as 
+    This function is the neural network architecture. The input is given as 
     the descriptor, and the output is calculated for the corresponding energy about a 
     specific atom. The sum of these energies is the total energy of the 
     crystal.
@@ -23,7 +23,7 @@ def forward(hiddenlayers, descriptor, weight, desrange, activation='tanh'):
     Returns
     -------
     dict
-        Outputs of Neural Network nodes.
+        Outputs of neural network nodes.
 
     """
     layer = 0
@@ -43,7 +43,7 @@ def forward(hiddenlayers, descriptor, weight, desrange, activation='tanh'):
         temp[0, _] = fingerprint[_]
     out[0] = temp
 
-    # Neural Network Architecture
+    # Neural network architecture
     for i, hl in enumerate(hiddenlayers):
         layer += 1
         lin[i+1] = np.dot(temp, weight[i+1])
