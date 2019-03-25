@@ -112,7 +112,7 @@ class Neuralnetwork:
 
 
     def get_random_weight(self, hiddenlayers, descriptor_shape):
-        """
+        """(CP)
         Generating random weights for the neural network architecture.
 
         Returns
@@ -275,9 +275,83 @@ class Neuralnetwork:
 
         return out
 
+class Raveler:
+    """(CP) Class to ravel and unravel variable values into a single vector.
 
+    This is used for feeding into the optimizer. Feed in a list of dictionaries
+    to initialize the shape of the transformation. Note no data is saved in the
+    class; each time it is used it is passed either the dictionaries or vector.
+    The dictionaries for initialization should be two levels deep.
 
+    weights, scalings are the variables to ravel and unravel
+    """
+    # why would scalings need to be raveled?
+    def __init__(self, weights, scalings):
 
+        self.count = 0
+        self.weightskeys = []
+        self.scalingskeys = []
+        for key1 in sorted(weights.keys()):  # element
+            for key2 in sorted(weights[key1].keys()):  # layer
+                value = weights[key1][key2]
+                self.weightskeys.append({'key1': key1,
+                                         'key2': key2,
+                                         'shape': np.array(value).shape,
+                                         'size': np.array(value).size})
+                self.count += np.array(weights[key1][key2]).size
+
+        for key1 in sorted(scalings.keys()):  # element
+            for key2 in sorted(scalings[key1].keys()):  # slope / intercept
+                self.scalingskeys.append({'key1': key1,
+                                          'key2': key2})
+                self.count += 1
+        print(self.weightskeys)
+        self.vector = np.zeros(self.count)
+
+    def to_vector(self, weights, scalings):
+        """Puts the weights and scalings embedded dictionaries into a single
+        vector and returns it. The dictionaries need to have the identical
+        structure to those it was initialized with."""
+
+        vector = np.zeros(self.count)
+        count = 0
+        print(f"This is before ravel: {weights}")
+        for k in self.weightskeys:
+            lweights = np.array(weights[k['key1']][k['key2']]).ravel()
+            vector[count:(count + lweights.size)] = lweights
+            count += lweights.size
+        for k in self.scalingskeys:
+            vector[count] = scalings[k['key1']][k['key2']]
+            count += 1
+        print(f"This is after ravel: {vector}")
+        return vector
+
+    def to_dicts(self, vector):
+        """Puts the vector back into weights and scalings dictionaries of the
+        form initialized. vector must have same length as the output of
+        unravel."""
+
+        assert len(vector) == self.count
+        count = 0
+        weights = OrderedDict()
+        scalings = OrderedDict()
+
+        for k in self.weightskeys:
+            if k['key1'] not in weights.keys():
+                weights[k['key1']] = OrderedDict()
+            matrix = vector[count:count + k['size']]
+            matrix = matrix.flatten()
+            matrix = np.matrix(matrix.reshape(k['shape']))
+            weights[k['key1']][k['key2']] = matrix.tolist()
+            count += k['size']
+        for k in self.scalingskeys:
+            if k['key1'] not in scalings.keys():
+                scalings[k['key1']] = OrderedDict()
+            scalings[k['key1']][k['key2']] = vector[count]
+            count += 1
+        return weights, scalings
+
+##########################################################################################
 
 from ase.calculators.emt import EMT
 from ase.build import fcc110
