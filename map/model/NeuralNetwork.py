@@ -1,3 +1,7 @@
+import os
+from collections import OrderedDict
+
+
 import numpy as np
 from ase.calculators.calculator import Parameters
 
@@ -28,9 +32,10 @@ class Neuralnetwork:
         p.activation = activation
         p.elements = elements
         p.feature_mode = feature_mode
+        p.weights = None
 
 
-    def fit(self, images, descriptor):
+    def fit(self, images, descriptor, feature=None):
         """
         Fit the model parameters here.
 
@@ -40,6 +45,12 @@ class Neuralnetwork:
             The descriptor that corresponds to the images.
         """
         p = self.parameters
+
+        if p.feature_mode:
+            if feature is None:
+                msg = f"You must input the feature if the feature_mode is {p.feature_mode}"
+            else:
+                p.feature = feature
 
         # Convert hiddenlayers to dictionary:
         if isinstance(p.hiddenlayers, (tuple, list)):
@@ -54,9 +65,12 @@ class Neuralnetwork:
 
         p.desrange = calculate_descriptor_range(images, descriptor)
         p.scalings = self.activation_scaling(images, p.activation, p.desrange.keys())
-        p.weight = self.get_random_weight(p.hiddenlayers, p.descriptor_shape,)
+        p.weights = self.get_random_weights(p.hiddenlayers, p.descriptor_shape,)
 
-        nnEnergy = self.calculate_nn_energy(descriptor[0])
+        self.x0 = self.vector
+
+        nnEnergy = self.calculate_nnEnergy(descriptor[0])
+        nndEnergy = self.calculate_dnnEnergy_dParameters(descriptor, p.weights)
 
 
     def activation_scaling(self, images, activation, elements):
@@ -111,7 +125,7 @@ class Neuralnetwork:
         return scaling
 
 
-    def get_random_weight(self, hiddenlayers, descriptor_shape):
+    def get_random_weights(self, hiddenlayers, descriptor_shape):
         """(CP)
         Generating random weights for the neural network architecture.
 
@@ -177,7 +191,7 @@ class Neuralnetwork:
 
         for i, (element, des) in enumerate(descriptor):
             scaling = p.scalings[element]
-            weight = p.weight[element]
+            weight = p.weights[element]
             hl = p.hiddenlayers[element]
             desrange = p.desrange[element]
             activation = p.activation
@@ -188,22 +202,20 @@ class Neuralnetwork:
             self.nnEnergies.append(nnEnergy)
             Energy += nnEnergy
 
-        return energy
+        return Energy
 
-
-    def calculate_dnnEnergy_dParameters(self, descriptor):
+    def calculate_dnnEnergy_dParameters(self, descriptor, weights):
         """
-        Calculate the derivative of predicted energy with neural network with respect to variables.
+        I still have no clue what this function does.
         """
-        p = self.parameters
-        desrange = p.desrange
+        W = self.weights_wo_bias(weights)
+        
 
-        dEnergy = 0.
+        dnnEnergy_dParameters = np.zeros(self.ravel.count)
+        
+        dnnEnergy_dWeights, dnnEnergy_dScalings = self.ravel.to_dicts(dnnEnergy_dParameters)
 
-        for i, (element, des) in enumerate(descriptor):
-            scaling = p.scaling[element]
-            weight = p.weight[element]
-
+        #print(dnnEnergy_dWeights)
 
 
     def forward(self, hiddenlayers, descriptor, weight, desrange, activation='tanh'):
@@ -275,6 +287,47 @@ class Neuralnetwork:
 
         return out
 
+    def weights_wo_bias(self, weights):
+        """
+        Return weights without the bias.
+        """
+        W = {}
+        for k in weights.keys():
+            W[k] = {}
+            w = weights[k]
+            for i in range(len(w)):
+                W[k][i+1] = w[i+1][:-1]
+        return W
+
+    @property
+    def vector(self):
+        """Access to get or set the model parameters (weights, scaling for
+        each network) as a single vector, useful in particular for
+        regression.
+
+        Parameters
+        ----------
+        vector : list
+            Parameters of the regression model in the form of a list.
+        """
+        if self.parameters['weights'] is None:
+            return None
+        p = self.parameters
+        if not hasattr(self, 'ravel'):
+            self.ravel = Raveler(p.weights, p.scalings)
+        return self.ravel.to_vector(weights=p.weights, scalings=p.scalings)
+
+    @vector.setter
+    def vector(self, vector):
+        p = self.parameters
+        if not hasattr(self, 'ravel'):
+            self.ravel = Raveler(p.weights, p.scalings)
+        weights, scalings = self.ravel.to_dicts(vector)
+        p['weights'] = weights
+        p['scalings'] = scalings
+
+
+
 class Raveler:
     """(CP) Class to ravel and unravel variable values into a single vector.
 
@@ -305,7 +358,7 @@ class Raveler:
                 self.scalingskeys.append({'key1': key1,
                                           'key2': key2})
                 self.count += 1
-        print(self.weightskeys)
+
         self.vector = np.zeros(self.count)
 
     def to_vector(self, weights, scalings):
@@ -315,7 +368,7 @@ class Raveler:
 
         vector = np.zeros(self.count)
         count = 0
-        print(f"This is before ravel: {weights}")
+#        print(f"This is before ravel: {weights}")
         for k in self.weightskeys:
             lweights = np.array(weights[k['key1']][k['key2']]).ravel()
             vector[count:(count + lweights.size)] = lweights
@@ -323,7 +376,7 @@ class Raveler:
         for k in self.scalingskeys:
             vector[count] = scalings[k['key1']][k['key2']]
             count += 1
-        print(f"This is after ravel: {vector}")
+#        print(f"This is after ravel: {vector}")
         return vector
 
     def to_dicts(self, vector):

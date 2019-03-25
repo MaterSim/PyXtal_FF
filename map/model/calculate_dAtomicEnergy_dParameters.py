@@ -3,9 +3,14 @@ from collections import OrderedDict
 import numpy as np
 np.set_printoptions(threshold=sys.maxsize)
 
-def calculate_dAtomicEnergy_dParameters(afp, symbol, weights, scaling):
+def calculate_dnnEnergy_dParameters(afp, symbol, weights, scaling):
+    """
+    I still have no clue what this function does.
+    """
     W = weights_wo_bias(weights)
+    W = W[symbol]
 
+    dnnEnergy_dParameters = np.zeros()
 
 
 def weights_wo_bias(weights):
