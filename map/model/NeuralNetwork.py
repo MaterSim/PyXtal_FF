@@ -67,10 +67,10 @@ class Neuralnetwork:
         p.scalings = self.activation_scaling(images, p.activation, p.desrange.keys())
         p.weights = self.get_random_weights(p.hiddenlayers, p.descriptor_shape,)
 
-        self.x0 = self.vector
+        self.vec = self.vector
 
         nnEnergy = self.calculate_nnEnergy(descriptor[0])
-        nndEnergy = self.calculate_dnnEnergy_dParameters(descriptor, p.weights)
+        nndEnergy = self.calculate_dnnEnergy_dParameters(descriptor[0])
 
 
     def activation_scaling(self, images, activation, elements):
@@ -135,18 +135,18 @@ class Neuralnetwork:
             Randomly-generated weights.
         """
         rs = np.random.RandomState(seed=13)
-        weight = {}
+        weights = {}
         nn_structure = {}
 
         elements = hiddenlayers.keys()
         for element in sorted(elements):
-            weight[element] = {}
+            weights[element] = {}
             nn_structure[element] = [descriptor_shape[1]] + [l for l in hiddenlayers[element]] + [1]
 
             epsilon = np.sqrt(6. / (nn_structure[element][0] +
                                     nn_structure[element][1]))
             normalized_arg_range = 2. * epsilon
-            weight[element][1] = (rs.random_sample(
+            weights[element][1] = (rs.random_sample(
                 (descriptor_shape[1] + 1, nn_structure[element][1])) *
                 normalized_arg_range - normalized_arg_range / 2.)
             len_of_hiddenlayers = len(list(nn_structure[element])) - 3
@@ -154,7 +154,7 @@ class Neuralnetwork:
                 epsilon = np.sqrt(6. / (nn_structure[element][layer + 1] +
                                         nn_structure[element][layer + 2]))
                 normalized_arg_range = 2. * epsilon
-                weight[element][layer + 2] = rs.random_sample(
+                weights[element][layer + 2] = rs.random_sample(
                     (nn_structure[element][layer + 1] + 1,
                      nn_structure[element][layer + 2])) * \
                     normalized_arg_range - normalized_arg_range / 2.
@@ -162,18 +162,18 @@ class Neuralnetwork:
             epsilon = np.sqrt(6. / (nn_structure[element][-2] +
                                     nn_structure[element][-1]))
             normalized_arg_range = 2. * epsilon
-            weight[element][len(list(nn_structure[element])) - 1] = \
+            weights[element][len(list(nn_structure[element])) - 1] = \
                 rs.random_sample((nn_structure[element][-2] + 1, 1)) \
                 * normalized_arg_range - normalized_arg_range / 2.
 
             if False:  # This seemed to be setting all biases to zero?
-                len_of_weight = len(weight[element])
+                len_of_weight = len(weights[element])
                 for _ in range(len_of_weight):  # biases
-                    size = weight[element][_ + 1][-1].size
+                    size = weights[element][_ + 1][-1].size
                     for __ in range(size):
-                        weight[element][_ + 1][-1][__] = 0.
+                        weights[element][_ + 1][-1][__] = 0.
 
-        return weight
+        return weights
 
 
     def calculate_nnEnergy(self, descriptor):
@@ -191,12 +191,12 @@ class Neuralnetwork:
 
         for i, (element, des) in enumerate(descriptor):
             scaling = p.scalings[element]
-            weight = p.weights[element]
+            weights = p.weights[element]
             hl = p.hiddenlayers[element]
             desrange = p.desrange[element]
             activation = p.activation
 
-            nnEnergies = self.forward(hl, des, weight, desrange, activation)
+            nnEnergies = self.forward(hl, des, weights, desrange, activation)
             nnEnergy = scaling['slope'] * float(nnEnergies[len(nnEnergies)-1]) + scaling['intercept']
             
             self.nnEnergies.append(nnEnergy)
@@ -204,19 +204,22 @@ class Neuralnetwork:
 
         return Energy
 
-    def calculate_dnnEnergy_dParameters(self, descriptor, weights):
+    def calculate_dnnEnergy_dParameters(self, descriptor):
         """
         I still have no clue what this function does.
         """
-        W = self.weights_wo_bias(weights)
+        p = self.parameters
+        dE_dP = 0.
         
-
-        dnnEnergy_dParameters = np.zeros(self.ravel.count)
+        for i, (element, des) in enumerate(descriptor):
+            W = self.weights_wo_bias(p.weights)
+            W = W[element]
+            dnnEnergy_dParameters = np.zeros(self.ravel.count)
         
-        dnnEnergy_dWeights, dnnEnergy_dScalings = self.ravel.to_dicts(dnnEnergy_dParameters)
-
-        #print(dnnEnergy_dWeights)
-
+            dnnEnergy_dWeights, dnnEnergy_dScalings = self.ravel.to_dicts(dnnEnergy_dParameters)
+            outputs = self.forward(p.hiddenlayers[element], des, p.weights[element], p.desrange[element])
+            
+            print(outputs)
 
     def forward(self, hiddenlayers, descriptor, weight, desrange, activation='tanh'):
         """
