@@ -20,7 +20,7 @@ class Neuralnetwork:
     feature_mode: bool
         The user input feature. If False, ASE will provide calculator to calculate the energies and forces.
     """
-    def __init__(self, hiddenlayers=(3,3), activation='tanh', elements=['Pt', 'Cu'], feature_mode=False):
+    def __init__(self, hiddenlayers=(3,3), activation='tanh', elements=['Pt', 'Cu'], feature_mode=False, weights=None):
         p = self.parameters = Parameters()
         
         act_mode = ['tanh', 'sigmoid', 'linear']
@@ -32,7 +32,7 @@ class Neuralnetwork:
         p.activation = activation
         p.elements = elements
         p.feature_mode = feature_mode
-        p.weights = None
+        p.weights = weights
 
 
     def fit(self, images, descriptor, feature=None):
@@ -65,7 +65,9 @@ class Neuralnetwork:
 
         p.desrange = calculate_descriptor_range(images, descriptor)
         p.scalings = self.activation_scaling(images, p.activation, p.desrange.keys())
-        p.weights = self.get_random_weights(p.hiddenlayers, p.descriptor_shape,)
+
+        if p.weights == None:
+            p.weights = self.get_random_weights(p.hiddenlayers, p.descriptor_shape,)
 
         self.vec = self.vector
 
@@ -209,17 +211,34 @@ class Neuralnetwork:
         I still have no clue what this function does.
         """
         p = self.parameters
-        dE_dP = 0.
+        dE_dP = None
         
         for i, (element, des) in enumerate(descriptor):
+            scaling = p.scalings[element]
             W = self.weights_wo_bias(p.weights)
             W = W[element]
             dnnEnergy_dParameters = np.zeros(self.ravel.count)
         
             dnnEnergy_dWeights, dnnEnergy_dScalings = self.ravel.to_dicts(dnnEnergy_dParameters)
             outputs = self.forward(p.hiddenlayers[element], des, p.weights[element], p.desrange[element])
+
+            D, delta, ohat = self.get_D_delta_ohat(outputs, W, residual=1)
+
+            dnnEnergy_dScalings[element]['intercept'] = 1.
+            dnnEnergy_dScalings[element]['slope'] = float(outputs[len(outputs)-1])
+
+            for i in range(1, len(outputs)):
+                dnnEnergy_dWeights[element][i] = float(scaling['slope']) * \
+                        np.dot(np.matrix(ohat[i-1]).T, np.matrix(delta[i]).T)
+            dnnEnergy_dParameters = self.ravel.to_vector(dnnEnergy_dWeights, dnnEnergy_dScalings)
+
+        if dE_dP is None:
+            dE_dP = dnnEnergy_dParameters
+        else: dE_dP += dnnEnergy_dParameters
+
+        return dE_dP
+
             
-            print(outputs)
 
     def forward(self, hiddenlayers, descriptor, weight, desrange, activation='tanh'):
         """
@@ -329,6 +348,55 @@ class Neuralnetwork:
         p['weights'] = weights
         p['scalings'] = scalings
 
+    
+    def get_D_delta_ohat(self, outputs, W, residual):
+        """
+        Calculate and store delta, ohat, and D.
+        These parameters are needed in calculating the derivative of the output with respect to the weights.
+
+        output: dict
+            Outputs of the neural network nodes.
+        W: dict
+            The weights of the neural network without the bias.
+        residual: float
+            True energy minus the neural network predicted energy
+        """
+        p = self.parameters
+        activation = p.activation
+        
+        N = len(outputs)
+
+        D = {}
+        for i in range(N):
+            n = np.size(outputs[i])
+            D[i] = np.zeros((n, n))
+            for j in range(n):
+                if activation == 'linear':
+                    D[i][j,j] = 1.
+                elif activation == 'sigmoid':
+                    D[i][j,j] = float(outputs[i][0,j]) * \
+                            float(1. - outputs[i][0,j])
+                elif activation == 'tanh':
+                    D[i][j,j] = float(1. - outputs[i][0,j] * outputs[i][0,j])
+
+        delta = {}
+        delta[N-1] = D[N-1] # Missing the (o_j - t_j)
+
+        for i in range(N-2, 0, -1):
+            delta[i] = np.dot(D[i], np.dot(W[i+1], delta[i+1]))
+
+        ohat = {}
+        for i in range(1, N):
+            n = np.size(outputs[i-1])
+            ohat[i-1] = np.zeros((1,n+1))
+            for j in range(n):
+                ohat[i-1][0,j] = outputs[i-1][0,j]
+            ohat[i-1][0,n] = 1.
+
+        return D, delta, ohat
+
+
+    
 
 
 class Raveler:
@@ -368,10 +436,10 @@ class Raveler:
         """Puts the weights and scalings embedded dictionaries into a single
         vector and returns it. The dictionaries need to have the identical
         structure to those it was initialized with."""
-
+        print(f"This is weightsssssssssssssssssssssssss: {weights}")
+        print(f"This is scalingsssssssssssssssssssssssss: {scalings}")
         vector = np.zeros(self.count)
         count = 0
-#        print(f"This is before ravel: {weights}")
         for k in self.weightskeys:
             lweights = np.array(weights[k['key1']][k['key2']]).ravel()
             vector[count:(count + lweights.size)] = lweights
@@ -379,7 +447,6 @@ class Raveler:
         for k in self.scalingskeys:
             vector[count] = scalings[k['key1']][k['key2']]
             count += 1
-#        print(f"This is after ravel: {vector}")
         return vector
 
     def to_dicts(self, vector):
@@ -444,7 +511,7 @@ from amp.model import LossFunction
 from amp.utilities import hash_images
 
 label = 'train_test_g5/calc'
-train_images = generate_data(2)
+train_images = generate_data(1)
 elements = ['Pt', 'Cu']
 G = make_symmetry_functions(elements=elements, type='G2',
         etas=np.logspace(np.log10(0.05), np.log10(5.),
@@ -466,6 +533,8 @@ d = []
 for key in h_images.keys():
     d.append(calc.model.trainingparameters.descriptor.fingerprints[key])
 
+# Generating the weights from amp
+w = calc.model.parameters.weights
 
-nn = Neuralnetwork()
+nn = Neuralnetwork(weights=w)
 nn.fit(images=train_images, descriptor=d)
