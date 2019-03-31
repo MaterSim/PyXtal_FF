@@ -218,26 +218,26 @@ class Neuralnetwork:
             W = self.weights_wo_bias(p.weights)
             W = W[element]
             dnnEnergy_dParameters = np.zeros(self.ravel.count)
-        
+            
             dnnEnergy_dWeights, dnnEnergy_dScalings = self.ravel.to_dicts(dnnEnergy_dParameters)
             outputs = self.forward(p.hiddenlayers[element], des, p.weights[element], p.desrange[element])
-
+            
             D, delta, ohat = self.get_D_delta_ohat(outputs, W, residual=1)
-
             dnnEnergy_dScalings[element]['intercept'] = 1.
             dnnEnergy_dScalings[element]['slope'] = float(outputs[len(outputs)-1])
+            
+            for j in range(1, len(outputs)):
+                dnnEnergy_dWeights[element][j] = float(scaling['slope']) * np.dot(np.matrix(ohat[j-1]).T, np.matrix(delta[j]).T)                       
 
-            for i in range(1, len(outputs)):
-                dnnEnergy_dWeights[element][i] = float(scaling['slope']) * \
-                        np.dot(np.matrix(ohat[i-1]).T, np.matrix(delta[i]).T)
             dnnEnergy_dParameters = self.ravel.to_vector(dnnEnergy_dWeights, dnnEnergy_dScalings)
 
-        if dE_dP is None:
-            dE_dP = dnnEnergy_dParameters
-        else: dE_dP += dnnEnergy_dParameters
-
+            if dE_dP is None:
+                dE_dP = dnnEnergy_dParameters
+            else: 
+                dE_dP += dnnEnergy_dParameters
+        print("SEPARATORRRRRRRRRRRRRRRRRRRRRRRRRRRRR")
+        print(dE_dP)
         return dE_dP
-
             
 
     def forward(self, hiddenlayers, descriptor, weight, desrange, activation='tanh'):
@@ -264,7 +264,6 @@ class Neuralnetwork:
         -------
         dict
             Outputs of neural network nodes.
-
         """
         layer = 0
         fingerprint = descriptor
@@ -363,8 +362,13 @@ class Neuralnetwork:
         """
         p = self.parameters
         activation = p.activation
-        
+
         N = len(outputs)
+
+        # Delete the bias for outputs[0]
+        o = outputs[0].tolist()
+        o[0].pop(-1)
+        outputs[0] = np.asarray(o)
 
         D = {}
         for i in range(N):
@@ -394,9 +398,6 @@ class Neuralnetwork:
             ohat[i-1][0,n] = 1.
 
         return D, delta, ohat
-
-
-    
 
 
 class Raveler:
@@ -436,8 +437,6 @@ class Raveler:
         """Puts the weights and scalings embedded dictionaries into a single
         vector and returns it. The dictionaries need to have the identical
         structure to those it was initialized with."""
-        print(f"This is weightsssssssssssssssssssssssss: {weights}")
-        print(f"This is scalingsssssssssssssssssssssssss: {scalings}")
         vector = np.zeros(self.count)
         count = 0
         for k in self.weightskeys:
@@ -447,6 +446,7 @@ class Raveler:
         for k in self.scalingskeys:
             vector[count] = scalings[k['key1']][k['key2']]
             count += 1
+
         return vector
 
     def to_dicts(self, vector):
