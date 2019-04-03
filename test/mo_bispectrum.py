@@ -8,8 +8,8 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
 
 sys.path.append("../")
-from descriptors.snap import bispectrum
-from utilities.assembler import assembler
+from MAP.descriptors.snap import bispectrum
+from MAP.utilities.assembler import assembler
 import pandas as pd
 
 directory = "../datasets/Mo/training/"
