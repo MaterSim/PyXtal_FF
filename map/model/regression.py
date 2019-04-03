@@ -1,5 +1,7 @@
 from scipy.optimize import minimize
 
+from .model import LossFunction
+
 class Regressor:
     """
     This class is built for optimizing the loss function of NeuralNetwork 
@@ -30,7 +32,6 @@ class Regressor:
             kwargs.update(user_kwargs)
 
         self.kwargs = kwargs
-        self.optimizer = minimize
 
 
     def regress(self, model):
@@ -39,7 +40,16 @@ class Regressor:
         """
         self.kwargs.update({'jac': True,
                             'args': (True,)})
-        x0 = [0., 0., 0.] # fix this
+        parameters0 = model.vector.copy()
+        function = LossFunction(model)
+        
+        opt = minimize(function.lossfunction, parameters0, **self.kwargs)
+        #except:
+        #    return True
+        #else:
+        #    return False
+
+        return opt.x 
 
 
 if __name__ == '__main__':

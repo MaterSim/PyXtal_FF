@@ -5,9 +5,11 @@ from collections import OrderedDict
 import numpy as np
 from ase.calculators.calculator import Parameters
 
-from model import calculate_descriptor_range
+#from .model import LossFunction
+from .model import calculate_descriptor_range
+from .regression import Regressor
 
-class Neuralnetwork:
+class Neuralnetwork():
     """
     This class implements a feed-forward neural network.
 
@@ -35,14 +37,14 @@ class Neuralnetwork:
         p.weights = weights
 
 
-    def fit(self, images, descriptor, feature=None):
+    def fit(self, images, adescriptors, feature=None):
         """
         Fit the model parameters here.
 
         images: List
             List of ASE atomic objects for neural network training.
-        descriptor: array
-            The descriptor that corresponds to the images.
+        adescriptor: array
+            All descriptors of images.
         """
         p = self.parameters
 
@@ -51,7 +53,7 @@ class Neuralnetwork:
                 msg = f"You must input the feature if the feature_mode is {p.feature_mode}"
             else:
                 p.feature = feature
-
+        
         # Convert hiddenlayers to dictionary:
         if isinstance(p.hiddenlayers, (tuple, list)):
             hiddenlayers = {}
@@ -60,20 +62,48 @@ class Neuralnetwork:
             p.hiddenlayers = hiddenlayers
 
         p.images = images
-        p.descriptor = descriptor
-        p.descriptor_shape = (len(descriptor[0]), len(descriptor[0][0][1]))
+        p.adescriptors = adescriptors
+        #p.descriptor_shape = (len(adescriptor[0]), len(adescriptor[0][0][1]))
 
-        p.desrange = calculate_descriptor_range(images, descriptor)
+        p.desrange = calculate_descriptor_range(images, adescriptors)
         p.scalings = self.activation_scaling(images, p.activation, p.desrange.keys())
 
         if p.weights == None:
             p.weights = self.get_random_weights(p.hiddenlayers, p.descriptor_shape,)
 
-        self.vec = self.vector
+        #nnEnergy = self.calculate_nnEnergy(descriptor[0])
+        #nndEnergy = self.calculate_dnnEnergy_dParameters(descriptor[0])
 
-        nnEnergy = self.calculate_nnEnergy(descriptor[0])
-        nndEnergy = self.calculate_dnnEnergy_dParameters(descriptor[0])
+        self.regressor = Regressor()
+        self.result = self.regressor.regress(model=self)
 
+        print(self.result)
+
+    def calculate_loss(self, parametervector, lossprime=True):
+        self.vector = parametervector
+        p = self.parameters
+        
+        energyloss = 0.
+        dloss_dparameters = np.zeros((len(parametervector),))
+        images = p.images
+        adescriptors = p.adescriptors
+
+        for i, image in enumerate(images):
+            no_of_atoms = len(image)
+            true_energy = image.get_potential_energy(apply_constraint=False)
+            nn_energy = self.calculate_nnEnergy(adescriptors[i])
+            norm_residual = abs(true_energy - nn_energy) / len(image)
+            
+            energyloss += norm_residual ** 2
+
+            if lossprime:
+                denergy_dparameters = self.calculate_dnnEnergy_dParameters(adescriptors[i])
+                dnorm_residual_dparameters = 2. * (nn_energy - true_energy) * denergy_dparameters / no_of_atoms ** 2.
+
+
+        loss = energyloss # can include weights in this loss too
+
+        return loss, dloss_dparameters
 
     def activation_scaling(self, images, activation, elements):
         """
@@ -178,7 +208,7 @@ class Neuralnetwork:
         return weights
 
 
-    def calculate_nnEnergy(self, descriptor):
+    def calculate_nnEnergy(self, descriptors):
         """
         Calculate the predicted energy with neural network.
 
@@ -191,7 +221,7 @@ class Neuralnetwork:
         self.nnEnergies = []
         Energy = 0.
 
-        for i, (element, des) in enumerate(descriptor):
+        for i, (element, des) in enumerate(descriptors):
             scaling = p.scalings[element]
             weights = p.weights[element]
             hl = p.hiddenlayers[element]
@@ -206,14 +236,14 @@ class Neuralnetwork:
 
         return Energy
 
-    def calculate_dnnEnergy_dParameters(self, descriptor):
+    def calculate_dnnEnergy_dParameters(self, descriptors):
         """
         I still have no clue what this function does.
         """
         p = self.parameters
         dE_dP = None
         
-        for i, (element, des) in enumerate(descriptor):
+        for i, (element, des) in enumerate(descriptors):
             scaling = p.scalings[element]
             W = self.weights_wo_bias(p.weights)
             W = W[element]
@@ -235,12 +265,11 @@ class Neuralnetwork:
                 dE_dP = dnnEnergy_dParameters
             else: 
                 dE_dP += dnnEnergy_dParameters
-        print("SEPARATORRRRRRRRRRRRRRRRRRRRRRRRRRRRR")
-        print(dE_dP)
+        
         return dE_dP
             
 
-    def forward(self, hiddenlayers, descriptor, weight, desrange, activation='tanh'):
+    def forward(self, hiddenlayers, descriptors, weight, desrange, activation='tanh'):
         """
         This function is the neural network architecture. The input is given as 
         the descriptor, and the output is calculated for the corresponding energy about a 
@@ -266,7 +295,7 @@ class Neuralnetwork:
             Outputs of neural network nodes.
         """
         layer = 0
-        fingerprint = descriptor
+        fingerprint = descriptors
         len_fp = len(fingerprint)
         for _ in range(len_fp):
             if (desrange[_][1] - desrange[_][0] > (10.**(-8.))):
@@ -398,7 +427,7 @@ class Neuralnetwork:
             ohat[i-1][0,n] = 1.
 
         return D, delta, ohat
-
+    
 
 class Raveler:
     """(CP) Class to ravel and unravel variable values into a single vector.
@@ -474,67 +503,3 @@ class Raveler:
             count += 1
         return weights, scalings
 
-##########################################################################################
-
-from ase.calculators.emt import EMT
-from ase.build import fcc110
-from ase import Atoms, Atom
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
-from ase import units
-from ase.md import VelocityVerlet
-from ase.constraints import FixAtoms
-def generate_data(count):
-    atoms = fcc110('Pt', (2,2,2), vacuum=7.)
-    adsorbate = Atoms([Atom('Cu', atoms[7].position + (0., 0., 2.5)),
-        Atom('Cu', atoms[7].position + (0., 0., 5.))])
-    atoms.extend(adsorbate)
-    atoms.set_constraint(FixAtoms(indices=[0, 2]))
-    atoms.set_calculator(EMT())
-    MaxwellBoltzmannDistribution(atoms, 300.*units.kB)
-    dyn = VelocityVerlet(atoms, dt=1.*units.fs)
-    newatoms = atoms.copy()
-    newatoms.set_calculator(EMT())
-    newatoms.get_potential_energy()
-    images = [newatoms]
-    for step in range(count-1):
-        dyn.run(50)
-        newatoms = atoms.copy()
-        newatoms.set_calculator(EMT())
-        newatoms.get_potential_energy()
-        images.append(newatoms)
-    return images
-
-from amp import Amp
-from amp.descriptor.gaussian import Gaussian, make_symmetry_functions
-from amp.model.neuralnetwork import NeuralNetwork
-from amp.model import LossFunction
-from amp.utilities import hash_images
-
-label = 'train_test_g5/calc'
-train_images = generate_data(1)
-elements = ['Pt', 'Cu']
-G = make_symmetry_functions(elements=elements, type='G2',
-        etas=np.logspace(np.log10(0.05), np.log10(5.),
-            num=4))
-G = {element: G for element in elements}
-calc = Amp(descriptor=Gaussian(Gs=G),
-        model=NeuralNetwork(hiddenlayers=(3, 3)),
-        label=label,
-        cores=1)
-loss = LossFunction(convergence={'energy_rmse': 0.02,
-    'force_rmse': 0.03})
-calc.model.lossfunction = loss
-
-calc.train(images=train_images,)
-
-# Generating the gaussian descriptors
-h_images = hash_images(train_images)
-d = []
-for key in h_images.keys():
-    d.append(calc.model.trainingparameters.descriptor.fingerprints[key])
-
-# Generating the weights from amp
-w = calc.model.parameters.weights
-
-nn = Neuralnetwork(weights=w)
-nn.fit(images=train_images, descriptor=d)

@@ -1,3 +1,18 @@
+#from .NeuralNetwork import Neuralnetwork
+
+class LossFunction:
+    def __init__(self, model):
+        self.model = model
+
+    def lossfunction(self, parameters, lossprime):
+
+        Loss, LossPrime = self.model.calculate_loss(parameters, lossprime)
+
+        if lossprime:
+            return Loss, LossPrime
+        else:
+            return Loss
+
 ################### AUX functions ##################################
 
 def calculate_descriptor_range(images, descriptor):
