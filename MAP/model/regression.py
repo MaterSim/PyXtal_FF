@@ -52,5 +52,5 @@ class Regressor:
         return opt.x 
 
 
-if __name__ == '__main__':
-    Regressor(method='BFGS')
+#if __name__ == '__main__':
+#    Regressor(method='BFGS')
