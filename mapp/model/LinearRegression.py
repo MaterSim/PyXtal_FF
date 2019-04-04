@@ -1,9 +1,11 @@
 from sklearn.linear_model import LinearRegression
 
+from ..utilities.gregression import Regressor
+
 class linearregression:
     """
-    Perform linear regression using Scikit-learn.
-
+    The class that performs the linear regression algorithm with Scikit-learn.
+    
     Parameters
     ----------
     adescriptors: list of arrays
@@ -28,16 +30,18 @@ class linearregression:
             raise ValueError("You must input the value for the weights")
 
 
-    def fit(self):
+    def fit(self, train_adescriptors, test_adescriptors, train_features, test_features, train_weights, test_weights):
         """
         Run the linear regression.
         """
-        self.reg = LinearRegression().fit(self.X_train, self.y_train, self.w_train)
+        #self.reg = LinearRegression().fit(self.X_train, self.y_train, self.w_train)
             
-        train_result = self.get_mae_rsquare(self.X_train, self.y_train, self.w_train, self.type_train)
-        test_result = self.get_mae_rsquare(self.X_test, self.y_test, self.w_test, self.type_test)
+        #train_result = self.get_mae_rsquare(self.X_train, self.y_train, self.w_train, self.type_train)
+        #test_result = self.get_mae_rsquare(self.X_test, self.y_test, self.w_test, self.type_test)
 
-        return train_result, test_result
+        #return train_result, test_result
+
+        self.regressor = gregressor()
 
 
     def get_coefficients(self):

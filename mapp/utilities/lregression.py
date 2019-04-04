@@ -1,32 +1,27 @@
-from scipy.optimize import minimize
+# Local regression
 
 from .model import LossFunction
 
 class Regressor:
     """
-    This class is built for optimizing the loss function of NeuralNetwork 
-    model. The Regressor class is based on SciPy optimizers. The minimization
-    methods include:
-    - BFGS
-    - etc.
+    This class contains global optimization methods
 
     Parameters
     ----------
     method: str
-        Type of minimization scheme. 
-        e.g.: 'BFGS'
-    kwargs: dict
-        Keywords for the method
+        Type of minimization scheme. E.g.: 'BFGS'.
+    user_kwargs: dict
+        The arguments of the optimization function are passed by the keywords of the dict.
     """
-
     def __init__(self, method='BFGS', user_kwargs=None):
 
         if method == 'BFGS':
+            from scipy.optimize import minimize as optimizer
             kwargs = {'method': 'BFGS',
                       'options': {'gtol': 1e-15, }}
         else:
-            raise NotImplementedError("The method is not implemented yet, "
-                                      "or it doesn't exist in SciPy.")
+            msg = "The method is not implemented yet."
+            raise NotImplementedError(msg)
         
         if user_kwargs is not None:
             kwargs.update(user_kwargs)
@@ -36,7 +31,12 @@ class Regressor:
 
     def regress(self, model):
         """
-        Perform the optimization scheme here.
+        Run the optimization scheme here.
+
+        Parameters
+        ----------
+        model: object
+            Class representing the regression model.
         """
         self.kwargs.update({'jac': True,
                             'args': (True,)})
@@ -46,7 +46,3 @@ class Regressor:
         opt = minimize(function.lossfunction, parameters0, **self.kwargs)
 
         return opt.x, opt.fun
-
-
-if __name__ == '__main__':
-    Regressor(method='BFGS')

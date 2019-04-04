@@ -5,7 +5,7 @@ import numpy as np
 from ase.calculators.calculator import Parameters
 
 from .model import calculate_descriptor_range
-from ..utilities.regression import Regressor
+from ..utilities.lregression import Regressor
 
 class neuralnetwork():
     """
@@ -74,8 +74,6 @@ class neuralnetwork():
 
         self.regressor = Regressor()
         self.result = self.regressor.regress(model=self)
-
-        print(self.result)
 
     def calculate_loss(self, parametervector, lossprime=True):
         self.vector = parametervector

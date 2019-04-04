@@ -1,9 +1,26 @@
 class LossFunction:
+    """
+    General loss function for passing the model to the optimizer.
+
+    Parameters
+    ----------
+    model: object
+        The class representing the model.
+    """
     def __init__(self, model):
         self.model = model
 
     def lossfunction(self, parameters, lossprime):
+        """
+        The value of loss function and the derivative are stored here.
 
+        Parameters
+        ----------
+        parameters: list
+            A list of parameters to be optimized.
+        lossprime: bool
+            If True, calculate the derivative of the loss function.
+        """
         Loss, LossPrime = self.model.calculate_loss(parameters, lossprime)
 
         if lossprime:
