@@ -1,13 +1,11 @@
 import os
 from collections import OrderedDict
 
-
 import numpy as np
 from ase.calculators.calculator import Parameters
 
-#from .model import LossFunction
 from .model import calculate_descriptor_range
-from .regression import Regressor
+from ..utilities.regression import Regressor
 
 class neuralnetwork():
     """

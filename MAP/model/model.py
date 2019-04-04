@@ -1,5 +1,3 @@
-#from .NeuralNetwork import Neuralnetwork
-
 class LossFunction:
     def __init__(self, model):
         self.model = model
