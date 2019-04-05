@@ -40,4 +40,4 @@ class Regressor:
         f = LossFunction(model)
         optimize = optimizer(f.lossfunction(lossprime=False), self.bounds)
 
-        return opt.x, opt.fun
+        return [optimize.x, optimize.fun]

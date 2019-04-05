@@ -7,7 +7,7 @@ from ase.calculators.calculator import Parameters
 from .model import calculate_descriptor_range
 from ..utilities.lregression import Regressor
 
-class neuralnetwork():
+class NeuralNetwork:
     """
     This class implements a feed-forward neural network.
 

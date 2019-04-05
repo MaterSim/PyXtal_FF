@@ -37,27 +37,27 @@ class bispectrum(object):
     structure: object
         Pymatgen crystal structure object.
     rcutfac: float
-        Scale factor applied to all cutoff radii
-    twojmax: int
-        Band limit for bispectrum components
+        Scale factor applied to all cutoff radii.
     element_profile: dict
         Elemental descriptions of each atom type in the structure.
-        i.e. dict(Na=dict(r=0.3, w=0.9), Cl=dict(r=0.7, w=3.0))
-    rfac0: float
-        Parameter in distance to angle conversion (0 < rcutfac < 1).
-        Default value: 0.99363.
-    rmin0: float
-        Parameter in distance to angle conversion.
-        Default value: 0.
+        i.e. dict(Na=dict(r=0.3, w=0.9), Cl=dict(r=0.7, w=3.0)).
+    twojmax: int
+        Band limit for bispectrum components.
     diagonal: int
         diagonal value = 0 or 1 or 2 or 3.
         0 = all j1, j2, j <= twojmax, j2 <= j1
         1 = subset satisfying j1 == j2
         2 = subset satisfying j1 == j2 == j3
         3 = subset satisfying j2 <= j1 <= j
+    rfac0: float
+        Parameter in distance to angle conversion (0 < rcutfac < 1).
+        Default value: 0.99363.
+    rmin0: float
+        Parameter in distance to angle conversion.
+        Default value: 0.
     """
-    def __init__(self, structure, rcutfac, twojmax, element_profile, 
-                 rfac0=0.99363, rmin0=0., diagonal=3):
+    def __init__(self, structure, rcutfac, element_profile, twojmax, 
+                 diagonal=3, rfac0=0.99363, rmin=0.):
         # Need to specify self.exe to find lammps executable.
         self.exe = '../lmp_serial'
         self.pre_cmds = ['units metal',
