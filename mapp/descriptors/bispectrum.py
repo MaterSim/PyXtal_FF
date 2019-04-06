@@ -27,7 +27,7 @@ def make_js(twojmax, diagonal):
     return js
 
 
-class bispectrum(object):
+class Bispectrum(object):
     """
     This class prepares a lammps input file and calls the lammps executable 
     to calculate bispectrum coefficients of a given structure.
@@ -57,7 +57,7 @@ class bispectrum(object):
         Default value: 0.
     """
     def __init__(self, structure, rcutfac, element_profile, twojmax, 
-                 diagonal=3, rfac0=0.99363, rmin=0.):
+                 diagonal=3, rfac0=0.99363, rmin0=0.):
         # Need to specify self.exe to find lammps executable.
         self.exe = '../lmp_serial'
         self.pre_cmds = ['units metal',

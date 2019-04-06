@@ -1,8 +1,12 @@
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error
 
-from ..utilities.gregression import Regressor
-from ..descriptors.snap import bispectrum
-from ..utilities.assembler import assembler
+import sys
+sys.path.append("..")
+
+from descriptors.bispectrum import Bispectrum
+from utilities.assembler import Assembler
+from utilities.gregression import Regressor
 
 
 
@@ -19,12 +23,12 @@ class Snap:
     stress_coefficient: float
         The stress scaling parameter to evaluate the loss value.
     """
-    def __init__(self, element_profile, twojmax=6, diagonal=3, rfac0=0.99363, rmin=0.0, energy_coefficient=1., force_coefficient=0.03, stress_coefficient=None):
+    def __init__(self, element_profile, twojmax=6, diagonal=3, rfac0=0.99363, rmin0=0.0, energy_coefficient=1., force_coefficient=0.03, stress_coefficient=None):
         self.profile = element_profile
         self.twojmax = twojmax
         self.diagonal = diagonal
         self.rfac0 = rfac0
-        self.rmin = rmin
+        self.rmin0 = rmin0
         self.energy_coefficient = energy_coefficient
         self.force_coefficient = force_coefficient
         self.stress_coefficient = stress_coefficient
@@ -69,7 +73,7 @@ class Snap:
 
         # Perform the SNAP regression model (i.e. Linear Regression and Global Optimization method)
         self.regressor = Regressor()
-        self.result = self.regressor.regress(model=self, self.bounds)
+        self.result = self.regressor.regress(model=self, bounds=self.bounds)
 
 
     def get_coefficients(self):
@@ -93,14 +97,14 @@ class Snap:
         # Get bispectrum coefficients with the initial structures and the predicted Rc
         self.X = []
         for i in range(len(self.structures)):
-            bispectrum(self.structures[i], parameter[0], self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0, rmin=self.rmin)
+            Bispectrum(self.structures[i], parameters[0], self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0, rmin0=self.rmin0)
             bispec = assembler(atom_type=self.atom_types, volume=self.volumes[i],
                                force=self.force, stress=self.stress)
         
             if self.X == []:
                 self.X = bispec.bispectrum_coefficients
             else:
-                self.X = np.vstack((snap, bispec.bispectrum coefficients)
+                self.X = np.vstack((snap, bispec.bispectrum_coefficients))
 
 
         # Construct the weights into an array based on the features.

@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-class assembler(object):
+class Assembler(object):
     """
     A class to gather all bispectrum components, including force and stress
     bispectrum. 

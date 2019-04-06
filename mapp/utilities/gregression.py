@@ -1,6 +1,11 @@
 # Global regression
 
-from ..model import LossFunction
+
+import sys
+sys.path.append("..")
+
+from scipy.optimize import differential_evolution as optimizer
+from models.model import LossFunction
 
 class Regressor:
     """
@@ -14,9 +19,8 @@ class Regressor:
         Keywords for the optimization scheme.
     """
     def __init__(self, method='DifferentialEvolution', user_kwargs=None):
-        
-        if method == 'DifferentialEvolution':
-            from scipy.optimize import differential_evolution as optimizer
+        self.method = method
+        if self.method == 'DifferentialEvolution':
             kwargs = {'strategy': 'best1bin',
                       'maxiter': 1000,
                       'popsize': 15,
@@ -38,6 +42,6 @@ class Regressor:
         self.bounds = bounds
 
         f = LossFunction(model)
-        optimize = optimizer(f.lossfunction(lossprime=False), self.bounds)
+        regression = optimizer(f.lossfunction, self.bounds)
 
-        return [optimize.x, optimize.fun]
+        return [regression.x, regression.fun]

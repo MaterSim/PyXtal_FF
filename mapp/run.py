@@ -1,15 +1,25 @@
-from .model.snap import Snap
+import json
+import numpy as np
 
-directory = "/datasets/Mo/training/"
+from pymatgen import Structure
+from models.snap import Snap
+
+
+directory = "./datasets/Mo/training/"
 files = ["AIMD_NPT.json"]
 profile = dict(Mo=dict(r=0.5, w=1.0))
+bounds = [(4, 5), (0.5, 3000), (0.001,100)]
 
 
 for file in files:
     with open(directory+file) as f:
         datas = json.load(f)
 
-for struc in data:
+structures = []
+y = []
+styles = []
+
+for struc in datas:
     lat = struc['structure']['lattice']['matrix']
     species = []
     positions = []
@@ -20,4 +30,16 @@ for struc in data:
     structure = Structure(lat, species, fcoords)
     structures.append(structure)
 
+    # append energies in y
+    y.append(struc['data']['energy_per_atom'])
+    styles.append('energy')
 
+    fs = np.ravel(struc['data']['forces'])
+    for f in fs:
+        y.append(f)
+        styles.append('force')
+
+Predictor = Snap(element_profile=profile)
+Predictor.fit(structures=structures, features=y, feature_styles=styles, bounds=bounds)
+
+print(Predictor.result)

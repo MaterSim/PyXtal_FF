@@ -10,7 +10,7 @@ class LossFunction:
     def __init__(self, model):
         self.model = model
 
-    def lossfunction(self, parameters, lossprime):
+    def lossfunction(self, parameters, lossprime=False):
         """
         The value of loss function and the derivative are stored here.
 
@@ -21,11 +21,11 @@ class LossFunction:
         lossprime: bool
             If True, calculate the derivative of the loss function.
         """
-        Loss, LossPrime = self.model.calculate_loss(parameters, lossprime)
-
         if lossprime:
+            Loss, LossPrime = self.model.calculate_loss(parameters, lossprime)
             return Loss, LossPrime
         else:
+            Loss = self.model.calculate_loss(parameters, lossprime)
             return Loss
 
 ################### AUX functions ##################################
