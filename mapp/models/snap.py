@@ -1,7 +1,10 @@
+import sys
+import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 
-import sys
+
+
 sys.path.append("..")
 
 from descriptors.bispectrum import Bispectrum
@@ -59,6 +62,9 @@ class Snap:
         self.styles = feature_styles
         self.bounds = bounds
         self.force = force
+        self.volumes = []
+        for structure in self.structures:
+            self.volumes.append(structure.volume)
 
         if stress == True and self.stress_coefficient == None:
             msg = "You must input the stress coefficient in snap"
@@ -70,6 +76,7 @@ class Snap:
                 self.volumes.append(structure.volume)
         else:
             self.stress = stress
+
 
         # Perform the SNAP regression model (i.e. Linear Regression and Global Optimization method)
         self.regressor = Regressor()
@@ -98,13 +105,13 @@ class Snap:
         self.X = []
         for i in range(len(self.structures)):
             Bispectrum(self.structures[i], parameters[0], self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0, rmin0=self.rmin0)
-            bispec = assembler(atom_type=self.atom_types, volume=self.volumes[i],
+            bispec = Assembler(atom_type=self.atom_types, volume=self.volumes[i],
                                force=self.force, stress=self.stress)
         
             if self.X == []:
                 self.X = bispec.bispectrum_coefficients
             else:
-                self.X = np.vstack((snap, bispec.bispectrum_coefficients))
+                self.X = np.vstack((self.X, bispec.bispectrum_coefficients))
 
 
         # Construct the weights into an array based on the features.
@@ -124,7 +131,7 @@ class Snap:
         y_forces, y_energies = [], []
         w_forces, w_energies = [], []
         
-        for i in range(len(w)):
+        for i in range(len(self.w)):
             if self.styles[i] == 'energy':
                 X_energies.append(self.X[i])
                 y_energies.append(self.y[i])

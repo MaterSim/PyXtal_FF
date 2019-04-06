@@ -8,7 +8,7 @@ from models.snap import Snap
 directory = "./datasets/Mo/training/"
 files = ["AIMD_NPT.json"]
 profile = dict(Mo=dict(r=0.5, w=1.0))
-bounds = [(4, 5), (0.5, 3000), (0.001,100)]
+bounds = [(4, 5), (500, 2000), (0.1,10)]
 
 
 for file in files:
