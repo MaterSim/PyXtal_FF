@@ -40,9 +40,10 @@ class Regressor:
         """
         self.kwargs.update({'jac': True,
                             'args': (True,)})
+                
         parameters0 = model.vector.copy()
-        function = LossFunction(model)
+        function = LossFunction(model, lossprime=True)
         
-        opt = minimize(function.lossfunction, parameters0, **self.kwargs)
+        opt = optimizer(function.lossfunction, parameters0, **self.kwargs)
 
         return opt.x, opt.fun

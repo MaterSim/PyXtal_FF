@@ -8,8 +8,7 @@ from .model import calculate_descriptor_range
 from ..utilities.lregression import Regressor
 
 class NeuralNetwork:
-    """
-    This class implements a feed-forward neural network.
+    """This class implements a Neural Network model.
 
     Parameters
     ----------
@@ -18,7 +17,9 @@ class NeuralNetwork:
     activation: str
         The activation function for the neural network.
     feature_mode: bool
-        The user input feature. If False, ASE will provide calculator to calculate the energies and forces.
+        The user input feature. 
+        If False, ASE will provide calculator to calculate the energies 
+        and forces.
     """
     def __init__(self, hiddenlayers=(3,3), activation='tanh', elements=['Pt', 'Cu'], feature_mode=False, weights=None):
         p = self.parameters = Parameters()

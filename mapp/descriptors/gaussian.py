@@ -1600,17 +1600,17 @@ def G5_prime(crystal, i, ep_type, ni, functional='Cosine',
 
 
 # Test run
-from pymatgen.core.structure import Structure
-
-crystal = Structure.from_file('../datasets/POSCARs/POSCAR-NaCl')
-
-sym_params = {'G3': {'kappa': np.logspace(np.log10(0.05), 
-                                         np.log10(5.), num=4),
-                    'Rc': 6.5},
-                'G4': {'eta': [0.005],
-                        'zeta': [1., 4.],
-                        'lamBda': [1., -1.]}}
-
-g = Gaussian(crystal, sym_params, derivative=True)
-
-descriptor = g.Gs # all symmetry calculation of G3 and G4
+#from pymatgen.core.structure import Structure
+#
+#crystal = Structure.from_file('../datasets/POSCARs/POSCAR-NaCl')
+#
+#sym_params = {'G3': {'kappa': np.logspace(np.log10(0.05), 
+#                                         np.log10(5.), num=4),
+#                    'Rc': 6.5},
+#                'G4': {'eta': [0.005],
+#                        'zeta': [1., 4.],
+#                        'lamBda': [1., -1.]}}
+#
+#g = Gaussian(crystal, sym_params, derivative=True)
+#
+#descriptor = g.Gs # all symmetry calculation of G3 and G4

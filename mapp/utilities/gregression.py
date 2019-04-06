@@ -7,9 +7,9 @@ sys.path.append("..")
 from scipy.optimize import differential_evolution as optimizer
 from models.model import LossFunction
 
+
 class Regressor:
-    """
-    This class contains global optimization methods.
+    """This class consists of global optimization methods.
 
     Parameters
     ----------
@@ -36,12 +36,24 @@ class Regressor:
 
 
     def regress(self, model, bounds):
-        """
-        Run the optimization scheme here.
+        """Run the optimization scheme here.
+        
+        Parameters
+        ----------
+        model: class
+            Class representing the machine learning model.
+        bounds: List of tuples
+            The tuples describe the min and max values for the global 
+            searching algorithm.
+        
+        Returns
+        -------
+        List
+            List of the optimized parameters and loss value.
         """
         self.bounds = bounds
 
-        f = LossFunction(model)
+        f = LossFunction(model, lossprime=False)
         regression = optimizer(f.lossfunction, self.bounds)
 
         return [regression.x, regression.fun]

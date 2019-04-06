@@ -27,7 +27,7 @@ def make_js(twojmax, diagonal):
     return js
 
 
-class Bispectrum(object):
+class Bispectrum:
     """
     This class prepares a lammps input file and calls the lammps executable 
     to calculate bispectrum coefficients of a given structure.
@@ -77,7 +77,6 @@ class Bispectrum(object):
         self.post_cmds = ['run 0']
         self.input_file = 'in.sna'
 
-        
         self.structure = structure
         self.rcutfac = rcutfac
         self.twojmax = twojmax
@@ -134,6 +133,7 @@ class Bispectrum(object):
  
         return data
 
+
     def get_lammps_input(self, input_file):
         """
         Create lammps input file.
@@ -158,10 +158,3 @@ class Bispectrum(object):
         with open(input_file, 'w') as f:
             for line in self.CMDS:
                 f.write("%s\n" %line)
-
-#from pymatgen import Lattice, Structure
-#s = Structure.from_spacegroup(225, Lattice.cubic(5.69169),
-#                                      ['Na', 'Cl'],
-#                                      [[0, 0, 0], [0, 0, 0.5]])
-#profile = dict(Na=dict(r=0.3, w=0.9), Cl=dict(r=0.7, w=3.0))
-#L = bispectrum(s, 5.0, 3, profile, diagonal=3)

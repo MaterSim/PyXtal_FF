@@ -1,18 +1,19 @@
 class LossFunction:
-    """
-    General loss function for passing the model to the optimizer.
+    """General loss function for passing the model to the optimizer.
 
     Parameters
     ----------
     model: object
         The class representing the model.
     """
-    def __init__(self, model):
+    def __init__(self, model, lossprime=False):
         self.model = model
+        self.lossprime= lossprime
 
-    def lossfunction(self, parameters, lossprime=False):
-        """
-        The value of loss function and the derivative are stored here.
+    def lossfunction(self, parameters):
+        """This loss function takes parameters (array) given by the Scipy and 
+        feeds the parameters to the model (i.e. NeuralNetwork) for loss 
+        function calculation.
 
         Parameters
         ----------
@@ -20,19 +21,39 @@ class LossFunction:
             A list of parameters to be optimized.
         lossprime: bool
             If True, calculate the derivative of the loss function.
+        
+        Returns
+        -------
+        float
+            If lossprime is true, this lossfunction returns both the loss and
+            its derivative values.
         """
-        if lossprime:
-            Loss, LossPrime = self.model.calculate_loss(parameters, lossprime)
+        if self.lossprime:
+            Loss, LossPrime = self.model.calculate_loss(parameters)
             return Loss, LossPrime
         else:
-            Loss = self.model.calculate_loss(parameters, lossprime)
+            Loss = self.model.calculate_loss(parameters)
             return Loss
 
-################### AUX functions ##################################
+
+############################## AUX functions ##################################
+
 
 def calculate_descriptor_range(images, descriptor):
-    """
-    Calculate the range for the descriptors corresponding to the images.
+    """Calculate the range (min and max values) for the descriptors 
+    corresponding to the ASE images.
+    
+    Parameters
+    ----------
+    images: dict
+        ASE atomic objects.
+    descriptor: dict
+        List of atomic descriptor based on the symmetry function.
+        
+    Returns
+    -------
+    dict
+        The range (min and max values) of the descriptors for each element.
     """
 
     no_of_images = len(images)

@@ -39,7 +39,11 @@ for struc in datas:
         y.append(f)
         styles.append('force')
 
+# Perform SNAP
 Predictor = Snap(element_profile=profile)
-Predictor.fit(structures=structures, features=y, feature_styles=styles, bounds=bounds)
+Predictor.fit(structures=structures, 
+              features=y, 
+              feature_styles=styles, 
+              bounds=bounds)
 
-print(Predictor.result)
+optimized_parameters = Predictor.result
