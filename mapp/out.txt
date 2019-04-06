@@ -1,3 +1,0 @@
-/homes/yanxonh/.local/lib/python3.6/site-packages/sklearn/externals/joblib/externals/cloudpickle/cloudpickle.py:47: DeprecationWarning: the imp module is deprecated in favour of importlib; see the module's documentation for alternative uses
-  import imp
-[array([4.53480058e+00, 1.97466144e+03, 1.00107119e-01]), 0.02312482312172779]

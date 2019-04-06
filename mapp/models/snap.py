@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 
@@ -181,7 +182,7 @@ class Snap:
         self.regression = LinearRegression().fit(self.X, self.y, self.w)
         
         # Calculate the MAE here.
-        if self.stress:
+        if self.stress == False:
             self.yp_energies = self.regression.predict(X_energies)
             self.mae_energies = mean_absolute_error(y_energies, 
                                                     self.yp_energies)
@@ -195,7 +196,7 @@ class Snap:
                                                    w_forces)
             
             # Evaluate loss
-            loss = parameters[1] * self.mae_energies 
+            loss = parameters[1] * self.mae_energies
             loss =+ parameters[2] * self.mae_forces
             
         else:
@@ -248,6 +249,24 @@ class Snap:
             for c in coeff:
                 f.write(str(c))
         f.close()
+        
+        
+    def print_mae_r2square(self,):
+        if self.stress:
+            d = {'energy_r2': [self.r2_energies], 
+                 'energy_mae': [self.mae_energies], 
+                 'force_r2': [self.r2_forces], 
+                 'force_mae': [self.mae_forces],
+                 'stress_r2': [self.r2_stress],
+                 'stress_mae': [self.mae_stress]}
+        else:
+            d = {'energy_r2': [self.r2_energies], 
+                 'energy_mae': [self.mae_energies], 
+                 'force_r2': [self.r2_forces], 
+                 'force_mae': [self.mae_forces]}
+        
+        df = pd.DataFrame(d)
+        print(df)
         
 
 ########################## Not needed? ####################################
