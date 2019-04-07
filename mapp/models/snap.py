@@ -239,17 +239,19 @@ class Snap:
             filename += atype
         
         f = open(filename+".snapcoeff", "a")
-        f.write("# SNAP coefficients for "+filename+"\n")
+        f = open(filename+".snapcoeff", "a")
+        f.write("# SNAP coefficients for "+filename+"\n\n")
         f.write(f"{len(self.atom_types)} {len(coeff)}\n")
         for k, v in self.profile.items():
             f.write(k+" ")
             for key, value in v.items():
-                f.write(value)
+                f.write(str(value)+" ")
             f.write("\n")
             for c in coeff:
                 f.write(str(c))
+                f.write("\n")
         f.close()
-        
+
         
     def print_mae_r2square(self,):
         if self.stress:

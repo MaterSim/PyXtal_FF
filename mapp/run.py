@@ -1,3 +1,4 @@
+import time
 import json
 import numpy as np
 
@@ -40,10 +41,14 @@ for struc in datas:
         styles.append('force')
 
 # Perform SNAP
+t0 = time.time()
 Predictor = Snap(element_profile=profile)
 Predictor.fit(structures=structures, 
               features=y, 
               feature_styles=styles, 
               bounds=bounds)
+t1 = time.time()
+print(round(t1-t0, 2))
 
 optimized_parameters = Predictor.result
+print(optimized_parameters)
