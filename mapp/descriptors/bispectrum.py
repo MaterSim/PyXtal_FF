@@ -59,7 +59,7 @@ class Bispectrum:
     def __init__(self, structure, rcutfac, element_profile, twojmax, 
                  diagonal=3, rfac0=0.99363, rmin0=0.):
         # Need to specify self.exe to find lammps executable.
-        self.exe = 'lmp_serial'
+        self.exe = 'lmp_serial.exe'
         self.pre_cmds = ['units metal',
                          'atom_style charge',
                          'box tilt large',
@@ -122,7 +122,8 @@ class Bispectrum:
                 error_msg += ', '.join([e for e in msg[error:]])
             except:
                 error_msg += msg[-1]
-            raise RuntimeError(msg[-1])
+            print(error_msg)
+            #raise RuntimeError(error_msg)
         
 
     def get_lammps_data(self, structure, elements):

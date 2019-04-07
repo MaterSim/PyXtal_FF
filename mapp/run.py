@@ -9,7 +9,7 @@ from models.snap import Snap
 directory = "./datasets/Mo/training/"
 files = ["AIMD_NPT.json"]
 profile = dict(Mo=dict(r=0.5, w=1.0))
-bounds = [(4, 5), (500, 2000), (0.1,10)]
+bounds = [(4, 5), (1000,2000), (0.1, 10), (500, 2000), (0.1,10)]
 
 
 for file in files:
@@ -48,7 +48,7 @@ Predictor.fit(structures=structures,
               feature_styles=styles, 
               bounds=bounds)
 t1 = time.time()
-print(round(t1-t0, 2))
+print(f"Running time: {round(t1-t0, 2)}s")
 
 optimized_parameters = Predictor.result
 print(optimized_parameters)

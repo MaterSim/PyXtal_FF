@@ -140,8 +140,7 @@ class Snap:
                        diagonal=self.diagonal, rfac0=self.rfac0, 
                        rmin0=self.rmin0)
             bispec = Assembler(atom_type=self.atom_types, 
-                               volume=self.volumes[i], force=self.force, 
-                               stress=self.stress)
+                               volume=self.volumes[i], stress=self.stress)
             if self.X == []:
                 self.X = bispec.bispectrum_coefficients
             else:
