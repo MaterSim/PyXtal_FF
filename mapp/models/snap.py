@@ -42,7 +42,7 @@ class Snap:
         The stress scaling parameter to evaluate the loss value.
     """
     def __init__(self, element_profile, twojmax=6, diagonal=3, rfac0=0.99363, 
-                 rmin0=0.0, energy_coefficient=1., force_coefficient=0.01, 
+                 rmin0=0.0, energy_coefficient=1., force_coefficient=0.03, 
                  stress_coefficient=None):
         self.profile = element_profile
         self.twojmax = twojmax
@@ -150,11 +150,11 @@ class Snap:
         self.w = []
         for style in self.styles:
             if style == 'energy':
-                self.w.append(parameters[3])
+                self.w.append(parameters[1])
             elif style == 'force':
-                self.w.append(parameters[4])
+                self.w.append(parameters[2])
             elif style == 'stress':
-                self.w.append(parameters[5])
+                self.w.append(parameters[3])
             else:
                 raise NotImplementedError(f"This {style} is not acceptable")
 
@@ -195,8 +195,8 @@ class Snap:
                                                    w_forces)
             
             # Evaluate loss
-            loss = parameters[1] * self.mae_energies
-            loss =+ parameters[2] * self.mae_forces
+            loss = self.energy_coefficient * self.mae_energies
+            loss += self.force_coefficient * self.mae_forces
             
         else:
             self.yp_energies = self.regression.predict(X_energies)
@@ -218,8 +218,8 @@ class Snap:
 
             # Evaluate loss
             loss = self.energy_coefficient * self.mae_energies 
-            loss =+ self.force_coefficient * self.mae_forces
-            loss =+ self.stress_coefficient * self.mae_stress
+            loss += self.force_coefficient * self.mae_forces
+            loss += self.stress_coefficient * self.mae_stress
 
         return loss
 
