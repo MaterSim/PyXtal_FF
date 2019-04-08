@@ -40,10 +40,15 @@ class Snap:
         The force scaling parameter to evaluate the loss value.
     stress_coefficient: float
         The stress scaling parameter to evaluate the loss value.
+    optimizer: str
+        Choose the desired global optimization scheme.
+    optimizer_kwargs: dict
+        The parameters for the global optimization scheme.
     """
     def __init__(self, element_profile, twojmax=6, diagonal=3, rfac0=0.99363, 
                  rmin0=0.0, energy_coefficient=1., force_coefficient=0.03, 
-                 stress_coefficient=None):
+                 stress_coefficient=None, optimizer='DifferentialEvolution', 
+                 optimizer_kwargs=None):
         self.profile = element_profile
         self.twojmax = twojmax
         self.diagonal = diagonal
@@ -53,6 +58,10 @@ class Snap:
         self.force_coefficient = force_coefficient
         self.stress_coefficient = stress_coefficient
         
+        # Global optimization
+        self.optimizer = optimizer
+        self.optimizer_kwargs = optimizer_kwargs
+
         # Eventually we want to develop kwargs for:
         # 1. Global optimization arguments
         # 2. Linear regression arguments
@@ -109,7 +118,8 @@ class Snap:
             self.stress = stress
 
         # Perform the SNAP model
-        self.regressor = Regressor()
+        self.regressor = Regressor(method=optimizer, 
+                                   user_kwargs=self.optimizer_kwargs)
         self.result = self.regressor.regress(model=self, bounds=self.bounds)
         
         if save:
