@@ -118,7 +118,7 @@ class Snap:
             self.stress = stress
 
         # Perform the SNAP model
-        self.regressor = Regressor(method=optimizer, 
+        self.regressor = Regressor(method=self.optimizer, 
                                    user_kwargs=self.optimizer_kwargs)
         self.result = self.regressor.regress(model=self, bounds=self.bounds)
         

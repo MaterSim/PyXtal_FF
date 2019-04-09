@@ -4,7 +4,6 @@
 import sys
 sys.path.append("..")
 
-from scipy.optimize import differential_evolution as optimizer
 from models.model import LossFunction
 
 
@@ -20,18 +19,24 @@ class Regressor:
     """
     def __init__(self, method='DifferentialEvolution', user_kwargs=None):
         self.method = method
-        if self.method == 'DifferentialEvolution':
+        if method == 'DifferentialEvolution':
+            from scipy.optimize import differential_evolution as optimizer
             kwargs = {'strategy': 'best1bin',
                       'maxiter': 1000,
-                      'popsize': 15,
+                      'popsize': 30,
                       'tol': 0.0001}
+        elif method == 'BasinHopping':
+            from scipy.optimize import basinhopping as optimizer
+            kwargs = {'niter': 100,
+                      'T': 1.0}
         else:
             msg = "The method is not implemented yet."
             raise NotImplementedError(msg)
 
         if user_kwargs is not None:
             kwargs.update(user_kwargs)
-
+        
+        self.optimizer = optimizer
         self.kwargs = kwargs
 
 
@@ -52,8 +57,8 @@ class Regressor:
             List of the optimized parameters and loss value.
         """
         self.bounds = bounds
-
+        print(self.kwargs)
         f = LossFunction(model, lossprime=False)
-        regression = optimizer(f.lossfunction, self.bounds)
+        regression = self.optimizer(f.lossfunction, self.bounds, **self.kwargs)
 
         return [regression.x, regression.fun]

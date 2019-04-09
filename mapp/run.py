@@ -5,12 +5,12 @@ import numpy as np
 from pymatgen import Structure
 from models.snap import Snap
 
-
+# The only parameters needed to be changed
 directory = "./datasets/Mo/training/"
 files = ["AIMD_NPT.json"]
 profile = dict(Mo=dict(r=0.5, w=1.0))
-bounds = [(4., 5.), (0.5, 3000), (0.001,100)]
-
+bounds = [(4., 5.), (0.5, 3000), (0.001,100)] # Rc, energy, and force weights
+optimizer_kwargs = {'strategy': 'best1bin', 'popsize': 40}
 
 for file in files:
     with open(directory+file) as f:
@@ -42,7 +42,7 @@ for struc in datas:
 
 # Perform SNAP
 t0 = time.time()
-Predictor = Snap(element_profile=profile)
+Predictor = Snap(element_profile=profile, optimizer_kwargs=optimizer_kwargs)
 Predictor.fit(structures=structures, 
               features=y, 
               feature_styles=styles, 
