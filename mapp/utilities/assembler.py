@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-class Assembler(object):
+class Assembler:
     """
     A class to gather all bispectrum components, including force and stress
     bispectrum. 
@@ -23,7 +23,7 @@ class Assembler(object):
         elements = self._read_dump("dump.element", dtype='str')
         
 
-        # SNA
+        # sna
         bias_weight = []
         for _ in range(len(atom_type)):
             bias_weight.append([1.0/len(atom_type)])
@@ -42,7 +42,7 @@ class Assembler(object):
         #print(f"This is self.sna:\n{self.sna}")
         
 
-        # SNAD
+        # snad
         if force == True:
             snad = self._read_dump("dump.snad")
             snad = np.split(np.asarray(snad), len(atom_type), axis=1)
@@ -65,7 +65,7 @@ class Assembler(object):
             #print(f"This is self.snad:\n{self.snad}")
 
 
-        # SNAV
+        # snav
         if stress == True:
             snav = self._read_dump("dump.snav")
             snav = np.asarray(snav)

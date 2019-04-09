@@ -59,12 +59,12 @@ class Bispectrum:
     def __init__(self, structure, rcutfac, element_profile, twojmax, 
                  diagonal=3, rfac0=0.99363, rmin0=0.):
         # Need to specify self.exe to find lammps executable.
-        self.exe = 'lmp_serial'
+        self.exe = 'lmp_daily'
         self.pre_cmds = ['units metal',
                          'atom_style charge',
                          'box tilt large',
                          'read_data data.0',
-                         'pair_style lj/cut 10',
+                         'pair_style lj/cut 10', # why need this lj potential?
                          'pair_coeff * * 1 1']
         self.compute_cmds = ['compute sna all sna/atom ',
                              'compute snad all snad/atom ',

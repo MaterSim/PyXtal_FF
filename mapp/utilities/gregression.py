@@ -57,7 +57,7 @@ class Regressor:
             List of the optimized parameters and loss value.
         """
         self.bounds = bounds
-        print(self.kwargs)
+        
         f = LossFunction(model, lossprime=False)
         regression = self.optimizer(f.lossfunction, self.bounds, **self.kwargs)
 
