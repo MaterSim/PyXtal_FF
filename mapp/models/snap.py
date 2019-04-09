@@ -42,8 +42,11 @@ class Snap:
         The stress scaling parameter to evaluate the loss value.
     optimizer: str
         Choose the desired global optimization scheme.
+        - 'DifferentialEvolution'
+        - 'BasinHopping'
     optimizer_kwargs: dict
         The parameters for the global optimization scheme.
+        i.e. {'strategy': 'best1bin'}
     """
     def __init__(self, element_profile, twojmax=6, diagonal=3, rfac0=0.99363, 
                  rmin0=0.0, energy_coefficient=1., force_coefficient=0.03, 
