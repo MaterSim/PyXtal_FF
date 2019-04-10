@@ -1,6 +1,7 @@
 import sys
 import time
 import numpy as np
+import pandas as pd
 import json
 from pymatgen import Structure
 from sklearn.linear_model import LinearRegression
@@ -8,11 +9,10 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
 
 sys.path.append("../")
-from MAP.descriptors.snap import bispectrum
-from MAP.utilities.assembler import assembler
-import pandas as pd
+from mapp.descriptors.bispectrum import Bispectrum
+from mapp.utilities.assembler import Assembler
 
-directory = "../datasets/Mo/training/"
+directory = "../mapp/datasets/Mo/training/"
 files = ["AIMD_NPT.json"] #"AIMD_NVT.json"]
 profile = dict(Mo=dict(r=0.5, w=1.0))
 Rc = 4.6158
@@ -110,9 +110,9 @@ class Mo_bispectrum(object):
         
         snap = []
         for i in range(len(self.structures)):
-            bispectrum(self.structures[i], self.Rc, self.twojmax, self.profile,
+            Bispectrum(self.structures[i], self.Rc, self.profile, self.twojmax,
                        diagonal=self.diagonal)
-            bispec = assembler(atom_type=['Mo'], volume=self.volumes[i],
+            bispec = Assembler(atom_type=['Mo'], volume=self.volumes[i],
                                force=self.force, stress=self.stress)
             if snap == []:
                 snap = bispec.bispectrum_coefficients
