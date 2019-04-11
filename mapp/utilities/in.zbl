@@ -1,0 +1,7 @@
+units metal 
+atom_style charge 
+box tilt large 
+read_data data.0 
+pair_style zbl 2 3 
+pair_coeff 1 1 6 6 
+run 0 
