@@ -28,8 +28,7 @@ def make_js(twojmax, diagonal):
 
 
 class Bispectrum:
-    """
-    This class prepares a lammps input file and calls the lammps executable 
+    """This class prepares a lammps input file and calls the lammps executable
     to calculate bispectrum coefficients of a given structure.
     
     Parameters
@@ -103,10 +102,8 @@ class Bispectrum:
 
     
     def calculate(self):
-        """
-        Call the lammps executable to compute bispectrum coefficients
-        """
-        data = self.get_lammps_data(self.structure, self.elements)
+        """Call the LAMMPS executable to compute bispectrum coefficients."""
+        data = self.get_dump(self.structure, self.elements)
         data.write_file('data.0')
         self.get_lammps_input(self.input_file)
         p = subprocess.Popen([self.exe, '-in', self.input_file], 
@@ -126,19 +123,15 @@ class Bispectrum:
             #raise RuntimeError(error_msg)
         
 
-    def get_lammps_data(self, structure, elements):
-        """
-        Convert Pymatgen structure object to lammps dump file.
-        """
+    def get_dump(self, structure, elements):
+        """Convert Pymatgen structure object to LAMMPS dump file."""
         data = LammpsData.from_structure(structure, elements)
  
         return data
 
 
     def get_lammps_input(self, input_file):
-        """
-        Create lammps input file.
-        """
+        """Create LAMMPS input file."""
         sna = f"1 {self.rfac0} {self.twojmax} "
         for R in self.Rs:
             R *= self.rcutfac
