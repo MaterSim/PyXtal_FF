@@ -5,8 +5,8 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 
 sys.path.append("..")
-from descriptors.bispectrum import Bispectrum
-from utilities.assembler import Assembler
+from descriptors.bispectrum import Bispectrum, Assembler
+#from utilities.assembler import Assembler
 from utilities.gregression import Regressor
 
 
@@ -68,7 +68,6 @@ class Snap:
         self.optimizer_kwargs = optimizer_kwargs
 
         # Eventually we want to develop kwargs for:
-        # 1. Global optimization arguments
         # 2. Linear regression arguments
         # 3. Bispectrum arguments. i.e. include electrostatics potential
         
@@ -282,7 +281,6 @@ class Snap:
                  'force_mae': [self.mae_forces]}
         
         df = pd.DataFrame(d)
-        print(df)
         
 
 ########################## Not needed? ####################################

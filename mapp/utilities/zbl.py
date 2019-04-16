@@ -36,20 +36,22 @@ class zbl:
         
         # Get energy and forces
         self.energy = np.asarray([self.get_energy()])
-
         self.force = self.get_force()
-        print(self.force)
 
-        #os.remove("data.0")
-        #os.remove("in.zbl")
-        #os.remove("log.lammps")
+        # ZBL energy and forces in a vector
+        self.zbl = self.vectorize(self.energy, self.force)
+
+        os.remove("data.0")
+        os.remove("in.zbl")
+        os.remove("log.lammps")
+        os.remove("dump.force")
 
 
     def calculate(self):
         """ Run LAMMPS to calculate the ZBL energy and force."""
-        self.no_of_atoms = self.structure.num_sites
-        self.atom_types = self.structure.symbol_set
-        self.no_atom_types = len(self.atom_types)
+        self.no_of_atoms = self.structure.num_sites  # 8 for ['Na', 'Cl']
+        self.atom_types = self.structure.symbol_set # ('Na', 'Cl')
+        self.no_atom_types = len(self.atom_types) # 2 for ['Na', 'Cl']
 
         # Convert to dump file
         data = self.get_dump(self.structure, self.atom_types)
@@ -139,35 +141,57 @@ class zbl:
         lines = np.array(lines[-self.no_of_atoms:]).astype(float)
         
         atom_types = []
-        fx, fy, fz = [], [], []
+        force = []
         for line in lines:
             if int(line[0]) <= self.no_atom_types:
                 atom_types.append(int(line[0]))
-                fx.append(line[1])
-                fy.append(line[2])
-                fz.append(line[3])
+                force.append(line[1])
+                force.append(line[2])
+                force.append(line[3])
             else:
                 raise ValueError(f"The no. of atom types should be no more than {self.atom_types}")
         
-        print(max(atom_types))
-        
-        force = np.concatenate((fx, fy, fz))
-
         return force
+
+    
+    def vectorize(self, energy, force):
+        """To vectorize energy and force into one vector"""
+        force = np.ravel(force)
+        vector = np.hstack((energy,force))
+        
+        return vector
 
 
             
 import json
-from pymatgen import Structure
+import time
 with open("C4_train.json") as f:
     datas = json.load(f)
 
 structures = []
-for data in datas[:1]:
+for data in datas[:500]:
     lattice = data['lattice']['data']
     species = data['elements']
     coords = data['coords']['data']
     s = Structure(lattice, species, coords)
     structures.append(s)
 
-z = zbl(structures[0], 2, 3)
+t0 = time.time()
+Z = []
+for struc in structures:
+    z = zbl(structures[0], 1., 5.)
+    if Z == []:
+        Z = z.zbl
+    else:
+        Z = np.hstack((Z, z.zbl))
+t1 = time.time()
+print(round(t1-t0, 2))
+
+np.savetxt("zbl.txt", Z, fmt='%.15e')
+
+
+#from pymatgen import Structure, Lattice
+#s_nacl = Structure.from_spacegroup(225, Lattice.cubic(5.69169),
+#                                    ['Na', 'Cl'],
+#                                    [[0, 0, 0], [0, 0, 0.5]])
+
