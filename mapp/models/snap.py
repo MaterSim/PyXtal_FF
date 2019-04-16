@@ -35,10 +35,6 @@ class Snap:
         Default value: 0.
     energy_coefficient: float
         The energy scaling parameter to evaluate the loss value.
-    force_coefficinet: float
-        The force scaling parameter to evaluate the loss value.
-    stress_coefficient: float
-        The stress scaling parameter to evaluate the loss value.
     optimizer: str
         Choose the desired global optimization scheme.
         - 'DifferentialEvolution'
@@ -60,7 +56,7 @@ class Snap:
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs
 
-        self.atom_types = list(self.profile.keys()) # E.g. ['Na', 'Cl']
+        self.atom_types = list(self.profile.keys()) # ['Na', 'Cl']
 
 
     def fit(self, structures, features, feature_styles, bounds, 
@@ -98,6 +94,9 @@ class Snap:
         self.bounds = bounds
         self.force = force
         self.stress = stress
+
+        if self.force == True or self.stress == True:
+            
         
         # Calculate the volume for each structure
         self.volumes = []
@@ -151,7 +150,10 @@ class Snap:
             elif style == 'force':
                 self.w.append(parameters[1])
             elif style == 'stress':
-                self.w.append(parameters[3])
+                if self.force == True:
+                    self.w.append(parameters[3])
+                else:
+                    self.w.append(parameters[1])
             else:
                 raise NotImplementedError(f"This {style} is not acceptable")
 
@@ -201,7 +203,10 @@ class Snap:
             self.mae_stress = mean_absolute_error(y_stress, self.yp_stress)
             self.r2_stress = self.regression.score(X_stress, y_stress, 
                                                    w_stress)
-            stress_coefficient = parameters[4]
+            if self.force == True:
+                stress_coefficient = parameters[4]
+            else:
+                stress_coefficient = parameters[2]
         else:
             self.mae_stress = 0.
             stress_coefficient = 1.

@@ -9,9 +9,12 @@ from models.snap import Snap
 directory = "./datasets/Mo/training/"
 files = ["AIMD_NPT.json"]
 profile = dict(Mo=dict(r=0.5, w=1.0))
-bounds = [(4., 5.), (0.5, 3000), (0.001,100)] # Rc, energy, and force weights
+# Rc, force weights, force coefficient, stress weight, stress coeff
+bounds = [(4., 5.), (0.5, 3000), (0.001,100)] 
 optimizer_kwargs = {'strategy': 'best1bin', 'popsize': 40}
 
+
+##################### Do not change!!!! ############################
 for file in files:
     with open(directory+file) as f:
         datas = json.load(f)
