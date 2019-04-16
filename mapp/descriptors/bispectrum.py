@@ -27,6 +27,8 @@ def make_js(twojmax, diagonal):
     return js
 
 
+# Perhaps, this class can be optimized further more if we don't include stress
+# calculations if there is no needed.
 class Bispectrum:
     """This class prepares a lammps input file and calls the lammps executable
     to calculate bispectrum coefficients of a given structure.
@@ -57,12 +59,12 @@ class Bispectrum:
     """
     def __init__(self, structure, rcutfac, element_profile, twojmax, 
                  diagonal=3, rfac0=0.99363, rmin0=0.):
-        self.exe = 'lmp_serial'          # define your LAMMPS executable here
+        self.exe = 'lmp_daily'          # define your LAMMPS executable here
         self.pre_cmds = ['units metal',
                          'atom_style charge',
                          'box tilt large',
                          'read_data data.0',
-                         'pair_style lj/cut 10', # why need this lj potential?
+                         'pair_style lj/cut 10', 
                          'pair_coeff * * 1 1']
         self.compute_cmds = ['compute sna all sna/atom ',
                              'compute snad all snad/atom ',
@@ -170,7 +172,7 @@ class Assembler:
     stress: bool
         If true, return stress bispectrum components
     """
-    def __init__(self, atom_type, volume, force=True, stress=True):
+    def __init__(self, atom_type, volume, force=True, stress=False):
         self.d_bispectrum_coefficient = {}
         elements = self._read_dump("dump.element", dtype='str')
 
@@ -189,9 +191,9 @@ class Assembler:
             self.sna.append(sum/(i+1))
         self.sna = np.hstack((bias_weight, self.sna))
         self.sna = [np.ravel(self.sna)]
+        
         all = self.sna
         #print(f"This is self.sna:\n{self.sna}")
-        
 
         # snad
         if force == True:
@@ -212,9 +214,9 @@ class Assembler:
                 else:
                     temp = np.hstack((np.zeros((len(temp), 1)), temp))
                     self.snad = np.hstack((self.snad,temp))
+            
             all = np.concatenate((self.sna, self.snad))
             #print(f"This is self.snad:\n{self.snad}")
-
 
         # snav
         if stress == True:
@@ -237,12 +239,6 @@ class Assembler:
         #print(f"This is all:\n{all}")
         self.bispectrum_coefficients = all
         
-        # Bispectrum as dict
-        bispectrum = np.hsplit(self.bispectrum_coefficients, len(atom_type))
-        for i, atom in enumerate(atom_type):
-            self.d_bispectrum_coefficient[atom] = bispectrum[i]
-        #print(self.d_bispectrum_coefficient)
-
         # Remove the dump files after usage due to write error.
         os.remove("dump.element")
         os.remove("dump.sna")
@@ -271,5 +267,3 @@ class Assembler:
                 arr.append(l)
                
         return arr
-
-

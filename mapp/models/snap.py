@@ -6,7 +6,6 @@ from sklearn.metrics import mean_absolute_error
 
 sys.path.append("..")
 from descriptors.bispectrum import Bispectrum, Assembler
-#from utilities.assembler import Assembler
 from utilities.gregression import Regressor
 
 
@@ -43,39 +42,29 @@ class Snap:
     optimizer: str
         Choose the desired global optimization scheme.
         - 'DifferentialEvolution'
-        - 'BasinHopping'
+        - add 'BasinHopping'
     optimizer_kwargs: dict
         The parameters for the global optimization scheme.
         i.e. {'strategy': 'best1bin'}
-    snap_kwargs: dict
-        argument?
     """
     def __init__(self, element_profile, twojmax=6, diagonal=3, rfac0=0.99363, 
-                 rmin0=0.0, energy_coefficient=1., force_coefficient=0.03, 
-                 stress_coefficient=None, optimizer='DifferentialEvolution', 
+                 rmin0=0.0, optimizer='DifferentialEvolution', 
                  optimizer_kwargs=None):
         self.profile = element_profile
         self.twojmax = twojmax
         self.diagonal = diagonal
         self.rfac0 = rfac0
         self.rmin0 = rmin0
-        self.energy_coefficient = energy_coefficient
-        self.force_coefficient = force_coefficient
-        self.stress_coefficient = stress_coefficient
         
         # Global optimization
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs
 
-        # Eventually we want to develop kwargs for:
-        # 2. Linear regression arguments
-        # 3. Bispectrum arguments. i.e. include electrostatics potential
-        
-        self.atom_types = list(self.profile.keys())
+        self.atom_types = list(self.profile.keys()) # E.g. ['Na', 'Cl']
 
 
-    def fit(self, structures, features, feature_styles, bounds, stress=False,
-            save=True):
+    def fit(self, structures, features, feature_styles, bounds, 
+            force=True, stress=False, save=True):
         """Run the Snap fitting with linear regression and a global 
         optimization algorithm.
 
@@ -91,35 +80,29 @@ class Snap:
             Defining the machine learning parameters bounds. The parameters 
             must consist of:
             - Rc (radial cutoff)
-            - Energy weight
-            - Force weight
-            - Stress weight (Included if the stress_coefficient is not None)
+            - Force weight*
+            - Force coefficient*
+            - Stress weight**
+            - Stress coefficient**
+        force: bool
+            If True, perform Snap fitting with force.
         stress: bool
-            If True, stress_coefficient must be included.
+            If True, perform Snap fitting with stress.
+
+        *  If force is True.
+        ** If stress if True.
         """
         self.structures = structures
         self.y = features
         self.styles = feature_styles
         self.bounds = bounds
+        self.force = force
+        self.stress = stress
         
         # Calculate the volume for each structure
         self.volumes = []
         for structure in self.structures:
             self.volumes.append(structure.volume)
-
-        if stress == True and self.stress_coefficient == None:
-            msg = "You must input the stress coefficient in snap"
-            raise ValueError(msg)
-        elif stress == True and self.stress_coefficient != None:
-            if len(bounds) == 4:
-                pass
-            else:
-                msg = "The bounds doesn't match. " \
-                        "Please check if you included all the necessary "\
-                        "parameters."
-                raise ValueError(msg)
-        else:
-            self.stress = stress
 
         # Perform the SNAP model
         self.regressor = Regressor(method=self.optimizer, 
@@ -149,31 +132,31 @@ class Snap:
         # and the predicted Rc.
         self.X = []
         for i in range(len(self.structures)):
-            Bispectrum(self.structures[i], parameters[0], 
-                       self.profile, twojmax=self.twojmax, 
-                       diagonal=self.diagonal, rfac0=self.rfac0, 
+            Bispectrum(self.structures[i], parameters[0],
+                       self.profile, twojmax=self.twojmax,
+                       diagonal=self.diagonal, rfac0=self.rfac0,
                        rmin0=self.rmin0)
-            bispec = Assembler(atom_type=self.atom_types, 
-                               volume=self.volumes[i], stress=self.stress)
+            b = Assembler(atom_type=self.atom_types,
+                          volume=self.volumes[i], stress=self.stress)
             if self.X == []:
-                self.X = bispec.bispectrum_coefficients
+                self.X = b.bispectrum_coefficients
             else:
-                self.X = np.vstack((self.X, bispec.bispectrum_coefficients))
+                self.X = np.vstack((self.X, b.bispectrum_coefficients))
 
         # Construct the weights into an array based on the features.
         self.w = []
         for style in self.styles:
             if style == 'energy':
-                self.w.append(parameters[1])
+                self.w.append(1.)
             elif style == 'force':
-                self.w.append(parameters[2])
+                self.w.append(parameters[1])
             elif style == 'stress':
                 self.w.append(parameters[3])
             else:
                 raise NotImplementedError(f"This {style} is not acceptable")
 
         # Separate energies, forces, and stress for MAE and r2 evaluations.
-        X_energies, X_forces, X_stress  = [], [], []
+        X_energies, X_forces, X_stress = [], [], []
         y_energies, y_forces, y_stress = [], [], []
         w_energies, w_forces, w_stress = [], [], []
         
@@ -192,81 +175,73 @@ class Snap:
                 w_stress.append(self.w[i])
                 
         # Perform the linear regression here.
-        self.regression = LinearRegression().fit(self.X, self.y, self.w)
+        regression = LinearRegression(fit_intercept=False)
+        self.regression = regression.fit(self.X, self.y, self.w)
         
         # Calculate the MAE here.
-        if self.stress == False:
-            self.yp_energies = self.regression.predict(X_energies)
-            self.mae_energies = mean_absolute_error(y_energies, 
-                                                    self.yp_energies)
-            self.r2_energies = self.regression.score(X_energies, y_energies, 
-                                                     w_energies)
-    
+        self.yp_energies = self.regression.predict(X_energies)
+        self.mae_energies = mean_absolute_error(y_energies,
+                                                self.yp_energies)
+        self.r2_energies = self.regression.score(X_energies, y_energies,
+                                                 w_energies)
+
+        if self.force == True:
             self.yp_forces = self.regression.predict(X_forces)
             self.mae_forces = mean_absolute_error(y_forces, 
                                                   self.yp_forces)
             self.r2_forces = self.regression.score(X_forces, y_forces, 
                                                    w_forces)
-            
-            # Evaluate loss
-            loss = self.energy_coefficient * self.mae_energies
-            loss += self.force_coefficient * self.mae_forces
-            
+            force_coefficient = parameters[2]
         else:
-            self.yp_energies = self.regression.predict(X_energies)
-            self.mae_energies = mean_absolute_error(y_energies, 
-                                                    self.yp_energies)
-            self.r2_energies = self.regression.score(X_energies, y_energies, 
-                                                     w_energies)
-    
-            self.yp_forces = self.regression.predict(X_forces)
-            self.mae_forces = mean_absolute_error(y_forces, 
-                                                  self.yp_forces)
-            self.r2_forces = self.regression.score(X_forces, y_forces, 
-                                                   w_forces)
-            
+            self.mae_forces = 0.
+            force_coefficient = 1.
+
+        if self.stress == True:
             self.yp_stress = self.regression.predict(X_stress)
             self.mae_stress = mean_absolute_error(y_stress, self.yp_stress)
             self.r2_stress = self.regression.score(X_stress, y_stress, 
                                                    w_stress)
+            stress_coefficient = parameters[4]
+        else:
+            self.mae_stress = 0.
+            stress_coefficient = 1.
 
-            # Evaluate loss
-            loss = self.energy_coefficient * self.mae_energies 
-            loss += self.force_coefficient * self.mae_forces
-            loss += self.stress_coefficient * self.mae_stress
+        # Evaluate loss
+        loss = 1. * self.mae_energies
+        loss += force_coefficient * self.mae_forces
+        loss += stress_coefficient * self.mae_stress
 
         return loss
 
 
     def save_to_textfile(self,):
         """Saving the bispectrum coefficients to a textfile."""
-        self.coeff = {}
-        
-        self.coeff['intercept'] = [self.regression.intercept_]
-        self.coeff['slope'] = self.regression.coef_
-        
-        coeff = [self.regression.intercept_] + self.regression.coef_
+        self.coef = {}
+        coef = self.regression.coef_
+        split_len = len(self.atom_types)
+        coef_ = np.split(coef, split_len)
         
         filename = ''
-        for atype in self.atom_types:
+        for i, atype in enumerate(self.atom_types):
+            self.coef[atype] = coef_[i]
             filename += atype
         
         f = open(filename+".snapcoeff", "a")
-        f = open(filename+".snapcoeff", "a")
         f.write("# SNAP coefficients for "+filename+"\n\n")
-        f.write(f"{len(self.atom_types)} {len(coeff)}\n")
+        f.write(f"{len(self.atom_types)} {int(len(coef)/split_len)}\n")
         for k, v in self.profile.items():
             f.write(k+" ")
             for key, value in v.items():
                 f.write(str(value)+" ")
             f.write("\n")
-            for c in coeff:
+            for c in self.coef[k]:
                 f.write(str(c))
                 f.write("\n")
         f.close()
 
         
     def print_mae_r2square(self,):
+
         if self.stress:
             d = {'energy_r2': [self.r2_energies], 
                  'energy_mae': [self.mae_energies], 
