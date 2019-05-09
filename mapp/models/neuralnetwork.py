@@ -1,5 +1,6 @@
 import os
 from collections import OrderedDict
+import copy
 
 import numpy as np
 from ase.calculators.calculator import Parameters
@@ -70,35 +71,35 @@ class NeuralNetwork:
         if p.weights == None:
             p.weights = self.get_random_weights(p.hiddenlayers, p.descriptor_shape,)
 
-        #nnEnergy = self.calculate_nnEnergy(descriptor[0])
-        #nndEnergy = self.calculate_dnnEnergy_dParameters(descriptor[0])
-
         self.regressor = Regressor()
-        self.result = self.regressor.regress(model=self)
+        self.result = self.regressor.regress(model=self) # return [parameters, loss]
 
     def calculate_loss(self, parametervector, lossprime=True):
         self.vector = parametervector
         p = self.parameters
         
         energyloss = 0.
-        dloss_dparameters = np.zeros((len(parametervector),))
+        denergyloss_dparameters = np.zeros((len(parametervector),))
         images = p.images
         adescriptors = p.adescriptors
 
         for i, image in enumerate(images):
             no_of_atoms = len(image)
-            true_energy = image.get_potential_energy(apply_constraint=False)
+
+            true_energy = image.get_potential_energy(apply_constraint=False) # Need to make this provided by the users
             nn_energy = self.calculate_nnEnergy(adescriptors[i])
-            norm_residual = abs(true_energy - nn_energy) / len(image)
-            
-            energyloss += norm_residual ** 2
+            residual = nn_energy - true_energy
+            energyloss += (residual / no_of_atoms) ** 2
 
             if lossprime:
-                denergy_dparameters = self.calculate_dnnEnergy_dParameters(adescriptors[i])
-                dnorm_residual_dparameters = 2. * (nn_energy - true_energy) * denergy_dparameters / no_of_atoms ** 2.
+                dnnenergy_dparameters = self.calculate_dnnEnergy_dParameters(adescriptors[i])
+                denergyloss_dparameters += 2. * residual * dnnenergy_dparameters / no_of_atoms ** 2.
 
 
         loss = energyloss # can include weights in this loss too
+        dloss_dparameters = denergyloss_dparameters
+
+        self.loss = nn_energy - true_energy
 
         return loss, dloss_dparameters
 
@@ -334,6 +335,34 @@ class NeuralNetwork:
 
         return out
 
+    def forwardPrime(hiddenlayers, descriptors, weight, desrange, outputs, activation='tanh',):
+        
+        layers = len(hiddenlayers)
+        fingerprint = copy.deepcopy(descriptors)
+        len_fp = len(fingerprint)
+        
+        for _ in range(len_fp):
+            if (desrange[_][1] - desrange[_][0] > (10.**(-8.))):
+                fingerprint[_] =  2.0 * (fingerprint[_] /
+                        (desrange[_][1] - desrange[_][0]))
+
+        dnodes_dr = {}
+
+        dnodes_dr[0] = np.asarray(fingerprint)
+
+        for layer in range(1, layers+1):
+            temp = np.dot(dnodes_dr[layer-1], np.asarray(weight[layer])[:-1,:])
+            
+            if activation == 'tanh':
+                dnodes_dr[layer] = temp * \
+                                   (1. - outputs[layer][0] * outputs[layer][0])
+            elif activation == 'sigmoid':
+                dnodes_dr[layer] = temp * (outputs[layer][0] * (1. - outputs[layer][0]))
+            elif activation == 'linear':
+                dnodes_dr[layer] = temp
+
+        return dnodes_dr
+
     def weights_wo_bias(self, weights):
         """
         Return weights without the bias.
@@ -499,4 +528,6 @@ class Raveler:
             scalings[k['key1']][k['key2']] = vector[count]
             count += 1
         return weights, scalings
+
+
 
