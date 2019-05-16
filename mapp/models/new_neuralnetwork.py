@@ -42,7 +42,8 @@ class NeuralNetwork:
         Random seed for generating random initial random weights.
     """
     def __init__(self, elements, hiddenlayers=[3, 3], activation='tanh', 
-                 weights=None, seed=13):
+                 weights=None, seed=13, energy_coefficient=1.,
+                 force_coefficient=0.03):
         p = self.parameters = Parameters()
 
         p.elements = elements
@@ -73,6 +74,9 @@ class NeuralNetwork:
         # weights
         p.weights = weights
         p.seed = seed
+
+        p.energy_coefficient = energy_coefficient
+        p.force_coefficient = force_coefficient
 
 
     def fit(self, descriptors, features, images=None,):
@@ -115,37 +119,52 @@ class NeuralNetwork:
         if p.weights == None:
             p.weights = self.random_weights(p.hiddenlayers, p.no_of_adescriptor, p.seed)
         
-        #self.regressor = Regressor()
-        #self.result = self.regressor.regress(model=self)
-        force = self.calculate_nnForces(descriptors[0])
-        print(f"This is force: {force}")
+        self.regressor = Regressor()
+        self.result = self.regressor.regress(model=self)
 
 
     def calculate_loss(self, parameters, lossprime=True):
+        """Get loss and its derivative for Scipy optimization."""
         self.vector = parameters
         p = self.parameters
         descriptors = p.descriptors
 
         energyloss = 0.
-        denergyloss = np.zeros((len(self.vector),)) # The derivative of energy loss w.r.t. the parameters.
+        forceloss = 0.
+        dLossdParameters = np.zeros((len(self.vector),)) # The derivative of energy loss w.r.t. the parameters.
+        
 
         for i in range(p.no_of_structures):
+            no_of_atoms = len(descriptors[i]['G'])
+
             true_energy = p.features[i]['energy']
             nnEnergy = self.calculate_nnEnergy(descriptors[i])
             energyloss += (nnEnergy - true_energy) ** 2.
 
             if lossprime:
                 dnnEnergydParameters = self.calculate_dnnEnergydParameters(descriptors[i])
-                denergyloss += 2. * (nnEnergy - true_energy) * dnnEnergydParameters
+                dLossdParameters += 2. * (nnEnergy - true_energy) * dnnEnergydParameters * p.energy_coefficient
             
             true_forces = p.features[i]['force']
             nnForces = self.calculate_nnForces(descriptors[i])
-            #print(true_forces)
-            #print(nnForces)
+            forceresidual = (nnForces - true_forces)
+            
+            forceloss += np.sum(forceresidual ** 2.)
+            
+            if lossprime:
+                dnnForcesdParameters = self.calculate_dnnForcesdParameters(descriptors[i])
+                temp = 0.
+                for i in range(no_of_atoms):
+                    for l in range(3):
+                        temp += (nnForces[i][l] - true_forces[i][l]) * dnnForcesdParameters[(i, l)]
+                dLossdParameters += p.force_coefficient * 2. * temp
+                dforceloss = 2. * temp
 
-            forceloss = true_forces - nnForces
+        loss = p.energy_coefficient * energyloss + p.force_coefficient * forceloss
+        
+        return loss, dLossdParameters
 
-            #print(forceloss)
+
 
 
     def calculate_nnEnergy(self, descriptor):
@@ -203,22 +222,20 @@ class NeuralNetwork:
         for tup, desp in _descriptorPrime:
             index, symbol, nindex, nsymbol, direction = tup
             des = _descriptor[nindex][1]
+            
             scaling = p.scalings[nsymbol]
             hiddenlayers = p.hiddenlayers[nsymbol]
             weight = p.weights[nsymbol]
             w = self.weights_wo_bias(p.weights)[nsymbol]
-
             drange = p.drange[nsymbol]
             activation = p.activation
             
             output = self.forward(hiddenlayers, des, weight, drange, activation)
-            #print(f"This is output: {output}")
             outputPrime = self.forwardPrime(output, hiddenlayers, desp, w, drange, activation)
-            #print(f"This is outputPrime: {outputPrime}")
-            force = -(scaling['slope'] * outputPrime[len(outputPrime)-1][0])
-            #print(f"This is force: {force}")
-            forces[index][direction] += force        # I think this should be nindex instead of index
             
+            force = -(scaling['slope'] * outputPrime[len(outputPrime)-1][0])
+            forces[index][direction] += force        # I think this should be nindex instead of index
+        
         return forces
 
 
@@ -273,6 +290,103 @@ class NeuralNetwork:
         return dE_dP
 
 
+    def calculate_dnnForcesdParameters(self, descriptor):
+        """Calculate the derivative of the force with respect to 
+        the parameters.
+        
+        Parameters
+        ----------
+        descriptor: list
+             The atom-centered descriptor of a crystal structure.
+
+        Returns
+        -------
+        dict
+            The derivative of the forces w.r.t. the parameters
+        """
+        p = self.parameters
+
+        _descriptor = descriptor['G']
+        _descriptorPrime = descriptor['Gprime']
+        
+        dF_dP = {(i, j): None 
+                 for i in range(len(_descriptor))
+                 for j in range(3)}
+
+        for tup, desp in _descriptorPrime:
+            index, symbol, nindex, nsymbol, direction = tup
+            des = _descriptor[nindex][1]
+
+            scaling = p.scalings[nsymbol]
+            hiddenlayers = p.hiddenlayers[nsymbol]
+            weight = p.weights[nsymbol]
+            w = self.weights_wo_bias(p.weights)[nsymbol]
+            drange = p.drange[nsymbol]
+            activation = p.activation
+
+            dnnForcesdParameters = np.zeros(self.ravel.count)
+            dnnForcesdWeights, dnnForcesdScalings = self.ravel.to_dicts(dnnForcesdParameters)
+            
+            output = self.forward(hiddenlayers, des, weight, drange, activation)
+            D, delta, ohat = self.backprop(output, w, residual=1.)
+            outputPrime = self.forwardPrime(output, hiddenlayers, desp, w, drange, activation)
+            
+            N = len(output)
+
+            # maybe put this in backpropPrime
+            Dprime = {}
+            for i in range(1, N):
+                n = len(output[i])
+                Dprime[i] = np.zeros((n, n))
+
+                for j in range(n):
+                    if activation == 'tanh':
+                        Dprime[i][j, j] = -2. * output[i][j] * outputPrime[i][j]
+                    elif activation == 'linear':
+                        Dprime[i][j, j] = 0.
+                    elif activation == 'sigmoid':
+                        Dprime[i][j, j] = outputPrime[i][j] - 2. * output[i][j] * outputPrime[i][j]
+
+            deltaPrime = {}
+            deltaPrime[N-1] = Dprime[N-1] 
+
+            temp1 = {}
+            temp2 = {}
+            for i in range(N-2, 0, -1):
+                temp1[i] = np.dot(w[i+1], delta[i+1])
+                temp2[i] = np.dot(w[i+1], deltaPrime[i+1])
+                deltaPrime[i] = np.dot(Dprime[i], temp1[i]) + np.dot(D[i], temp2[i])
+
+            ohatPrime = {}
+            doutputPrimedWeights = {}
+            for i in range(1, N):
+                ohatPrime[i-1] = [None] * (1 + len(outputPrime[i-1]))
+                n = len(outputPrime[i-1])
+                for j in range(n):
+                    ohatPrime[i-1][j] = outputPrime[i-1][j]
+                ohatPrime[i-1][-1] = 0.
+                doutputPrimedWeights[i] = np.dot(np.matrix(ohatPrime[i-1]).T,
+                                                 np.matrix(delta[i]).T) + \
+                                          np.dot(np.matrix(ohat[i-1]).T,
+                                                 np.matrix(deltaPrime[i]).T)
+
+            for i in range(1, N):
+                dnnForcesdWeights[nsymbol][i] = scaling['slope'] * doutputPrimedWeights[i]
+            dnnForcesdScalings[nsymbol]['slope'] = outputPrime[N-1][0]
+
+            dnnForcesdParameters = self.ravel.to_vector(dnnForcesdWeights, dnnForcesdScalings)
+
+            dnnForcesdParameters *= -1.
+
+            if dF_dP[(index, direction)] is None:
+                dF_dP[(index, direction)] = dnnForcesdParameters
+            else:
+                dF_dP[(index, direction)] += dnnForcesdParameters
+
+        return dF_dP
+
+
+
     def forward(self, hiddenlayers, descriptor, weight, drange, activation):
         """The feedforward neural network function.
         
@@ -283,7 +397,7 @@ class NeuralNetwork:
         descriptor: list
             The atom-centered descriptor of the corresponding element.
         weight: dict
-            The neural network weights without the bias.
+            The neural network weights.
         drange: array
             The range values of the descriptor.
         activation:
@@ -339,7 +453,7 @@ class NeuralNetwork:
             The derivative of the atom-centered descriptor of 
             the corresponding element.
         weight: dict
-            The neural network weights.
+            The neural network weights without the bias.
         drange: array
             The range values of the descriptor.
         activation:
