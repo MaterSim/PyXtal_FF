@@ -1,0 +1,1 @@
+For neural network, the feature (i.e. formation energy) should be in eV/atom

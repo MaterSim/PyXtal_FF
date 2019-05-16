@@ -5,7 +5,7 @@ import itertools
 ################################ Gaussian Class ###############################
 
 
-class Gaussian:
+class BehlerParrinello:
     """
     Get the all the desired symmetry functions.
 
@@ -148,7 +148,7 @@ class Gaussian:
                                     e_type=ele,
                                     functional=functional,
                                     Rc=Rc, eta=eta, Rs=Rs))
-                G.append(g)
+                G.append((self.crystal[i].species_string, g))
 
             if derivative:
                 for i in range(n_core):
@@ -165,7 +165,7 @@ class Gaussian:
                                                    eta=eta, 
                                                    Rs=Rs,
                                                    p=i, q=q))
-                        Gp.append(gp)
+                        Gp.append(((i, self.crystal[i].species_string, i, self.crystal[i].species_string, q),gp))
                         
                         for n in neighbors_info[i]:
                             if n[3] == (0.0, 0.0, 0.0):
@@ -183,7 +183,7 @@ class Gaussian:
                                                          Rs=Rs, 
                                                          p=i, q=q)
                                         gp.append(prime)
-                                Gp.append(gp)
+                                Gp.append(((i, self.crystal[i].species_string, n[2], self.crystal[n[2]].species_string, q),gp))
                             
         elif G_type == 'G3':
             for i in range(n_core):
@@ -431,24 +431,31 @@ class Gaussian:
 
 
     def get_all_G(self, derivative):
-        Gs = []
+        Gs = None
         
         if self.G1_parameters is not None:
+            G1s = {}
             self._check_sanity(self.G1_parameters, self.G1_keywords)
             self.G1, self.G1_prime = self.calculate('G1', self.G1_parameters, 
                                                     derivative)
-            G1s = np.vstack((self.G1, self.G1_prime))
+            
+            G1s['G'] = self.G1
+            G1s['Gprime'] = self.G1_prime
             
             Gs = G1s
 
         if self.G2_parameters is not None:
+            G2s = {}
             self._check_sanity(self.G2_parameters, self.G2_keywords)
             self.G2, self.G2_prime = self.calculate('G2', self.G2_parameters, 
                                                     derivative)
-            G2s = np.vstack((self.G2, self.G2_prime))
+            
+            G2s['G'] = self.G2
+            G2s['Gprime'] = self.G2_prime
 
-            if Gs != []:
-                Gs = np.hstack((Gs, G2s))
+            if Gs != None:
+                Gs['G'] = np.hstack((Gs['G'], G2s['G']))
+                Gs['Gprime'] = np.hstack((Gs['Gprime'], G2s['Gprime']))
             else:
                 Gs = G2s
         
@@ -1010,7 +1017,7 @@ def G2(crystal, i, e_type, functional='Cosine', Rc=6.5, eta=2, Rs=0.0):
     G2 = 0
     for j in range(len(neighbors[i])):
         if e_type == neighbors[i][j][0].species_string:
-            Rj = neighbors[i][j][0]._coords
+            Rj = neighbors[i][j][0].coords
             Rij = np.linalg.norm(Ri - Rj)
             G2 += np.exp(-eta * Rij ** 2. / Rc ** 2.) * func(Rij)
     
@@ -1069,7 +1076,7 @@ def G2_prime(crystal, i, e_type, ni, functional='Cosine',
     G2p = 0
     for count in range(len(ni)):
         symbol = ni[count][0].species_string
-        Rj = ni[count][0]._coords
+        Rj = ni[count][0].coords
         j = ni[count][2]
         if e_type == symbol:
             dRabdRpq = dRab_dRpq(i, j, Ri, Rj, p, q)

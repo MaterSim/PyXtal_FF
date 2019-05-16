@@ -1,8 +1,4 @@
 # Local regression
-
-import os
-sys.path.append("..")
-
 from ..models.model import LossFunction
 
 

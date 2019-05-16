@@ -22,7 +22,7 @@ class NeuralNetwork:
         If False, ASE will provide calculator to calculate the energies 
         and forces.
     """
-    def __init__(self, hiddenlayers=(3,3), activation='tanh', elements=['Pt', 'Cu'], feature_mode=False, weights=None):
+    def __init__(self, hiddenlayers=(3, 3), activation='tanh', elements=['Pt', 'Cu'], feature_mode=False, weights=None):
         p = self.parameters = Parameters()
         
         act_mode = ['tanh', 'sigmoid', 'linear']
@@ -233,6 +233,20 @@ class NeuralNetwork:
             Energy += nnEnergy
 
         return Energy
+
+
+    def calculate_nnForce(self, descriptors, output):
+        """
+        Calculate the predicted force with neural network.
+        """
+        p = self.parameters
+        self.nnForces = []
+        Force = 0.
+
+        
+
+        return Force
+
 
     def calculate_dnnEnergy_dParameters(self, descriptors):
         """
