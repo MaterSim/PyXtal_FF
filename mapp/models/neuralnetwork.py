@@ -6,7 +6,7 @@ import numpy as np
 from ase.calculators.calculator import Parameters
 
 from .model import calculate_descriptor_range
-from ..utilities.lregression import Regressor
+from ..utilities.regression import lRegressor as Regressor
 
 class NeuralNetwork:
     """This class implements a Neural Network model.

@@ -9,22 +9,28 @@ from ase.calculators.calculator import Parameters
 from ..utilities.lregression import Regressor
 
 class NeuralNetwork:
-    """This neural network model takes inputs from Behler-Parrinello (BP)
-    symmetry functions and predict the total energies and forces of crystal
-    systems. BP symmetry functions are atom-centered method.
+    """Atom-centered neural network model. The inputs of this model have
+    to be atom-centered descriptors to predict the total energy and forces
+    of a crystal structure. By optimizing the weights of neural network based
+    on a given system, a machine learning interatomic potential is developed.
 
     Parameters
     ----------
     elements: list
-        The list of atomic species in a crystal structure.
+        A list of atomic species in the crystal system.
+    input_type: str
+        The chosen descriptor for the inputs to the neural network.
+        Options: BehlerParrinello and Bispectrum.
     hiddenlayers: list or dict
-        [3, 3] means 2 layers with 3 nodes each. Hiddenlayers can be passed 
-        as a dict. Every elements can have its own neural network. 
-        For example: {'C': [3, 3], 'Si': [2, 2]}
+        [3, 3] contains 2 layers with 3 nodes each. hiddenlayers can also be 
+        passed as a dict. Each atomic species in the crystal system is 
+        assigned with a neural network architecture. 
+        For example, {'Na': [3, 3], 'Cl': [2, 2]} has two neural network 
+        architectures for NaCl system.
     activation: str
         The activation function for the neural network model.
-        There are 3 options to choose from: tanh, sigmoid, and linear.
-    weights: dict
+        Options: tanh, sigmoid, and linear.
+    weights: OrderedDict
         Predefined user input weights. Must be in the form of OrderedDict.
         For example, the weights for a [3, 3] neural network with 2 input
         values:
@@ -40,10 +46,13 @@ class NeuralNetwork:
         represents the 1 output node.
     seed: int
         Random seed for generating random initial random weights.
+    force_coeff: float
+        This parameter is used in the penalty function to scale the force
+        contribution relative to the energy.
     """
-    def __init__(self, elements, hiddenlayers=[3, 3], activation='tanh', 
-                 weights=None, seed=13, energy_coefficient=1.,
-                 force_coefficient=0.03):
+    def __init__(self, elements, input_type='BehlerParrinello', 
+                 hiddenlayers=[3, 3], activation='tanh', weights=None, 
+                 seed=13, force_coefficient=0.03):
         p = self.parameters = Parameters()
 
         p.elements = elements
@@ -75,21 +84,20 @@ class NeuralNetwork:
         p.weights = weights
         p.seed = seed
 
-        p.energy_coefficient = energy_coefficient
         p.force_coefficient = force_coefficient
 
 
     def fit(self, descriptors, features, images=None,):
-        """Fitting of the neural network model occurs here.
+        """Fitting of the neural network model.
         
         Parameters
         ----------
         descriptors: dict of dicts
             The atom-centered descriptors. The descriptors of 2 crystal 
             structures should be presented in this form:
-                {1: {'G': [('C', [1, 2, 3, 4]), ('Si', [3, 2, 1, 0]), ...],
+                {1: {'G': [('Na', [1, 2, 3, 4]), ('Cl', [3, 2, 1, 0]), ...],
                      'Gprime': [ ... ]},
-                 2: {'G': [('C', [2, 2, 2, 2]), ('Si', [3, 3, 3, 3]), ...],
+                 2: {'G': [('Na', [2, 2, 2, 2]), ('Cl', [3, 3, 3, 3]), ...],
                      'Gprime': [ ... ]}}
         features: dict of dicts
             energies and forces of crystal structures. The features of 2 
@@ -109,10 +117,11 @@ class NeuralNetwork:
         p.no_of_structures = len(descriptors)                   # number of columns
         p.no_of_adescriptor = len(descriptors[0]['G'][0][1])    # number of rows
 
-        # Calculate the range of the descriptors
+        # Calculate the range of the descriptors and scaling the energy.
         p.drange = NeuralNetwork.descriptor_range(p.no_of_structures, p.descriptors)
-        min_E = min([features[i]['energy'] for i in range(p.no_of_structures)])
-        max_E = max([features[i]['energy'] for i in range(p.no_of_structures)])
+        energies = [features[i]['energy'] for i in range(p.no_of_structures)]
+        min_E = min(energies)
+        max_E = max(energies)
         p.scalings = NeuralNetwork.scalings(p.activation, [min_E, max_E], p.drange.keys())
 
         # Generate random weight if None is given.
@@ -132,7 +141,6 @@ class NeuralNetwork:
         energyloss = 0.
         forceloss = 0.
         dLossdParameters = np.zeros((len(self.vector),)) # The derivative of energy loss w.r.t. the parameters.
-        
 
         for i in range(p.no_of_structures):
             no_of_atoms = len(descriptors[i]['G'])
@@ -163,8 +171,6 @@ class NeuralNetwork:
         loss = p.energy_coefficient * energyloss + p.force_coefficient * forceloss
         
         return loss, dLossdParameters
-
-
 
 
     def calculate_nnEnergy(self, descriptor):
@@ -386,7 +392,6 @@ class NeuralNetwork:
         return dF_dP
 
 
-
     def forward(self, hiddenlayers, descriptor, weight, drange, activation):
         """The feedforward neural network function.
         
@@ -520,7 +525,7 @@ class NeuralNetwork:
                 if activation == 'linear':
                     D[i][j,j] = 1.
                 elif activation == 'sigmoid':
-                    D[i][j,j] = output[i][j] * (1. - output[i][j])
+                    D[i][j,j] = output[i][j] * (1. - outpui][j])
                 elif activation == 'tanh':
                     D[i][j,j] = (1. - output[i][j] * output[i][j])
 
@@ -552,7 +557,7 @@ class NeuralNetwork:
         no_of_adescriptor: int
             The length of a descriptor.
         seed: int
-            The seed for numpy random generator.
+            The seed for Numpy random generator.
 
         Returns
         -------
@@ -594,7 +599,7 @@ class NeuralNetwork:
 
     @staticmethod
     def descriptor_range(no_of_structures, descriptors):
-        """Calculate the range (min and max values) for the descriptors 
+        """Calculate the range (min and max values) of the descriptors 
         corresponding to all of the crystal structures.
         
         Parameters
@@ -616,7 +621,7 @@ class NeuralNetwork:
                 element = _[0]
                 descriptor = _[1]
                 if element not in drange.keys():
-                    drange[element] = [[_, _] for _ in descriptor]
+                    drange[element] = [[__, __] for __ in descriptor]
                 else:
                     assert len(drange[element]) == len(descriptor)
                     for j, des in enumerate(descriptor):
