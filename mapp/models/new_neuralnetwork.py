@@ -133,7 +133,9 @@ class NeuralNetwork:
 
 
     def calculate_loss(self, parameters, lossprime=True):
-        """Get loss and its derivative for Scipy optimization."""
+        """Get loss and its derivative for Scipy optimization.
+        This function is consistent with the Jorg Behler paper.
+        """
         self.vector = parameters
         p = self.parameters
         descriptors = p.descriptors
@@ -151,13 +153,13 @@ class NeuralNetwork:
 
             if lossprime:
                 dnnEnergydParameters = self.calculate_dnnEnergydParameters(descriptors[i])
-                dLossdParameters += 2. * (nnEnergy - true_energy) * dnnEnergydParameters * p.energy_coefficient
+                dLossdParameters += 2. * (nnEnergy - true_energy) * dnnEnergydParameters 
             
             true_forces = p.features[i]['force']
             nnForces = self.calculate_nnForces(descriptors[i])
             forceresidual = (nnForces - true_forces)
             
-            forceloss += np.sum(forceresidual ** 2.)
+            forceloss += np.sum(forceresidual ** 2.) / 3. / no_of_atoms
             
             if lossprime:
                 dnnForcesdParameters = self.calculate_dnnForcesdParameters(descriptors[i])
@@ -165,10 +167,11 @@ class NeuralNetwork:
                 for i in range(no_of_atoms):
                     for l in range(3):
                         temp += (nnForces[i][l] - true_forces[i][l]) * dnnForcesdParameters[(i, l)]
-                dLossdParameters += p.force_coefficient * 2. * temp
-                dforceloss = 2. * temp
+                dLossdParameters += p.force_coefficient * 2. * temp / 3. / no_of_atoms
+                dforceloss = 2. * temp # Don't need this just want to make people confused.
 
-        loss = p.energy_coefficient * energyloss + p.force_coefficient * forceloss
+        loss = (energyloss + p.force_coefficient * forceloss) / p.no_of_structures
+        dLossdParameters /= p.no_of_structures
         
         return loss, dLossdParameters
 
