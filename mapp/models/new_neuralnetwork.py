@@ -243,7 +243,10 @@ class NeuralNetwork:
             outputPrime = self.forwardPrime(output, hiddenlayers, desp, w, drange, activation)
             
             force = -(scaling['slope'] * outputPrime[len(outputPrime)-1][0])
-            forces[index][direction] += force        # I think this should be nindex instead of index
+            forces[index][direction] += force        
+            # I think index here is correct instead of nindex, 
+            # because nindex is for center atom, and index is 
+            # the pair atom(or the atom that force is acting on)
         
         return forces
 
@@ -419,7 +422,8 @@ class NeuralNetwork:
         no_of_adescriptor = len(descriptor)
         _hiddenlayers = [no_of_adescriptor] + deepcopy(hiddenlayers)
         _descriptor = deepcopy(descriptor)
-
+        
+        # Min-max feature scaling
         for i in range(no_of_adescriptor):
             diff = drange[i][1] - drange[i][0]
             if (diff > (10.**(-8.))):
@@ -493,8 +497,8 @@ class NeuralNetwork:
             elif activation == 'sigmoid':
                 outputPrime[layer] = term * (output[layer] * (1. - output[layer]))
             elif activation == 'linear':
-                outputPrime[layer] = temp
-
+                outputPrime[layer] = term
+        
         return outputPrime
 
 
@@ -528,7 +532,7 @@ class NeuralNetwork:
                 if activation == 'linear':
                     D[i][j,j] = 1.
                 elif activation == 'sigmoid':
-                    D[i][j,j] = output[i][j] * (1. - outpui][j])
+                    D[i][j,j] = output[i][j] * (1. - output[i][j])
                 elif activation == 'tanh':
                     D[i][j,j] = (1. - output[i][j] * output[i][j])
 
