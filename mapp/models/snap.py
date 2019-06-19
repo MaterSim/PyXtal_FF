@@ -44,12 +44,13 @@ class Snap:
         i.e. {'strategy': 'best1bin'}
     """
     def __init__(self, element_profile, twojmax=6, diagonal=3, rfac0=0.99363, 
-                 rmin0=0.0, optimizer='DifferentialEvolution', 
+                 Rc=5., rmin0=0.0, optimizer='DifferentialEvolution', 
                  optimizer_kwargs=None):
         self.profile = element_profile
         self.twojmax = twojmax
         self.diagonal = diagonal
         self.rfac0 = rfac0
+        self.Rc = Rc
         self.rmin0 = rmin0
         
         # Global optimization
@@ -57,6 +58,7 @@ class Snap:
         self.optimizer_kwargs = optimizer_kwargs
 
         self.atom_types = list(self.profile.keys()) # ['Na', 'Cl']
+        print(self.atom_types)
 
 
     def fit(self, structures, features, feature_styles, bounds, 
@@ -94,14 +96,21 @@ class Snap:
         self.bounds = bounds
         self.force = force
         self.stress = stress
-
-        if self.force == True or self.stress == True:
-            
         
         # Calculate the volume for each structure
         self.volumes = []
         for structure in self.structures:
             self.volumes.append(structure.volume)
+
+        # Bispectrum calculation
+        self.X = []
+        for i in range(len(self.structures)):
+            Bispectrum(self.structures[i], self.Rc, self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0,rmin0=self.rmin0)
+            b = Assembler(atom_type=self.atom_types, volume=self.volumes[i], stress=self.stress)
+            if self.X == []:
+                self.X = b.bispectrum_coefficients
+            else:
+                self.X = np.vstack((self.X, b.bispectrum_coefficients))
 
         # Perform the SNAP model
         self.regressor = Regressor(method=self.optimizer, 
@@ -129,18 +138,18 @@ class Snap:
         
         # Get bispectrum coefficients with the initial structures 
         # and the predicted Rc.
-        self.X = []
-        for i in range(len(self.structures)):
-            Bispectrum(self.structures[i], parameters[0],
-                       self.profile, twojmax=self.twojmax,
-                       diagonal=self.diagonal, rfac0=self.rfac0,
-                       rmin0=self.rmin0)
-            b = Assembler(atom_type=self.atom_types,
-                          volume=self.volumes[i], stress=self.stress)
-            if self.X == []:
-                self.X = b.bispectrum_coefficients
-            else:
-                self.X = np.vstack((self.X, b.bispectrum_coefficients))
+        #self.X = []
+        #for i in range(len(self.structures)):
+        #    Bispectrum(self.structures[i], self.Rc,
+        #               self.profile, twojmax=self.twojmax,
+        #               diagonal=self.diagonal, rfac0=self.rfac0,
+        #               rmin0=self.rmin0)
+        #    b = Assembler(atom_type=self.atom_types,
+        #                  volume=self.volumes[i], stress=self.stress)
+        #    if self.X == []:
+        #        self.X = b.bispectrum_coefficients
+        #    else:
+        #        self.X = np.vstack((self.X, b.bispectrum_coefficients))
 
         # Construct the weights into an array based on the features.
         self.w = []
@@ -148,12 +157,12 @@ class Snap:
             if style == 'energy':
                 self.w.append(1.)
             elif style == 'force':
-                self.w.append(parameters[1])
+                self.w.append(parameters[0])
             elif style == 'stress':
                 if self.force == True:
-                    self.w.append(parameters[3])
+                    self.w.append(parameters[2])
                 else:
-                    self.w.append(parameters[1])
+                    self.w.append(parameters[0])
             else:
                 raise NotImplementedError(f"This {style} is not acceptable")
 
@@ -193,7 +202,7 @@ class Snap:
                                                   self.yp_forces)
             self.r2_forces = self.regression.score(X_forces, y_forces, 
                                                    w_forces)
-            force_coefficient = parameters[2]
+            force_coefficient = parameters[1]
         else:
             self.mae_forces = 0.
             force_coefficient = 1.
@@ -204,9 +213,9 @@ class Snap:
             self.r2_stress = self.regression.score(X_stress, y_stress, 
                                                    w_stress)
             if self.force == True:
-                stress_coefficient = parameters[4]
+                stress_coefficient = parameters[3]
             else:
-                stress_coefficient = parameters[2]
+                stress_coefficient = parameters[1]
         else:
             self.mae_stress = 0.
             stress_coefficient = 1.
