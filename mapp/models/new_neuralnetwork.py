@@ -133,8 +133,25 @@ class NeuralNetwork:
 
 
     def calculate_loss(self, parameters, lossprime=True):
-        """Get loss and its derivative for Scipy optimization.
-        This function is consistent with the Jorg Behler paper.
+        """Calculate the loss and the derivative of the loss with respect to the parameters.
+        The parameters are weights and scaling factors and to be optimized by Scipy optimizer.
+        
+        This error function is consistent with:
+        Behler, J. Int. J. Quantum Chem. 2015, 115, 1032– 1050.
+
+        Parameters
+        ----------
+        parameters: array
+            The adjustable parameters to be optimized.
+        lossprime: bool
+            If True, calculate the dLossdParameters.
+
+        Returns
+        -------
+        loss: float
+            The value of the loss function.
+        dLossdParameters:
+            The derivative of the lossfunction with respect tot he parameters
         """
         self.vector = parameters
         p = self.parameters
@@ -149,11 +166,12 @@ class NeuralNetwork:
 
             true_energy = p.features[i]['energy']
             nnEnergy = self.calculate_nnEnergy(descriptors[i])
-            energyloss += (nnEnergy - true_energy) ** 2.
+            residual = nnEnergy - true_energy
+            energyloss += residual ** 2.
 
             if lossprime:
                 dnnEnergydParameters = self.calculate_dnnEnergydParameters(descriptors[i])
-                dLossdParameters += 2. * (nnEnergy - true_energy) * dnnEnergydParameters 
+                dLossdParameters += 2. * residual * dnnEnergydParameters 
             
             true_forces = p.features[i]['force']
             nnForces = self.calculate_nnForces(descriptors[i])
@@ -280,18 +298,18 @@ class NeuralNetwork:
 
             _w = w[element]
 
-            dnnEnergydParameters = np.zeros(self.ravel.count)       # might not need this!
+            dnnEnergydParameters = np.zeros(self.ravel.count)
             dnnEnergydWeights, dnnEnergydScalings = self.ravel.to_dicts(dnnEnergydParameters)
             output = self.forward(hl, des, weight, drange, activation)
 
-            D, delta, ohat = self.backprop(output, _w, residual=1.)
+            D, delta, ohat = self.backprop(output, _w)
             
             dnnEnergydScalings[element]['intercept'] = 1.
             dnnEnergydScalings[element]['slope'] = output[len(output)-1]
 
             for j in range(1, len(output)):
                 dnnEnergydWeights[element][j] = scalings['slope']* np.dot(np.matrix(ohat[j-1]).T, np.matrix(delta[j]).T) # rewrite this?
-
+                
             dnnEnergydParameters = self.ravel.to_vector(dnnEnergydWeights, dnnEnergydScalings)
 
             if dE_dP is None:
@@ -340,7 +358,7 @@ class NeuralNetwork:
             dnnForcesdWeights, dnnForcesdScalings = self.ravel.to_dicts(dnnForcesdParameters)
             
             output = self.forward(hiddenlayers, des, weight, drange, activation)
-            D, delta, ohat = self.backprop(output, w, residual=1.)
+            D, delta, ohat = self.backprop(output, w)
             outputPrime = self.forwardPrime(output, hiddenlayers, desp, w, drange, activation)
             
             N = len(output)
@@ -360,7 +378,7 @@ class NeuralNetwork:
                         Dprime[i][j, j] = outputPrime[i][j] - 2. * output[i][j] * outputPrime[i][j]
 
             deltaPrime = {}
-            deltaPrime[N-1] = Dprime[N-1] 
+            deltaPrime[N-1] = Dprime[N-1]
 
             temp1 = {}
             temp2 = {}
@@ -502,7 +520,7 @@ class NeuralNetwork:
         return outputPrime
 
 
-    def backprop(self, output, w, residual):
+    def backprop(self, output, w):
         """The backpropagation method to get the derivative of the output
         with respect to the adjustable parameters.
 
@@ -512,9 +530,7 @@ class NeuralNetwork:
             The output of the feedforward neural network.
         w: dict
             The neural network weight without the bias.
-        residual: float
-            The predicted energy minus the true energy.
-
+        
         Returns
         -------
         documentation here
@@ -537,7 +553,7 @@ class NeuralNetwork:
                     D[i][j,j] = (1. - output[i][j] * output[i][j])
 
         delta = {}
-        delta[N-1] = D[N-1] # missing the residual term (o_j - t_j)
+        delta[N-1] = D[N-1]
 
         for i in range(N-2, 0, -1):
             delta[i] = np.dot(D[i], np.dot(w[i+1], delta[i+1]))
