@@ -1,399 +1,721 @@
 import os
+from copy import deepcopy
 from collections import OrderedDict
-import copy
 
 import numpy as np
+
 from ase.calculators.calculator import Parameters
 
-from .model import calculate_descriptor_range
 from ..utilities.regression import lRegressor as Regressor
+import sys
 
 class NeuralNetwork:
-    """This class implements a Neural Network model.
+    """Atom-centered neural network model. The inputs of this model have
+    to be atom-centered descriptors to predict the total energy and forces
+    of a crystal structure. By optimizing the weights of neural network based
+    on a given system, a machine learning interatomic potential is developed.
 
     Parameters
     ----------
-    hiddenlayers: tuple
-        (3,3) means 2 layers with 3 nodes each.
+    elements: list
+        A list of atomic species in the crystal system.
+    input_type: str
+        The chosen descriptor for the inputs to the neural network.
+        Options: BehlerParrinello and Bispectrum.
+    hiddenlayers: list or dict
+        [3, 3] contains 2 layers with 3 nodes each. hiddenlayers can also be 
+        passed as a dict. Each atomic species in the crystal system is 
+        assigned with a neural network architecture. 
+        For example, {'Na': [3, 3], 'Cl': [2, 2]} has two neural network 
+        architectures for NaCl system.
     activation: str
-        The activation function for the neural network.
-    feature_mode: bool
-        The user input feature. 
-        If False, ASE will provide calculator to calculate the energies 
-        and forces.
+        The activation function for the neural network model.
+        Options: tanh, sigmoid, and linear.
+    weights: OrderedDict
+        Predefined user input weights. Must be in the form of OrderedDict.
+        For example, the weights for a [3, 3] neural network with 2 input
+        values:
+            w = OrderedDict([(1, [[1, 2, 3],
+                                  [1, 2, 3],
+                                  [1, 2, 3]]),
+                             (2, [[1, 2 ,3], 
+                                  [1, 2, 3],
+                                  [1, 2, 3],
+                                  [1, 2, 3]]),
+                             (3, [[1], [2], [3], [4]])])
+        Every last array of in the dict represents the bias, and layer 3
+        represents the 1 output node.
+    seed: int
+        Random seed for generating random initial random weights.
+    force_coeff: float
+        This parameter is used in the penalty function to scale the force
+        contribution relative to the energy.
     """
-    def __init__(self, hiddenlayers=(3, 3), activation='tanh', elements=['Pt', 'Cu'], feature_mode=False, weights=None):
+    def __init__(self, elements, input_type='BehlerParrinello', 
+                 hiddenlayers=[3, 3], activation='tanh', weights=None, 
+                 seed=13, force_coefficient=0.03):
         p = self.parameters = Parameters()
-        
-        act_mode = ['tanh', 'sigmoid', 'linear']
-        if activation not in act_mode:
-            msg = f"{activation} is not implemented here. Please choose from {act_mode}."
-            raise NotImplementedError(msg)
 
-        p.hiddenlayers = hiddenlayers
-        p.activation = activation
         p.elements = elements
-        p.feature_mode = feature_mode
+        
+        # Format hiddenlayers and add the last output layer
+        if isinstance(hiddenlayers, list):
+            hl = {}
+            for elem in p.elements:
+                hl[elem] = hiddenlayers + [1]
+            p.hiddenlayers = hl
+        elif isinstance(hiddenlayers, dict):
+            for key, value in hiddenlayers.items():
+                hiddenlayers[key] = value + [1]
+            p.hiddenlayers = hiddenlayers
+        else:
+            msg = f"Don't recognize {type(hiddenlayers)}. " +\
+                  f"Please refer to documentations!"
+            raise TypeError(msg)
+        
+        # Activation options
+        activation_modes = ['tanh', 'sigmoid', 'linear']
+        if activation not in activation_modes:
+            msg = f"{activation} is not implemented. " +\
+                    f"Please choose from {activation_modes}."
+            raise NotImplementedError(msg)
+        p.activation = activation
+        
+        # weights
         p.weights = weights
+        p.seed = seed
+
+        p.force_coefficient = force_coefficient
 
 
-    def fit(self, images, adescriptors, feature=None):
-        """
-        Fit the model parameters here.
-
-        images: List
-            List of ASE atomic objects for neural network training.
-        adescriptor: array
-            All descriptors of images.
+    def fit(self, descriptors, features, images=None,):
+        """Fitting of the neural network model.
+        
+        Parameters
+        ----------
+        descriptors: dict of dicts
+            The atom-centered descriptors. The descriptors of 2 crystal 
+            structures should be presented in this form:
+                {1: {'G': [('Na', [1, 2, 3, 4]), ('Cl', [3, 2, 1, 0]), ...],
+                     'Gprime': [ ... ]},
+                 2: {'G': [('Na', [2, 2, 2, 2]), ('Cl', [3, 3, 3, 3]), ...],
+                     'Gprime': [ ... ]}}
+        features: dict of dicts
+            energies and forces of crystal structures. The features of 2 
+            crystal structures should be presented in this form:
+                {1: {'energy': -10.0, 'forces': [ ... ]},
+                 2: {'energy': -20.0, 'forces': [ ... ]}}
+        images: dict
+            ASE atomic objects. Provide the original images of ASE structures 
+            if the features are not defined.
         """
         p = self.parameters
-
-        if p.feature_mode:
-            if feature is None:
-                msg = f"You must input the feature if the feature_mode is {p.feature_mode}"
-            else:
-                p.feature = feature
         
-        # Convert hiddenlayers to dictionary:
-        if isinstance(p.hiddenlayers, (tuple, list)):
-            hiddenlayers = {}
-            for e in p.elements:
-                hiddenlayers[e] = p.hiddenlayers
-            p.hiddenlayers = hiddenlayers
+        p.descriptors = descriptors
+        p.features = features
+        p.training_images = images
+        
+        p.no_of_structures = len(descriptors)                   # number of columns
+        p.no_of_adescriptor = len(descriptors[0]['G'][0][1])    # number of rows
 
-        p.images = images
-        p.adescriptors = adescriptors
-        #p.descriptor_shape = (len(adescriptor[0]), len(adescriptor[0][0][1]))
+        # Calculate the range of the descriptors and scaling the energy.
+        p.drange = NeuralNetwork.descriptor_range(p.no_of_structures, p.descriptors)
+        energies = [features[i]['energy'] for i in range(p.no_of_structures)]
+        min_E = min(energies)
+        max_E = max(energies)
+        p.scalings = NeuralNetwork.scalings(p.activation, [min_E, max_E], p.drange.keys())
 
-        p.desrange = calculate_descriptor_range(images, adescriptors)
-        p.scalings = self.activation_scaling(images, p.activation, p.desrange.keys())
-
+        # Generate random weight if None is given.
         if p.weights == None:
-            p.weights = self.get_random_weights(p.hiddenlayers, p.descriptor_shape,)
-
+            p.weights = self.random_weights(p.hiddenlayers, p.no_of_adescriptor, p.seed)
+        
         self.regressor = Regressor()
         self.result = self.regressor.regress(model=self) # return [parameters, loss]
 
-    def calculate_loss(self, parametervector, lossprime=True):
-        self.vector = parametervector
-        p = self.parameters
+
+    def calculate_loss(self, parameters, lossprime=True):
+        """Calculate the loss and the derivative of the loss with respect to the parameters.
+        The parameters are weights and scaling factors and to be optimized by Scipy optimizer.
         
-        energyloss = 0.
-        denergyloss_dparameters = np.zeros((len(parametervector),))
-        images = p.images
-        adescriptors = p.adescriptors
-
-        for i, image in enumerate(images):
-            no_of_atoms = len(image)
-
-            true_energy = image.get_potential_energy(apply_constraint=False) # Need to make this provided by the users
-            nn_energy = self.calculate_nnEnergy(adescriptors[i])
-            residual = nn_energy - true_energy
-            energyloss += (residual / no_of_atoms) ** 2
-
-            if lossprime:
-                dnnenergy_dparameters = self.calculate_dnnEnergy_dParameters(adescriptors[i])
-                denergyloss_dparameters += 2. * residual * dnnenergy_dparameters / no_of_atoms ** 2.
-
-
-        loss = energyloss # can include weights in this loss too
-        dloss_dparameters = denergyloss_dparameters
-
-        self.loss = nn_energy - true_energy
-
-        return loss, dloss_dparameters
-
-    def activation_scaling(self, images, activation, elements):
-        """
-        To scale the range of activation to the range of actual energies.
+        This error function is consistent with:
+        Behler, J. Int. J. Quantum Chem. 2015, 115, 1032– 1050.
 
         Parameters
         ----------
-        images: list
-            ASE atom objects.
-        activation: str
-            The type of activation function.
-        elements: list
-            List of atomic symbols in str.
+        parameters: array
+            The adjustable parameters to be optimized.
+        lossprime: bool
+            If True, calculate the dLossdParameters.
+
+        Returns
+        -------
+        loss: float
+            The value of the loss function.
+        dLossdParameters:
+            The derivative of the lossfunction with respect tot he parameters
+        """
+        self.vector = parameters
+        p = self.parameters
+        descriptors = p.descriptors
+
+        energyloss = 0.
+        forceloss = 0.
+        dLossdParameters = np.zeros((len(self.vector),)) # The derivative of energy loss w.r.t. the parameters.
+
+        for i in range(p.no_of_structures):
+            no_of_atoms = len(descriptors[i]['G'])
+
+            true_energy = p.features[i]['energy']
+            nnEnergy = self.calculate_nnEnergy(descriptors[i])
+            residual = nnEnergy - true_energy
+            energyloss += residual ** 2.
+
+            if lossprime:
+                dnnEnergydParameters = self.calculate_dnnEnergydParameters(descriptors[i])
+                dLossdParameters += 2. * residual * dnnEnergydParameters 
+            
+            true_forces = p.features[i]['force']
+            nnForces = self.calculate_nnForces(descriptors[i])
+            forceresidual = (nnForces - true_forces)
+            
+            forceloss += np.sum(forceresidual ** 2.) / 3. / no_of_atoms
+            
+            if lossprime:
+                dnnForcesdParameters = self.calculate_dnnForcesdParameters(descriptors[i])
+                temp = 0.
+                for _ in range(no_of_atoms):
+                    for l in range(3):
+                        temp += (nnForces[_][l] - true_forces[_][l]) * dnnForcesdParameters[(_, l)]
+                dLossdParameters += p.force_coefficient * 2. * temp / 3. / no_of_atoms
+                dforceloss = 2. * temp # Don't need this just want to make people confused.
+
+        #print(self.calculate_dnnForcesdParameters(descriptors[0]))
+        
+        loss = (energyloss + p.force_coefficient * forceloss) / p.no_of_structures
+        dLossdParameters /= p.no_of_structures
+        
+
+        return loss, dLossdParameters
+
+
+    def calculate_nnEnergy(self, descriptor):
+        """Predicting energy with neural network.
+
+        Parameters
+        ----------
+        descriptor: dict
+            The atom-centered descriptor of a crystal structure.
+        
+        Returns
+        -------
+        energy: float
+            The predicted energy.
+        """
+        p = self.parameters
+        
+        nodes = []
+        energy = 0.
+
+        for i, (element, des) in enumerate(descriptor['G']):
+            scalings = p.scalings[element]
+            weight = p.weights[element]
+            hl = p.hiddenlayers[element]
+            drange = p.drange[element]
+            activation = p.activation
+
+            nodes = self.forward(hl, des, weight, drange, activation)
+            energy += scalings['slope'] * nodes[len(nodes)-1][0] + scalings['intercept']
+
+        return energy
+
+
+    def calculate_nnForces(self, descriptor):
+        """Calculate the predicted forces based on the derivative of 
+        neural network and the derivative of the atom-centered descriptor.
+        
+        Parameters
+        ----------
+        descriptor: dict
+            The atom-centered descriptor of a crystal structure.
+
+        Returns
+        -------
+        forces: array
+            The predicted forces.
+        """
+        p = self.parameters
+
+        _descriptor = descriptor['G']
+        _descriptorPrime = descriptor['Gprime']
+
+        forces = np.zeros((len(_descriptor),3))
+        
+        for tup, desp in _descriptorPrime:
+            index, symbol, nindex, nsymbol, direction = tup
+            des = _descriptor[nindex][1]
+            
+            scaling = p.scalings[nsymbol]
+            hiddenlayers = p.hiddenlayers[nsymbol]
+            weight = p.weights[nsymbol]
+            w = self.weights_wo_bias(p.weights)[nsymbol]
+            drange = p.drange[nsymbol]
+            activation = p.activation
+            
+            output = self.forward(hiddenlayers, des, weight, drange, activation)
+            outputPrime = self.forwardPrime(output, hiddenlayers, desp, w, drange, activation)
+            
+            force = -(scaling['slope'] * outputPrime[len(outputPrime)-1][0])
+            forces[index][direction] += force        
+            # I think index here is correct instead of nindex, 
+            # because nindex is for center atom, and index is 
+            # the pair atom(or the atom that force is acting on)
+        
+        return forces
+
+
+    def calculate_dnnEnergydParameters(self, descriptor):
+        """Calculate the derivative of the energy with respect to 
+        the parameters (i.e. weights and scalings).
+
+        Parameters
+        ----------
+        descriptor: list
+             The atom-centered descriptor of a crystal structure.
+        
+        Returns
+        -------
+        list
+            The derivative of energy with respect to the parameters.
+        """
+        p = self.parameters
+        
+        dE_dP = None
+
+        w = self.weights_wo_bias(p.weights)
+
+        for i, (element, des) in enumerate(descriptor['G']):
+            scalings = p.scalings[element]
+            weight = p.weights[element]
+            hl = p.hiddenlayers[element]
+            drange = p.drange[element]
+            activation = p.activation
+
+            _w = w[element]
+
+            dnnEnergydParameters = np.zeros(self.ravel.count)
+            dnnEnergydWeights, dnnEnergydScalings = self.ravel.to_dicts(dnnEnergydParameters)
+            output = self.forward(hl, des, weight, drange, activation)
+
+            D, delta, ohat = self.backprop(output, _w)
+            
+            dnnEnergydScalings[element]['intercept'] = 1.
+            dnnEnergydScalings[element]['slope'] = output[len(output)-1]
+
+            for j in range(1, len(output)):
+                dnnEnergydWeights[element][j] = scalings['slope']* np.dot(np.matrix(ohat[j-1]).T, np.matrix(delta[j]).T) # rewrite this?
+                
+            dnnEnergydParameters = self.ravel.to_vector(dnnEnergydWeights, dnnEnergydScalings)
+
+            if dE_dP is None:
+                dE_dP = dnnEnergydParameters
+            else:
+                dE_dP += dnnEnergydParameters
+
+        return dE_dP
+
+
+    def calculate_dnnForcesdParameters(self, descriptor):
+        """Calculate the derivative of the force with respect to 
+        the parameters.
+        
+        Parameters
+        ----------
+        descriptor: list
+             The atom-centered descriptor of a crystal structure.
 
         Returns
         -------
         dict
-            The scalings parameters, i.e. slope and intercept.
+            The derivative of the forces w.r.t. the parameters
         """
-        n_images = len(images)
-    
-        # Max and min of true energies.
-        max_E = max(image.get_potential_energy(apply_constraint=False) for image in images)
-        min_E = min(image.get_potential_energy(apply_constraint=False) for image in images)
+        p = self.parameters
 
-        for _ in range(n_images):
-            image = images[_]
-            n_atoms = len(image)
-            if image.get_potential_energy(apply_constraint=False) == max_E:
-                n_atoms_of_max_E = n_atoms
-            if image.get_potential_energy(apply_constraint=False) == min_E:
-                n_atoms_of_min_E = n_atoms
+        _descriptor = descriptor['G']
+        _descriptorPrime = descriptor['Gprime']
+        
+        dF_dP = {(i, j): None 
+                 for i in range(len(_descriptor))
+                 for j in range(3)}
+        
+        for tup, desp in _descriptorPrime:
+            index, symbol, nindex, nsymbol, direction = tup
+            des = _descriptor[nindex][1]
+            scaling = p.scalings[nsymbol]
+            hiddenlayers = p.hiddenlayers[nsymbol]
+            weight = p.weights[nsymbol]
+            w = self.weights_wo_bias(p.weights)[nsymbol]
+            drange = p.drange[nsymbol]
+            activation = p.activation
 
-        max_E_per_atom = max_E / n_atoms_of_max_E
-        min_E_per_atom = min_E / n_atoms_of_min_E
+            dnnForcesdParameters = np.zeros(self.ravel.count)
+            dnnForcesdWeights, dnnForcesdScalings = self.ravel.to_dicts(dnnForcesdParameters)
+            
+            output = self.forward(hiddenlayers, des, weight, drange, activation)
+            D, delta, ohat = self.backprop(output, w)
+            outputPrime = self.forwardPrime(output, hiddenlayers, desp, w, drange, activation)
+            doutputPrimedWeights = self.backpropPrime(output, outputPrime, D, delta, ohat, w, activation)
+            
+            N = len(output)
+            for i in range(1, N):
+                dnnForcesdWeights[nsymbol][i] = scaling['slope'] * doutputPrimedWeights[i]
+            dnnForcesdScalings[nsymbol]['slope'] = outputPrime[N-1][0]
 
-        scaling = {}
+            dnnForcesdParameters = self.ravel.to_vector(dnnForcesdWeights, dnnForcesdScalings)
 
-        for element in elements:
-            scaling[element] = {}
+            dnnForcesdParameters *= -1.
+
+            if dF_dP[(index, direction)] is None:
+                dF_dP[(index, direction)] = dnnForcesdParameters
+            else:
+                dF_dP[(index, direction)] += dnnForcesdParameters
+
+        return dF_dP
+
+
+    def forward(self, hiddenlayers, descriptor, weight, drange, activation):
+        """The feedforward neural network function.
+        
+        Parameters
+        ----------
+        hiddenlayers: list
+            The hiddenlayers nodes of the neural network.
+        descriptor: list
+            The atom-centered descriptor of the corresponding element.
+        weight: dict
+            The neural network weights.
+        drange: array
+            The range values of the descriptor.
+        activation:
+            The activation function for the neural network model.
+
+        Returns
+        -------
+        dict
+            The output of the neural network nodes.
+        """
+        no_of_adescriptor = len(descriptor)
+        _hiddenlayers = [no_of_adescriptor] + deepcopy(hiddenlayers)
+        _descriptor = deepcopy(descriptor)
+        
+        # Min-max feature scaling
+        for i in range(no_of_adescriptor):
+            diff = drange[i][1] - drange[i][0]
+            if (diff > (10.**(-8.))):
+                _descriptor[i] = -1. + 2. * (_descriptor[i] - drange[i][0]) /\
+                                 diff
+        
+        output = {}
+        output_b = {}
+        
+        output[0] = np.asarray(_descriptor)
+        output_b[0] = np.asarray(_descriptor + [1.])
+
+        # Feedforward neural network
+        for i in range(len(_hiddenlayers)-1):
+            term = np.dot(output_b[i], weight[i+1])
             if activation == 'tanh':
-                scaling[element]['intercept'] = (max_E_per_atom + min_E_per_atom) / 2.
-                scaling[element]['slope'] = (max_E_per_atom - min_E_per_atom) / 2.
+                activate = np.tanh(term)
             elif activation == 'sigmoid':
-                scaling[element]['intercept'] = min_E_per_atom
-                scaling[element]['slope'] = (max_E_per_atom - min_E_per_atom)
+                activate = 1. / (1. + np.exp(-term))
             elif activation == 'linear':
-                scaling[element]['intercept'] = (max_E_per_atom + min_E_per_atom) / 2.
-                scaling[element]['slope'] = (10. ** (-10.)) * (max_E_per_atom - min_E_per_atom) / 2.
+                activate = term
+                
+            output[i+1] = activate
+            output_b[i+1] = np.append(activate, [1.])
 
-        return scaling
+        return output
 
 
-    def get_random_weights(self, hiddenlayers, descriptor_shape):
-        """(CP)
-        Generating random weights for the neural network architecture.
+    def forwardPrime(self, output, hiddenlayers, descriptorPrime, weight, drange, activation,):
+        """The derivative of the feedforward w.r.t. the atom-centered descriptor.
+
+        Parameters
+        ----------
+        output: dict
+            The output of the neural network nodes.
+        hiddenlayers: list
+            The hiddenlayers nodes of the neural network.
+        descriptorPrime: list
+            The derivative of the atom-centered descriptor of 
+            the corresponding element.
+        weight: dict
+            The neural network weights without the bias.
+        drange: array
+            The range values of the descriptor.
+        activation:
+            The activation function for the neural network model.
+
+        Returns
+        -------
+        dict
+            The derivative of the output of the neural network nodes.
+        """
+        no_of_adescriptorPrime = len(descriptorPrime)
+        layers = len(hiddenlayers)
+        _dPrime = deepcopy(descriptorPrime)
+
+        for _ in range(no_of_adescriptorPrime):
+            if (drange[_][1] - drange[_][0] > (10.**(-8.))):
+                _dPrime[_] =  2.0 * (_dPrime[_] / 
+                            (drange[_][1] - drange[_][0]))
+
+        outputPrime = {}
+
+        outputPrime[0] = np.asarray(_dPrime)
+
+        for layer in range(1, layers+1):
+            term = np.dot(outputPrime[layer-1], np.asarray(weight[layer]))
+
+            if activation == 'tanh':
+                outputPrime[layer] = term * (1. - output[layer] * output[layer])
+            elif activation == 'sigmoid':
+                outputPrime[layer] = term * (output[layer] * (1. - output[layer]))
+            elif activation == 'linear':
+                outputPrime[layer] = term
+        
+        return outputPrime
+
+
+    def backprop(self, output, w):
+        """The backpropagation method to get the derivative of the output
+        with respect to the adjustable parameters.
+
+        Parameters
+        ----------
+        output: dict
+            The output of the feedforward neural network.
+        w: dict
+            The neural network weight without the bias.
+        
+        Returns
+        -------
+        documentation here
+        """
+        p = self.parameters
+        activation = p.activation
+
+        N = len(output)
+
+        D = {}
+        for i in range(N):
+            n = np.size(output[i])
+            D[i] = np.zeros((n,n))
+            for j in range(n):
+                if activation == 'linear':
+                    D[i][j,j] = 1.
+                elif activation == 'sigmoid':
+                    D[i][j,j] = output[i][j] * (1. - output[i][j])
+                elif activation == 'tanh':
+                    D[i][j,j] = (1. - output[i][j] * output[i][j])
+
+        delta = {}
+        delta[N-1] = D[N-1]
+
+        for i in range(N-2, 0, -1):
+            delta[i] = np.dot(D[i], np.dot(w[i+1], delta[i+1]))
+        
+        # I don't think I need ohat
+        ohat = {}
+        for i in range(1, N):
+            n = np.size(output[i-1])
+            ohat[i-1] = np.zeros((n+1))
+            for j in range(n):
+                ohat[i-1][j] = output[i-1][j]
+            ohat[i-1][n] = 1.
+
+        return D, delta, ohat
+
+
+    def backpropPrime(self, output, outputPrime, D, delta, ohat, w, activation):
+        """The derivative of the backpropagation method. This method obtains
+        the change of outputPrime with respect to the weights.
+        Parameters
+        ----------
+        doc here.
+
+        Returns
+        -------
+        doc here.
+        """
+        N = len(output)
+        Dprime = {}
+        for i in range(1, N):
+            n = len(output[i])
+            Dprime[i] = np.zeros((n, n))
+
+            for j in range(n):
+                if activation == 'tanh':
+                    Dprime[i][j, j] = -2. * output[i][j] * outputPrime[i][j]
+                elif activation == 'linear':
+                    Dprime[i][j, j] = 0.
+                elif activation == 'sigmoid':
+                    Dprime[i][j, j] = outputPrime[i][j] - 2. * output[i][j] * outputPrime[i][j]
+
+        deltaPrime = {}
+        deltaPrime[N-1] = Dprime[N-1]
+
+        temp1 = {}
+        temp2 = {}
+        for i in range(N-2, 0, -1):
+            temp1[i] = np.dot(w[i+1], delta[i+1])
+            temp2[i] = np.dot(w[i+1], deltaPrime[i+1])
+            deltaPrime[i] = np.dot(Dprime[i], temp1[i]) + np.dot(D[i], temp2[i])
+
+        ohatPrime = {}
+        doutputPrimedWeights = {}
+        for i in range(1, N):
+            ohatPrime[i-1] = [None] * (1 + len(outputPrime[i-1]))
+            n = len(outputPrime[i-1])
+            for j in range(n):
+                ohatPrime[i-1][j] = outputPrime[i-1][j]
+            ohatPrime[i-1][-1] = 0.
+            doutputPrimedWeights[i] = np.dot(np.matrix(ohatPrime[i-1]).T,
+                                             np.matrix(delta[i]).T) + \
+                                      np.dot(np.matrix(ohat[i-1]).T,
+                                             np.matrix(deltaPrime[i]).T)
+        
+        return doutputPrimedWeights
+
+
+
+    def random_weights(self, hiddenlayers, no_of_adescriptor, seed=None):
+        """Generating random initial weights for the neural network.
+
+        Parameters
+        ----------
+        hiddenlayers: list
+            The hiddenlayers nodes of the neural network.
+        no_of_adescriptor: int
+            The length of a descriptor.
+        seed: int
+            The seed for Numpy random generator.
 
         Returns
         -------
         dict
             Randomly-generated weights.
         """
-        rs = np.random.RandomState(seed=13)
         weights = {}
-        nn_structure = {}
+        nnArchitecture = {}
+
+        r = np.random.RandomState(seed=seed)
 
         elements = hiddenlayers.keys()
         for element in sorted(elements):
             weights[element] = {}
-            nn_structure[element] = [descriptor_shape[1]] + [l for l in hiddenlayers[element]] + [1]
+            nnArchitecture[element] = [no_of_adescriptor] + hiddenlayers[element]
+            n = len(nnArchitecture[element])
 
-            epsilon = np.sqrt(6. / (nn_structure[element][0] +
-                                    nn_structure[element][1]))
-            normalized_arg_range = 2. * epsilon
-            weights[element][1] = (rs.random_sample(
-                (descriptor_shape[1] + 1, nn_structure[element][1])) *
-                normalized_arg_range - normalized_arg_range / 2.)
-            len_of_hiddenlayers = len(list(nn_structure[element])) - 3
-            for layer in range(len_of_hiddenlayers):
-                epsilon = np.sqrt(6. / (nn_structure[element][layer + 1] +
-                                        nn_structure[element][layer + 2]))
-                normalized_arg_range = 2. * epsilon
-                weights[element][layer + 2] = rs.random_sample(
-                    (nn_structure[element][layer + 1] + 1,
-                     nn_structure[element][layer + 2])) * \
-                    normalized_arg_range - normalized_arg_range / 2.
-
-            epsilon = np.sqrt(6. / (nn_structure[element][-2] +
-                                    nn_structure[element][-1]))
-            normalized_arg_range = 2. * epsilon
-            weights[element][len(list(nn_structure[element])) - 1] = \
-                rs.random_sample((nn_structure[element][-2] + 1, 1)) \
-                * normalized_arg_range - normalized_arg_range / 2.
-
-            if False:  # This seemed to be setting all biases to zero?
-                len_of_weight = len(weights[element])
-                for _ in range(len_of_weight):  # biases
-                    size = weights[element][_ + 1][-1].size
-                    for __ in range(size):
-                        weights[element][_ + 1][-1][__] = 0.
-
+            for layer in range(n-1):
+                epsilon = np.sqrt(6. / (nnArchitecture[element][layer] +
+                                        nnArchitecture[element][layer+1]))
+                norm_epsilon = 2. * epsilon
+                weights[element][layer+1] = r.random_sample(
+                        (nnArchitecture[element][layer]+1,
+                         nnArchitecture[element][layer+1])) * \
+                                 norm_epsilon - epsilon
+        
         return weights
 
 
-    def calculate_nnEnergy(self, descriptors):
+    def weights_wo_bias(self, weights):
+        """Return the weights without bias."""
+        w = {}
+        for key in weights.keys():
+            w[key] = {}
+            for i in range(len(weights[key])):
+                    w[key][i+1] = weights[key][i+1][:-1]
+        return w
+
+
+    @staticmethod
+    def descriptor_range(no_of_structures, descriptors):
+        """Calculate the range (min and max values) of the descriptors 
+        corresponding to all of the crystal structures.
+        
+        Parameters
+        ----------
+        no_of_structures: int
+            The number of structures.
+        descriptors: dict of dicts
+            Atom-centered descriptors.
+            
+        Returns
+        -------
+        dict
+            The range of the descriptors for each element species.
         """
-        Calculate the predicted energy with neural network.
+        drange = {}
+
+        for i in range(no_of_structures):
+            for _ in descriptors[i]['G']:
+                element = _[0]
+                descriptor = _[1]
+                if element not in drange.keys():
+                    drange[element] = [[__, __] for __ in descriptor]
+                else:
+                    assert len(drange[element]) == len(descriptor)
+                    for j, des in enumerate(descriptor):
+                        if des < drange[element][j][0]:
+                            drange[element][j][0] = des
+                        elif des > drange[element][j][1]:
+                            drange[element][j][1] = des
+
+        return drange
+
+
+    @staticmethod
+    def scalings(activation, energies, elements):
+        """To scale the range of activation to the range of actual energies.
 
         Parameters
         ----------
-        descriptor: list
-            The list of descriptor per structure.
-        """
-        p = self.parameters
-        self.nnEnergies = []
-        Energy = 0.
-
-        for i, (element, des) in enumerate(descriptors):
-            scaling = p.scalings[element]
-            weights = p.weights[element]
-            hl = p.hiddenlayers[element]
-            desrange = p.desrange[element]
-            activation = p.activation
-
-            nnEnergies = self.forward(hl, des, weights, desrange, activation)
-            nnEnergy = scaling['slope'] * float(nnEnergies[len(nnEnergies)-1]) + scaling['intercept']
-            
-            self.nnEnergies.append(nnEnergy)
-            Energy += nnEnergy
-
-        return Energy
-
-
-    def calculate_nnForce(self, descriptors, output):
-        """
-        Calculate the predicted force with neural network.
-        """
-        p = self.parameters
-        self.nnForces = []
-        Force = 0.
-
-        
-
-        return Force
-
-
-    def calculate_dnnEnergy_dParameters(self, descriptors):
-        """
-        I still have no clue what this function does.
-        """
-        p = self.parameters
-        dE_dP = None
-        
-        for i, (element, des) in enumerate(descriptors):
-            scaling = p.scalings[element]
-            W = self.weights_wo_bias(p.weights)
-            W = W[element]
-            dnnEnergy_dParameters = np.zeros(self.ravel.count)
-            
-            dnnEnergy_dWeights, dnnEnergy_dScalings = self.ravel.to_dicts(dnnEnergy_dParameters)
-            outputs = self.forward(p.hiddenlayers[element], des, p.weights[element], p.desrange[element])
-            
-            D, delta, ohat = self.get_D_delta_ohat(outputs, W, residual=1)
-            dnnEnergy_dScalings[element]['intercept'] = 1.
-            dnnEnergy_dScalings[element]['slope'] = float(outputs[len(outputs)-1])
-            
-            for j in range(1, len(outputs)):
-                dnnEnergy_dWeights[element][j] = float(scaling['slope']) * np.dot(np.matrix(ohat[j-1]).T, np.matrix(delta[j]).T)                       
-
-            dnnEnergy_dParameters = self.ravel.to_vector(dnnEnergy_dWeights, dnnEnergy_dScalings)
-
-            if dE_dP is None:
-                dE_dP = dnnEnergy_dParameters
-            else: 
-                dE_dP += dnnEnergy_dParameters
-        
-        return dE_dP
-            
-
-    def forward(self, hiddenlayers, descriptors, weight, desrange, activation='tanh'):
-        """
-        This function is the neural network architecture. The input is given as 
-        the descriptor, and the output is calculated for the corresponding energy about a 
-        specific atom. The sum of these energies is the total energy of the 
-        crystal.
-
-        Parameters
-        ----------
-        hiddenlayers: tuple
-            (3,3) means 2 layers with 3 nodes each.
-        descriptor: array
-            The descriptor.
-        weight: dict
-            The Neural Network weights.
-        desrange: array
-            The range of the descriptor. This is used for scaling.
-        activation:
-            The activation function.
+        activation: str
+            The activation function for the neural network model.
+        energies: list
+            The min and max value of the energies.
 
         Returns
         -------
         dict
-            Outputs of neural network nodes.
+            The scalings parameters, i.e. slope and intercept.
         """
-        layer = 0
-        fingerprint = descriptors
-        len_fp = len(fingerprint)
-        for _ in range(len_fp):
-            if (desrange[_][1] - desrange[_][0] > (10.**(-8.))):
-                fingerprint[_] = -1.0 + 2.0 * ((fingerprint[_] - desrange[_][0]) /
-                        (desrange[_][1] - desrange[_][0]))
+        # Max and min of true energies.
+        min_E = energies[0] 
+        max_E = energies[1] 
 
-        out = {}
-        lin = {}
+        scalings = {}
 
-        temp = np.zeros((1, len_fp+1))
-        temp[0, len_fp] = 1.0
-        for _ in range(len_fp):
-            temp[0, _] = fingerprint[_]
-        out[0] = temp
-
-        # Neural network architecture
-        for i, hl in enumerate(hiddenlayers):
-            layer += 1
-            lin[i+1] = np.dot(temp, weight[i+1])
+        for element in elements:
+            scalings[element] = {}
             if activation == 'tanh':
-                out[i+1] = np.tanh(lin[i+1])
+                scalings[element]['intercept'] = (max_E + min_E) / 2.
+                scalings[element]['slope'] = (max_E - min_E) / 2.
             elif activation == 'sigmoid':
-                out[i+1] = 1. / (1. + np.exp(-lin[i+1]))
+                scalings[element]['intercept'] = min_E
+                scalings[element]['slope'] = (max_E - min_E)
             elif activation == 'linear':
-                out[i+1] = lin[i+1]
-            temp = np.zeros((1, hl+1))
-            temp[0, hl] = 1.0
-            for _ in range(hl):
-                temp[0, _] = out[i+1][0][_]
+                scalings[element]['intercept'] = (max_E + min_E) / 2.
+                scalings[element]['slope'] = (10. ** (-10.)) * (max_E - min_E) / 2.
 
-        # The output (i.e. energies)
-        lin[layer+1] = np.dot(temp, weight[layer+1])
-        if activation == 'tanh':
-            out[layer+1] = np.tanh(lin[layer+1])
-        elif activation == 'sigmoid':
-            out[layer+1] = 1. / (1. + np.exp(-lin[layer+1]))
-        elif activation == 'linear':
-            out[layer+1] = lin[layer+1]
+        return scalings
 
-        return out
-
-    def forwardPrime(hiddenlayers, descriptors, weight, desrange, outputs, activation='tanh',):
-        
-        layers = len(hiddenlayers)
-        fingerprint = copy.deepcopy(descriptors)
-        len_fp = len(fingerprint)
-        
-        for _ in range(len_fp):
-            if (desrange[_][1] - desrange[_][0] > (10.**(-8.))):
-                fingerprint[_] =  2.0 * (fingerprint[_] /
-                        (desrange[_][1] - desrange[_][0]))
-
-        dnodes_dr = {}
-
-        dnodes_dr[0] = np.asarray(fingerprint)
-
-        for layer in range(1, layers+1):
-            temp = np.dot(dnodes_dr[layer-1], np.asarray(weight[layer])[:-1,:])
-            
-            if activation == 'tanh':
-                dnodes_dr[layer] = temp * \
-                                   (1. - outputs[layer][0] * outputs[layer][0])
-            elif activation == 'sigmoid':
-                dnodes_dr[layer] = temp * (outputs[layer][0] * (1. - outputs[layer][0]))
-            elif activation == 'linear':
-                dnodes_dr[layer] = temp
-
-        return dnodes_dr
-
-    def weights_wo_bias(self, weights):
-        """
-        Return weights without the bias.
-        """
-        W = {}
-        for k in weights.keys():
-            W[k] = {}
-            w = weights[k]
-            for i in range(len(w)):
-                W[k][i+1] = w[i+1][:-1]
-        return W
 
     @property
     def vector(self):
-        """Access to get or set the model parameters (weights, scaling for
-        each network) as a single vector, useful in particular for
-        regression.
+        """(CP) Access to get or set the model parameters (weights, 
+        scaling for each network) as a single vector, useful in particular 
+        for regression.
 
         Parameters
         ----------
@@ -407,6 +729,7 @@ class NeuralNetwork:
             self.ravel = Raveler(p.weights, p.scalings)
         return self.ravel.to_vector(weights=p.weights, scalings=p.scalings)
 
+
     @vector.setter
     def vector(self, vector):
         p = self.parameters
@@ -416,58 +739,9 @@ class NeuralNetwork:
         p['weights'] = weights
         p['scalings'] = scalings
 
-    
-    def get_D_delta_ohat(self, outputs, W, residual):
-        """
-        Calculate and store delta, ohat, and D.
-        These parameters are needed in calculating the derivative of the output with respect to the weights.
 
-        output: dict
-            Outputs of the neural network nodes.
-        W: dict
-            The weights of the neural network without the bias.
-        residual: float
-            True energy minus the neural network predicted energy
-        """
-        p = self.parameters
-        activation = p.activation
+########################### AUX function ######################################
 
-        N = len(outputs)
-
-        # Delete the bias for outputs[0]
-        o = outputs[0].tolist()
-        o[0].pop(-1)
-        outputs[0] = np.asarray(o)
-
-        D = {}
-        for i in range(N):
-            n = np.size(outputs[i])
-            D[i] = np.zeros((n, n))
-            for j in range(n):
-                if activation == 'linear':
-                    D[i][j,j] = 1.
-                elif activation == 'sigmoid':
-                    D[i][j,j] = float(outputs[i][0,j]) * \
-                            float(1. - outputs[i][0,j])
-                elif activation == 'tanh':
-                    D[i][j,j] = float(1. - outputs[i][0,j] * outputs[i][0,j])
-
-        delta = {}
-        delta[N-1] = D[N-1] # Missing the (o_j - t_j)
-
-        for i in range(N-2, 0, -1):
-            delta[i] = np.dot(D[i], np.dot(W[i+1], delta[i+1]))
-
-        ohat = {}
-        for i in range(1, N):
-            n = np.size(outputs[i-1])
-            ohat[i-1] = np.zeros((1,n+1))
-            for j in range(n):
-                ohat[i-1][0,j] = outputs[i-1][0,j]
-            ohat[i-1][0,n] = 1.
-
-        return D, delta, ohat
-    
 
 class Raveler:
     """(CP) Class to ravel and unravel variable values into a single vector.
@@ -479,7 +753,6 @@ class Raveler:
 
     weights, scalings are the variables to ravel and unravel
     """
-    # why would scalings need to be raveled?
     def __init__(self, weights, scalings):
 
         self.count = 0
@@ -542,6 +815,3 @@ class Raveler:
             scalings[k['key1']][k['key2']] = vector[count]
             count += 1
         return weights, scalings
-
-
-

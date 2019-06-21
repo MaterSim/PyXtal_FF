@@ -1,12 +1,13 @@
 import sys
+import time
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 
-sys.path.append("..")
-from descriptors.bispectrum import Bispectrum, Assembler
-from utilities.gregression import Regressor
+#sys.path.append("..")
+from ..descriptors.bispectrum import Bispectrum, Assembler
+from ..utilities.regression import gRegressor as Regressor
 
 
 class Snap:
@@ -58,7 +59,6 @@ class Snap:
         self.optimizer_kwargs = optimizer_kwargs
 
         self.atom_types = list(self.profile.keys()) # ['Na', 'Cl']
-        print(self.atom_types)
 
 
     def fit(self, structures, features, feature_styles, bounds, 
@@ -101,7 +101,9 @@ class Snap:
         self.volumes = []
         for structure in self.structures:
             self.volumes.append(structure.volume)
-
+        
+        t0 = time.time()
+        print("Calculating Bispectrum")
         # Bispectrum calculation
         self.X = []
         for i in range(len(self.structures)):
@@ -111,6 +113,10 @@ class Snap:
                 self.X = b.bispectrum_coefficients
             else:
                 self.X = np.vstack((self.X, b.bispectrum_coefficients))
+        t1 = time.time()
+        print("Calculating Bispectrum Done!")
+        print(f"Bispectrum calculation time: {t1-t0}s")
+
 
         # Perform the SNAP model
         self.regressor = Regressor(method=self.optimizer, 
@@ -202,7 +208,7 @@ class Snap:
                                                   self.yp_forces)
             self.r2_forces = self.regression.score(X_forces, y_forces, 
                                                    w_forces)
-            force_coefficient = parameters[1]
+            force_coefficient = 1. # parameters[1]
         else:
             self.mae_forces = 0.
             force_coefficient = 1.

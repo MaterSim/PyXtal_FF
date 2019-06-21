@@ -14,7 +14,7 @@ from ase.md import VelocityVerlet
 from ase.constraints import FixAtoms
 
 from mapp.descriptors.behlerparrinello import BehlerParrinello
-from mapp.models.new_neuralnetwork import NeuralNetwork as NN
+from mapp.models.new_neuralnetwork import nNeuralNetwork as NN
 
 
 from amp import Amp

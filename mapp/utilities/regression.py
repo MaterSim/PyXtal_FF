@@ -1,7 +1,7 @@
 import sys
-sys.path.append("..")
+#sys.path.append("..")
 
-from models.model import LossFunction
+from ..models.model import LossFunction
 
 class gRegressor:
     """This class consists of global optimization methods.
