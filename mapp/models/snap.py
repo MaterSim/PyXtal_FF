@@ -44,7 +44,7 @@ class Snap:
         The parameters for the global optimization scheme.
         i.e. {'strategy': 'best1bin'}
     """
-    def __init__(self, element_profile, twojmax=6, diagonal=3, rfac0=0.99363, 
+    def __init__(self, element_profile, twojmax=8, diagonal=3, rfac0=0.99363, 
                  Rc=5., rmin0=0.0, optimizer='DifferentialEvolution', 
                  optimizer_kwargs=None):
         self.profile = element_profile
@@ -62,7 +62,7 @@ class Snap:
 
 
     def fit(self, structures, features, feature_styles, bounds, 
-            force=True, stress=False, save=True):
+            force=True, stress=False, save=False, X=None):
         """Run the Snap fitting with linear regression and a global 
         optimization algorithm.
 
@@ -102,29 +102,37 @@ class Snap:
         for structure in self.structures:
             self.volumes.append(structure.volume)
         
-        t0 = time.time()
-        print("Calculating Bispectrum")
-        # Bispectrum calculation
-        self.X = []
-        for i in range(len(self.structures)):
-            Bispectrum(self.structures[i], self.Rc, self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0,rmin0=self.rmin0)
-            b = Assembler(atom_type=self.atom_types, volume=self.volumes[i], stress=self.stress)
-            if self.X == []:
-                self.X = b.bispectrum_coefficients
-            else:
-                self.X = np.vstack((self.X, b.bispectrum_coefficients))
-        t1 = time.time()
-        print("Calculating Bispectrum Done!")
-        print(f"Bispectrum calculation time: {t1-t0}s")
+        if X == None:
+            t0 = time.time()
+            print("Calculating Bispectrum")
+            # Bispectrum calculation
+            self.X = []
+            for i in range(len(self.structures)):
+                Bispectrum(self.structures[i], self.Rc, self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0,rmin0=self.rmin0)
+                b = Assembler(atom_type=self.atom_types, volume=self.volumes[i], stress=self.stress)
+                if self.X == []:
+                    self.X = b.bispectrum_coefficients
+                else:
+                    self.X = np.vstack((self.X, b.bispectrum_coefficients))
+            t1 = time.time()
+            print("Calculating Bispectrum Done!")
+            print(f"Bispectrum calculation time: {t1-t0}s")
+        else:
+            self.X = np.loadtxt(X)
 
+        if save:
+            np.savetxt("Bispectrum.txt", self.X)
 
         # Perform the SNAP model
         self.regressor = Regressor(method=self.optimizer, 
                                    user_kwargs=self.optimizer_kwargs)
         self.result = self.regressor.regress(model=self, bounds=self.bounds)
         
-        if save:
-            self.save_to_textfile()
+        # Print result
+        self.print_mae_r2square()
+        
+        # Save the Bispectrum coefficients
+        self.save_regression_coefficients()
     
     
     def calculate_loss(self, parameters):
@@ -142,21 +150,6 @@ class Snap:
         """
         loss = 0.
         
-        # Get bispectrum coefficients with the initial structures 
-        # and the predicted Rc.
-        #self.X = []
-        #for i in range(len(self.structures)):
-        #    Bispectrum(self.structures[i], self.Rc,
-        #               self.profile, twojmax=self.twojmax,
-        #               diagonal=self.diagonal, rfac0=self.rfac0,
-        #               rmin0=self.rmin0)
-        #    b = Assembler(atom_type=self.atom_types,
-        #                  volume=self.volumes[i], stress=self.stress)
-        #    if self.X == []:
-        #        self.X = b.bispectrum_coefficients
-        #    else:
-        #        self.X = np.vstack((self.X, b.bispectrum_coefficients))
-
         # Construct the weights into an array based on the features.
         self.w = []
         for style in self.styles:
@@ -166,7 +159,7 @@ class Snap:
                 self.w.append(parameters[0])
             elif style == 'stress':
                 if self.force == True:
-                    self.w.append(parameters[2])
+                    self.w.append(parameters[1])
                 else:
                     self.w.append(parameters[0])
             else:
@@ -177,7 +170,7 @@ class Snap:
         y_energies, y_forces, y_stress = [], [], []
         w_energies, w_forces, w_stress = [], [], []
         
-        for i in range(len(self.w)):
+        for i in range(len(self.X)):
             if self.styles[i] == 'energy':
                 X_energies.append(self.X[i])
                 y_energies.append(self.y[i])
@@ -206,35 +199,33 @@ class Snap:
             self.yp_forces = self.regression.predict(X_forces)
             self.mae_forces = mean_absolute_error(y_forces, 
                                                   self.yp_forces)
-            self.r2_forces = self.regression.score(X_forces, y_forces, 
+            self.r2_forces = self.regression.score(X_forces, y_forces,
                                                    w_forces)
-            force_coefficient = 1. # parameters[1]
         else:
             self.mae_forces = 0.
-            force_coefficient = 1.
+            self.r2_forces = None
 
         if self.stress == True:
             self.yp_stress = self.regression.predict(X_stress)
             self.mae_stress = mean_absolute_error(y_stress, self.yp_stress)
             self.r2_stress = self.regression.score(X_stress, y_stress, 
                                                    w_stress)
-            if self.force == True:
-                stress_coefficient = parameters[3]
-            else:
-                stress_coefficient = parameters[1]
         else:
             self.mae_stress = 0.
-            stress_coefficient = 1.
+            self.r2_stress = None
 
         # Evaluate loss
-        loss = 1. * self.mae_energies
-        loss += force_coefficient * self.mae_forces
-        loss += stress_coefficient * self.mae_stress
+        loss = self.mae_energies
+        loss += parameters[0] * self.mae_forces
+        if self.force == True and self.stress == True:
+            loss += parameters[1] * self.mae_stress
+        elif self.force == False and self.stress == True:
+            loss += parameters[0] * self.mae_stress
 
         return loss
 
 
-    def save_to_textfile(self,):
+    def save_regression_coefficients(self,):
         """Saving the bispectrum coefficients to a textfile."""
         self.coef = {}
         coef = self.regression.coef_
@@ -261,7 +252,7 @@ class Snap:
 
         
     def print_mae_r2square(self,):
-
+        """Print the evalution criteria such as mae and r2 values"""
         if self.stress:
             d = {'energy_r2': [self.r2_energies], 
                  'energy_mae': [self.mae_energies], 
@@ -276,6 +267,8 @@ class Snap:
                  'force_mae': [self.mae_forces]}
         
         df = pd.DataFrame(d)
+
+        print(df)
         
 
 ########################## Not needed? ####################################
