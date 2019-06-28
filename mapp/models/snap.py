@@ -61,8 +61,8 @@ class Snap:
         self.atom_types = list(self.profile.keys()) # ['Na', 'Cl']
 
 
-    def fit(self, structures, features, feature_styles, bounds, 
-            force=True, stress=False, save=False, X=None):
+    def fit(self, structures=None, features=None, feature_styles=None, bounds=None, 
+            force=True, stress=False, save=False, json_file=None):
         """Run the Snap fitting with linear regression and a global 
         optimization algorithm.
 
@@ -96,31 +96,18 @@ class Snap:
         self.bounds = bounds
         self.force = force
         self.stress = stress
+
+        if (self.structures == None or self.y == None) and json_file == None:
+            msg = "Structures or features can't be None while json_file is None"
+            raise ValueError(msg)
         
-        # Calculate the volume for each structure
-        self.volumes = []
-        for structure in self.structures:
-            self.volumes.append(structure.volume)
-        
-        if X == None:
-            t0 = time.time()
-            print("Calculating Bispectrum")
-            # Bispectrum calculation
-            self.X = []
-            for i in range(len(self.structures)):
-                Bispectrum(self.structures[i], self.Rc, self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0,rmin0=self.rmin0)
-                b = Assembler(atom_type=self.atom_types, volume=self.volumes[i], stress=self.stress)
-                if self.X == []:
-                    self.X = b.bispectrum_coefficients
-                else:
-                    self.X = np.vstack((self.X, b.bispectrum_coefficients))
-            t1 = time.time()
-            print("Calculating Bispectrum Done!")
-            print(f"Bispectrum calculation time: {t1-t0}s")
+        if json_file == None:
+            self.X, self.volumes = self.get_bispectrum(save=save)
         else:
             self.X = np.loadtxt(X)
 
         if save:
+            # START HERE
             np.savetxt("Bispectrum.txt", self.X)
 
         # Perform the SNAP model
@@ -252,7 +239,7 @@ class Snap:
 
         
     def print_mae_r2square(self,):
-        """Print the evalution criteria such as mae and r2 values"""
+        """Print the evalution criteria such as mae and r2 values."""
         if self.stress:
             d = {'energy_r2': [self.r2_energies], 
                  'energy_mae': [self.mae_energies], 
@@ -271,69 +258,49 @@ class Snap:
         print(df)
         
 
-########################## Not needed? ####################################
-#    def get_coefficients(self):
-#        """
-#        Get the linearly fitted coefficients.
-#        """
-#        coeff = {}
-#
-#        coeff['intercept'] = [self.reg.intercept_]
-#        coeff['slope'] = reg.coef_
-#
-#        return coeff
-#    
-#        def get_mae_rsquare(self, X, y, w, styles):
-#        """
-#        Calculate the mae and rsquare of energies, forces, and stress (if applicable).
-#        """
-#        X1, X2, X3 = [], [], []
-#        y1, y2, y3 = [], [], []
-#        w1, w2, w3 = [], [], []
-#
-#        for i, style in styles:
-#            if style == 'energy':
-#                X1.append(X[i])
-#                y1.append(y[i])
-#                w1.append(w[i])
-#            elif style == 'force':
-#                X2.append(X[i])
-#                y2.append(y[i])
-#                w2.append(w[i])
-#            else:
-#                X3.append(X[i])
-#                y3.append(y[i])
-#                w3.append(w[i])
-#
-#        # Evaluate the mae and r square of energy
-#        y1_ = self.reg.predict(X1)
-#        mae1 = mean_absolute_error(y1, y1_)
-#        rsquare1 = reg.score(X1, y1, w1)
-#
-#        # Evaluate the mae and r square of force
-#        y2_ = self.reg.predict(X2)
-#        mae2 = mean_absolute_error(y2, y2_)
-#        rsquare2 = reg.score(X2, y2, w2)
-#
-#        # Evaluate the mae and r square of stress
-#        if self.stress == True:
-#            y3_ = self.reg.predict(X3)
-#            mae3 = mean_absolute_error(y3, y3_)
-#            rsquare3 = reg.score(X3, y3, w3)
-#
-#            result = {'energy_r2': [rsquare1],
-#                      'energy_mae': [mae1],
-#                      'force_r2': [rsquare2],
-#                      'force_mae': [mae2],
-#                      'stress_r2': [rsquare3],
-#                      'stress_mae': [mae3]}
-#        
-#            return result
-#
-#        else:
-#            result = {'energy_r2': [rsquare1],
-#                      'energy_mae': [mae1],
-#                      'force_r2': [rsquare2],
-#                      'force_mae': [mae2]}
-#
-#            return result
+    def get_bispectrum(self, save):
+        """Get bispectrum 
+
+        """
+        bispectrum = []
+
+        if save:
+            infos = []
+            for structure in self.structures:
+                info = {}
+
+                print(len(structure))
+                
+                volume = structure.volume
+                info['volume'] = volume
+                
+                Bispectrum(structure, self.Rc, self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0, rmin0=self.rmin0)
+                b = Assembler(atom_type=self.atom_types, volume=volume, stress=self.stress)
+                info['bispectrum'] = b.bispectrum_coefficients
+
+                #for i in range(len(b.bispectrum_coefficients)):
+
+                
+                
+
+
+                if bispectrum == []:
+                    bispectrum = b.bispectrum_coefficients
+                else:
+                    bispectrum = np.vstack((bispectrum, b.bispectrum_coefficients))
+        else:
+            volume = structure.volume
+
+            Bispectrum(structure, self.Rc, self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0, rmin0=self.rmin0)
+            b = Assembler(atom_type=self.atom_types, volume=volume, stress=self.stress)
+            if bispectrum == []:
+                bispectrum = b.bispectrum_coefficients
+            else:
+                bispectrum = np.vstack((bispectrum, b.bispectrum_coefficients))
+
+
+        return bispectrum
+
+    def from_json(self, json_file):
+        """Retrieve the necessary information from json file."""
+        pass
