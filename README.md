@@ -1,4 +1,4 @@
-## FF-MAPP (Force-Field Machine-learning interAtomic Potential Predictions)
+## PyXtal FF
 
 FF-MAPP is an open-source Python library for developing machine learning interatomic potential of materials. In the current state, there are two models available: 
 - [SNAP](https://www.sciencedirect.com/science/article/pii/S0021999114008353?via%3Dihub)
