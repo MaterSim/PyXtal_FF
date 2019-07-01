@@ -53,6 +53,3 @@ Predictor.fit(structures=structures,
               bounds=bounds,)
 t1 = time.time()
 print(f"Running time: {round(t1-t0, 2)}s")
-
-optimized_parameters = Predictor.result
-print(optimized_parameters)
