@@ -1,6 +1,6 @@
 ## PyXtal FF
 
-PyXtal FF is an open-source Python library for developing machine learning interatomic potential of materials. In the current state, there are two models available: 
+PyXtal FF is an open-source Python library for developing machine learning interatomic potential of materials. At the current state, there are two models available: 
 - [SNAP](https://www.sciencedirect.com/science/article/pii/S0021999114008353?via%3Dihub)
 - [Neural Network](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.98.146401)
 
