@@ -1,0 +1,2 @@
+- C and Si datasets are generated from [PyXtal](https://github.com/qzhu2017/Pyxtal).
+- Cu and Mo datasets are from [here](https://github.com/materialsvirtuallab/snap).
