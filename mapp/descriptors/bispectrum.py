@@ -59,7 +59,7 @@ class Bispectrum:
     """
     def __init__(self, structure, rcutfac, element_profile, twojmax, 
                  diagonal=3, rfac0=0.99363, rmin0=0.):
-        self.exe = 'lmp_daily'          # define your LAMMPS executable here
+        self.exe = 'lmp_serial'          # define your LAMMPS executable here
         self.pre_cmds = ['units metal',
                          'atom_style charge',
                          'box tilt large',

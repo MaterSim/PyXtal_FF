@@ -2,6 +2,7 @@ import sys
 import time
 import numpy as np
 import pandas as pd
+import json
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 
@@ -102,13 +103,10 @@ class Snap:
             raise ValueError(msg)
         
         if json_file == None:
-            self.X, self.volumes = self.get_bispectrum(save=save)
+            self.X = self.get_bispectrum(save=save)
         else:
-            self.X = np.loadtxt(X)
+            self.X, self.y, self.styles = self.from_json(json_file)
 
-        if save:
-            # START HERE
-            np.savetxt("Bispectrum.txt", self.X)
 
         # Perform the SNAP model
         self.regressor = Regressor(method=self.optimizer, 
@@ -259,48 +257,99 @@ class Snap:
         
 
     def get_bispectrum(self, save):
-        """Get bispectrum 
+        """Get bispectrum. If save is True, a JSON file will be created to save all the relevant information, 
+        such as bispectrum coefficients, energy, forces, and volume.
+
+        Parameters
+        ----------
+        save: bool
+            If True, a JSON file will be created.
+
+        Returns
+        -------
+        array
+            The bispectrum coefficients.
 
         """
         bispectrum = []
 
         if save:
+
             infos = []
+            total = 0
             for structure in self.structures:
+                
                 info = {}
 
-                print(len(structure))
+                if self.stress:
+                    N = len(structure) * 3 + 1 + 6
+                else:
+                    N = len(structure) * 3 + 1
                 
-                volume = structure.volume
-                info['volume'] = volume
-                
+                volume = structure.volume               
                 Bispectrum(structure, self.Rc, self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0, rmin0=self.rmin0)
                 b = Assembler(atom_type=self.atom_types, volume=volume, stress=self.stress)
-                info['bispectrum'] = b.bispectrum_coefficients
-
-                #for i in range(len(b.bispectrum_coefficients)):
-
                 
-                
-
-
                 if bispectrum == []:
                     bispectrum = b.bispectrum_coefficients
                 else:
                     bispectrum = np.vstack((bispectrum, b.bispectrum_coefficients))
+                
+                # Information to be saved in JSON file.
+                info['volume'] = volume
+                info['bispectrum'] = b.bispectrum_coefficients
+                info['bispectrum'] = info['bispectrum'].tolist()
+                info['forces'] = []
+                for n in range(N):
+                    if n == 0:
+                        info['energy'] = self.y[total]
+                        total += 1
+                    else:
+                        info['forces'].append(self.y[total])
+                        total += 1
+                info['forces'] = np.asarray(info['forces']).reshape((len(structure),3))
+                info['forces'] = info['forces'].tolist()
+                infos.append(info)
+
+            with open("infos.json", 'w') as f:
+                json.dump(infos, f, indent=2)
+
         else:
-            volume = structure.volume
-
-            Bispectrum(structure, self.Rc, self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0, rmin0=self.rmin0)
-            b = Assembler(atom_type=self.atom_types, volume=volume, stress=self.stress)
-            if bispectrum == []:
-                bispectrum = b.bispectrum_coefficients
-            else:
-                bispectrum = np.vstack((bispectrum, b.bispectrum_coefficients))
-
+            
+            for structure in self.structures:    
+                
+                volume = structure.volume
+                Bispectrum(structure, self.Rc, self.profile, twojmax=self.twojmax, diagonal=self.diagonal, rfac0=self.rfac0, rmin0=self.rmin0)
+                b = Assembler(atom_type=self.atom_types, volume=volume, stress=self.stress)
+                
+                if bispectrum == []:
+                    bispectrum = b.bispectrum_coefficients
+                else:
+                    bispectrum = np.vstack((bispectrum, b.bispectrum_coefficients))
 
         return bispectrum
 
+
     def from_json(self, json_file):
         """Retrieve the necessary information from json file."""
-        pass
+        with open(json_file) as f:
+            datas = json.load(f)
+        
+        bispectrum = []
+        y = []
+        styles = []
+        for data in datas:
+            if bispectrum == []:
+                bispectrum = data['bispectrum']
+            else:
+                bispectrum = np.vstack((bispectrum, data['bispectrum']))
+
+            y.append(data['energy'])
+            styles.append('energy')
+
+            fs = np.ravel(data['forces'])
+            for f in fs:
+                y.append(f)
+                styles.append('force')
+
+        return bispectrum, y, styles

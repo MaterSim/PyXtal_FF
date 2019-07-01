@@ -61,8 +61,7 @@ Predictor = Snap(element_profile=profile, optimizer_kwargs=optimizer_kwargs, Rc=
 Predictor.fit(structures=structures, 
               features=y, 
               feature_styles=styles, 
-              bounds=bounds,
-              X=X)
+              bounds=bounds,)
 t1 = time.time()
 print(f"Running time: {round(t1-t0, 2)}s")
 
