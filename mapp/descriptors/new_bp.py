@@ -229,6 +229,7 @@ def get_G2(num_of_cores, atom_types, cores_species, cores_coordinates,
     
     return G, Gp
 
+
 #@numba.njit(numba.f8(numba.f8[:], numba.f8[:,:], numba.i1[:], numba.i1, numba.f8, numba.f8, numba.f8),
 #            cache=True, nogil=True, fastmath=True)
 @numba.njit(cache=True, nogil=True, fastmath=True)
