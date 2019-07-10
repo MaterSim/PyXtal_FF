@@ -179,7 +179,6 @@ def get_G2(num_of_cores, atom_types, cores_species, cores_coordinates,
         g = []
         for eta in etas:
             for atom in atom_types:
-                print(neighbors_coordinates[i])
                 g.append(G2(Ri=cores_coordinates[i],
                             n_coordinates=neighbors_coordinates[i],
                             n_species=neighbors_species[i],
@@ -230,9 +229,9 @@ def get_G2(num_of_cores, atom_types, cores_species, cores_coordinates,
     
     return G, Gp
 
-#@numba.njit(cache=True, nogil=True, fastmath=True)
-@numba.njit(numba.f8(numba.f8[:], numba.f8[:,:], numba.i1[:], numba.i1, numba.f8, numba.f8, numba.f8),
-            cache=True, nogil=True, fastmath=True)
+#@numba.njit(numba.f8(numba.f8[:], numba.f8[:,:], numba.i1[:], numba.i1, numba.f8, numba.f8, numba.f8),
+#            cache=True, nogil=True, fastmath=True)
+@numba.njit(cache=True, nogil=True, fastmath=True)
 def G2(Ri, n_coordinates, n_species, atom, Rc=6.5, Rs=0., eta=2):
     G2 = 0
     for j in range(len(n_coordinates)):
