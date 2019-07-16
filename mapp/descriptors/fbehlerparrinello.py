@@ -1710,6 +1710,9 @@ def Kronecker(a,b):
     return kronecker
 
 # Test
+# To run this test script you need to make sure fbehlerparrinello.py 
+# know where to find neighborhood (see line 4).
+
 #from ase.calculators.emt import EMT
 #from ase.build import fcc110
 #from ase import Atoms, Atom
