@@ -1,5 +1,7 @@
 import numpy as np
 import itertools
+from numba import jit
+from pprint import pprint
 
 
 ################################ Gaussian Class ###############################
@@ -19,7 +21,7 @@ class BehlerParrinello:
     derivative: bool
         If True, calculate the derivatives of symmetry functions.
     """
-    def __init__(self, crystal, symmetry_parameters, derivative=False):
+    def __init__(self, crystal, symmetry_parameters, derivative=True):
         self.crystal = crystal
         self.symmetry_parameters = symmetry_parameters
 
@@ -195,7 +197,7 @@ class BehlerParrinello:
                                     e_type=ele,
                                     functional=functional,
                                     Rc=Rc, k=kappa))
-                G.append(g)
+                G.append((self.crystal[i].species_string, g))
 
             if derivative:
                 for i in range(n_core):
@@ -211,7 +213,7 @@ class BehlerParrinello:
                                              Rc=Rc,
                                              k=kappa, 
                                              p=i, q=q))
-                        Gp.append(gp)
+                        Gp.append(((i, self.crystal[i].species_string, i, self.crystal[i].species_string, q),gp))
                         
                         for n in neighbors_info[i]:
                             if n[3] == (0.0, 0.0, 0.0):
@@ -228,7 +230,7 @@ class BehlerParrinello:
                                                          k=kappa, 
                                                          p=i, q=q)
                                         gp.append(prime)
-                                Gp.append(gp)
+                                Gp.append(((i, self.crystal[i].species_string, n[2], self.crystal[n[2]].species_string, q),gp))
 
         elif G_type == 'G4':
             for i in range(n_core):
@@ -243,7 +245,7 @@ class BehlerParrinello:
                                             functional=functional,
                                             Rc=Rc, eta=eta, 
                                             lamBda=lb, zeta=zeta))
-                G.append(g)
+                G.append((self.crystal[i].species_string, g))
              
             if derivative:
                 for i in range(n_core):
@@ -265,7 +267,7 @@ class BehlerParrinello:
                                                            lamBda=lb, 
                                                            zeta=zeta, 
                                                            p=i, q=q))
-                        Gp.append(gp)
+                        Gp.append(((i, self.crystal[i].species_string, i, self.crystal[i].species_string, q), gp))
                         
                         for n in neighbors_info[i]:
                             if n[3] == (0.0, 0.0, 0.0):
@@ -287,7 +289,7 @@ class BehlerParrinello:
                                                                  zeta=zeta, 
                                                                  p=i, q=q)
                                                 gp.append(prime)
-                                Gp.append(gp)
+                                Gp.append(((i, self.crystal[i].species_string, n[2], self.crystal[n[2]].species_string, q), gp))
 
         elif G_type == 'G5':
             for i in range(n_core):
@@ -302,7 +304,7 @@ class BehlerParrinello:
                                             functional=functional,
                                             Rc=Rc, eta=eta, 
                                             lamBda=lb, zeta=zeta))
-                G.append(g)
+                G.append((self.crystal[i].species_string, g))
              
             if derivative:
                 for i in range(n_core):
@@ -324,7 +326,7 @@ class BehlerParrinello:
                                                            lamBda=lb, 
                                                            zeta=zeta, 
                                                            p=i, q=q))
-                        Gp.append(gp)
+                        Gp.append(((i, self.crystal[i].species_string, i, self.crystal[i].species_string, q), gp))
                         
                         for n in neighbors_info[i]:
                             if n[3] == (0.0, 0.0, 0.0):
@@ -346,7 +348,7 @@ class BehlerParrinello:
                                                                  zeta=zeta, 
                                                                  p=i, q=q)
                                                 gp.append(prime)
-                                Gp.append(gp)
+                                Gp.append(((i, self.crystal[i].species_string, n[2], self.crystal[n[2]].species_string, q),gp))
 
         return G, Gp
 
@@ -454,47 +456,130 @@ class BehlerParrinello:
             G2s['Gprime'] = self.G2_prime
 
             if Gs != None:
-                Gs['G'] = np.hstack((Gs['G'], G2s['G']))
-                Gs['Gprime'] = np.hstack((Gs['Gprime'], G2s['Gprime']))
+                assert len(G2s['G']) == len(Gs['G']), "The length of two symmetry function are different"
+                assert len(G2s['Gprime']) == len(Gs['Gprime']), "The length of two derivative of the symmetry function are different"
+                
+                for i in range(len(Gs['G'])):
+                    atom1, d1 = Gs['G'][i]
+                    atom2, d2 = G2s['G'][i]
+                    if atom1 == atom2:
+                        d = d1 + d2
+                        Gs['G'][i] = (atom1, d)
+                    else:
+                        print("defected")
+
+                for j in range(len(Gs['Gprime'])):
+                    pair_atom1, dp1 = Gs['Gprime'][j]
+                    pair_atom2, dp2 = G2s['Gprime'][j]
+                    if pair_atom1 == pair_atom2:
+                        dp = dp1 + dp2
+                        Gs['Gprime'][j] = (pair_atom1, dp)
+                    else:
+                        print("defected")
+            
             else:
                 Gs = G2s
-        
+
         if self.G3_parameters is not None:
+            G3s = {}
             self._check_sanity(self.G3_parameters, self.G3_keywords)
             self.G3, self.G3_prime = self.calculate('G3', self.G3_parameters, 
                                                     derivative)
-            G3s = np.vstack((self.G3, self.G3_prime))
-            
-            if Gs != []:
-                Gs = np.hstack((Gs, G3s))
+            G3s['G'] = self.G3
+            G3s['Gprime'] = self.G3_prime
+
+            if Gs != None:
+                assert len(G3s['G']) == len(Gs['G']), "The length of two symmetry function are different"
+                assert len(G3s['Gprime']) == len(Gs['Gprime']), "The length of two derivative of the symmetry function are different"
+                
+                for i in range(len(Gs['G'])):
+                    atom1, d1 = Gs['G'][i]
+                    atom2, d2 = G3s['G'][i]
+                    if atom1 == atom2:
+                        d = d1+d2
+                        Gs['G'][i] = (atom1, d)
+                    else:
+                        print("defected")
+
+                for j in range(len(Gs['Gprime'])):
+                    pair_atom1, dp1 = Gs['Gprime'][j]
+                    pair_atom2, dp2 = G3s['Gprime'][j]
+                    if pair_atom1 == pair_atom2:
+                        dp = dp1 + dp2
+                        Gs['Gprime'][j] = (pair_atom1, dp)
+                    else:
+                        print("defected")
             else:
                 Gs = G3s
 
         if self.G4_parameters is not None:
+            G4s = {}
             self._check_sanity(self.G4_parameters, self.G4_keywords)
             self.G4, self.G4_prime = self.calculate('G4', self.G4_parameters, 
                                                     derivative)
-            G4s = np.vstack((self.G4, self.G4_prime))
             
-            if Gs != []:
-                Gs = np.hstack((Gs, G4s))
+            G4s['G'] = self.G4
+            G4s['Gprime'] = self.G4_prime
+
+            if Gs != None:
+                assert len(G4s['G']) == len(Gs['G']), "The length of two symmetry function are different"
+                assert len(G4s['Gprime']) == len(Gs['Gprime']), "The length of two derivative of the symmetry function are different"
+
+                for i in range(len(Gs['G'])):
+                    atom1, d1 = Gs['G'][i]
+                    atom2, d2 = G4s['G'][i]
+                    if atom1 == atom2:
+                        d = d1 + d2
+                        Gs['G'][i] = (atom1, d)
+                    else:
+                        print("defected")
+
+                for j in range(len(Gs['Gprime'])):
+                    pair_atom1, dp1 = Gs['Gprime'][j]
+                    pair_atom2, dp2 = G4s['Gprime'][j]
+                    if pair_atom1 == pair_atom2:
+                        dp = dp1 + dp2
+                        Gs['Gprime'][j] = (pair_atom1, dp)
+                    else:
+                        print("defected")
+            
             else:
                 Gs = G4s
 
         if self.G5_parameters is not None:
+            G5s = {}
             self._check_sanity(self.G5_parameters, self.G5_keywords)
             self.G5, self.G5_prime = self.calculate('G5', self.G5_parameters, 
                                                     derivative)
-            G5s = np.vstack((self.G5, self.G5_prime))
+            G5s['G'] = self.G5
+            G5s['Gprime'] = self.G5_prime
+
+            if Gs != None:
+                assert len(G5s['G']) == len(Gs['G']), "The length of two symmetry function are different"
+                assert len(G5s['Gprime']) == len(Gs['Gprime']), "The length of two derivative of the symmetry function are different"
+
+                for i in range(len(Gs['G'])):
+                    atom1, d1 = Gs['G'][i]
+                    atom2, d2 = G5s['G'][i]
+                    if atom1 == atom2:
+                        d = d1 + d2
+                        Gs['G'][i] = (atom1, d)
+                    else:
+                        print("defected")
+
+                for j in range(len(Gs['Gprime'])):
+                    pair_atom1, dp1 = Gs['Gprime'][j]
+                    pair_atom2, dp2 = G5s['Gprime'][j]
+                    if pair_atom1 == pair_atom2:
+                        dp = dp1 + dp2
+                        Gs['Gprime'][j] = (pair_atom1, dp)
+                    else:
+                        print("defected")
             
-            if Gs != []:
-                Gs = np.hstack((Gs, G5s))
             else:
                 Gs = G5s
-
-        self.Gs = Gs
         
-        return self.Gs
+        return Gs
     
     
     def _check_sanity(self, G_parameters, G_keywords):
@@ -657,7 +742,7 @@ def dcos_dRpq(a, b, c, Ra, Rb, Rc, p, q):
                     dRab_dRpq(a, b, Ra, Rb, p, q)
     fo_term = np.dot(Rab_vector, Rac_vector) / Rab / Rac ** 2 * \
                     dRab_dRpq(a, c, Ra, Rc, p, q)
-                    
+    
     return (f_term + s_term - t_term - fo_term)
 
 
@@ -1005,8 +1090,8 @@ def G2(crystal, i, e_type, functional='Cosine', Rc=6.5, eta=2, Rs=0.0):
         func = Polynomial(Rc=Rc)
     elif functional == 'TangentH':
         func = TangentH(Rc=Rc)
-    else:
-        raise NotImplementedError('Unknown cutoff functional: %s' %functional)
+    #else:
+    #    raise NotImplementedError('Unknown cutoff functional: %s' %functional)
         
     # Get positions of core atoms
     Ri = crystal.cart_coords[i]
@@ -1067,8 +1152,8 @@ def G2_prime(crystal, i, e_type, ni, functional='Cosine',
         func = Polynomial(Rc=Rc)
     elif functional == 'TangentH':
         func = TangentH(Rc=Rc)
-    else:
-        raise NotImplementedError('Unknown cutoff functional: %s' %functional)
+    #else:
+    #    raise NotImplementedError('Unknown cutoff functional: %s' %functional)
     
     # Get positions of core atoms
     Ri = crystal.cart_coords[i]
@@ -1192,8 +1277,8 @@ def G3_prime(crystal, i, e_type, ni, functional='Cosine',
         func = Polynomial(Rc=Rc)
     elif functional == 'TangentH':
         func = TangentH(Rc=Rc)
-    else:
-        raise NotImplementedError('Unknown cutoff functional: %s' %functional)
+    #else:
+    #    raise NotImplementedError('Unknown cutoff functional: %s' %functional)
 
     # Get positions of core atoms
     Ri = crystal.cart_coords[i]
@@ -1264,8 +1349,8 @@ def G4(crystal, i, ep_type, functional='Cosine',
         func = Polynomial(Rc=Rc)
     elif functional == 'TangentH':
         func = TangentH(Rc=Rc)
-    else:
-        raise NotImplementedError('Unknown cutoff functional: %s' %functional)
+    #else:
+    #    raise NotImplementedError('Unknown cutoff functional: %s' %functional)
 
     # Get core atoms information
     Ri = crystal.cart_coords[i]
@@ -1300,7 +1385,7 @@ def G4(crystal, i, ep_type, functional='Cosine',
                 term *= func(Rij) * func(Rik) * func(Rjk)
                 G4 += term
     G4 *= 2. ** (1. - zeta)
-        
+    
     return G4
 
 
@@ -1352,8 +1437,8 @@ def G4_prime(crystal, i, ep_type, ni, functional='Cosine',
         func = Polynomial(Rc=Rc)
     elif functional == 'TangentH':
         func = TangentH(Rc=Rc)
-    else:
-        raise NotImplementedError('Unknown cutoff functional: %s' %functional)
+    #else:
+    #    raise NotImplementedError('Unknown cutoff functional: %s' %functional)
         
     # Get positions of core atoms
     Ri = crystal.cart_coords[i]
@@ -1471,8 +1556,8 @@ def G5(crystal, i, ep_type, functional='Cosine',
         func = Polynomial(Rc=Rc)
     elif functional == 'TangentH':
         func = TangentH(Rc=Rc)
-    else:
-        raise NotImplementedError('Unknown cutoff functional: %s' %functional)
+    #else:
+    #    raise NotImplementedError('Unknown cutoff functional: %s' %functional)
     
     # Get core atoms information
     Ri = crystal.cart_coords[i]
@@ -1500,7 +1585,7 @@ def G5(crystal, i, ep_type, functional='Cosine',
                 term *= func(Rij) * func(Rik)
                 G5 += term
     G5 *= 2. ** (1. - zeta)
-        
+       
     return G5
 
 
@@ -1605,19 +1690,44 @@ def G5_prime(crystal, i, ep_type, ni, functional='Cosine',
         
     return G5p
 
+# Test
+#from ase.calculators.emt import EMT
+#from ase.build import fcc110
+#from ase import Atoms, Atom
+#from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
+#from ase import units
+#from ase.md import VelocityVerlet
+#from ase.constraints import FixAtoms
 
-# Test run
 #from pymatgen.core.structure import Structure
+#from pymatgen.io.ase import AseAtomsAdaptor
 #
-#crystal = Structure.from_file('../datasets/POSCARs/POSCAR-NaCl')
-#
-#sym_params = {'G3': {'kappa': np.logspace(np.log10(0.05), 
-#                                         np.log10(5.), num=4),
-#                    'Rc': 6.5},
-#                'G4': {'eta': [0.005],
-#                        'zeta': [1., 4.],
-#                        'lamBda': [1., -1.]}}
-#
-#g = Gaussian(crystal, sym_params, derivative=True)
-#
-#descriptor = g.Gs # all symmetry calculation of G3 and G4
+#def generate_data(count):
+#    """Generates test or training data with a simple MD simulation."""
+#    atoms = fcc110('Pt', (2, 2, 2), vacuum=7.)
+#    adsorbate = Atoms([Atom('Cu', atoms[7].position + (0., 0., 2.5)),
+#                       Atom('Cu', atoms[7].position + (0., 0., 5.))])
+#    atoms.extend(adsorbate)
+#    atoms.set_constraint(FixAtoms(indices=[0, 2]))
+#    MaxwellBoltzmannDistribution(atoms, 300. * units.kB)
+#    dyn = VelocityVerlet(atoms, dt=1. * units.fs)
+#    atoms.set_calculator(EMT())
+#    newatoms = atoms.copy()
+#    newatoms.set_calculator(EMT())
+#    newatoms.get_potential_energy()
+#    images = [newatoms]
+#    for step in range(count - 1):
+#        dyn.run(50)
+#        newatoms = atoms.copy()
+#        newatoms.set_calculator(EMT())
+#        newatoms.get_potential_energy()
+#        images.append(newatoms)
+#    return images
+
+#crystal = AseAtomsAdaptor.get_structure(generate_data(1)[0])
+
+#symmetry = {'G4': {'lamBda': [1], 'zeta':[1], 'eta': [0.036, 0.071,], 
+#                   'Rc': 5.2}}
+#symmetry = {'G2': {'eta': [0.036, 0.071,]}}
+#bp = BehlerParrinello(crystal, symmetry,)
+
