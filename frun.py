@@ -3,12 +3,14 @@ import json
 from mapp.descriptors.fbehlerparrinello import BehlerParrinello
 from mapp.models.fneuralnetwork import fNeuralNetwork
 
-data = loadfn("mapp/datasets/Si/training.json")[:2]
+no_of_structures = 2
 
-descriptors = loadfn("BehlerParrinello.json")
+data = loadfn("mapp/datasets/Si/training.json")[:no_of_structures]
+
+#descriptors = loadfn("BehlerParrinello.json")
 
 features = {}
-#structures = [d['structure'] for d in data]
+structures = [d['structure'] for d in data]
 structures = []
 for i, d in enumerate(data):
     structures.append(d['structure'])
@@ -19,7 +21,7 @@ for i, d in enumerate(data):
 symmetry = {'G2': {'eta': [0.036, 0.071,]},
             'G4': {'lambda': [-1, 1], 'zeta':[1], 'eta': [0.036, 0.071,]}}
 
-#descriptors = BehlerParrinello(symmetry, Rc=5.2, derivative=True)
+descriptors = BehlerParrinello(symmetry, Rc=5.2, derivative=True)
 
 model = fNeuralNetwork(elements=['Si'])
-model.train(None, descriptors=descriptors, features=features, save=False)
+model.train(structures, descriptors=descriptors, features=features, save=True)

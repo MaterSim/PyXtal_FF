@@ -23,7 +23,7 @@ class Model:
        if model == 'BehlerParrinello':
            for i in range(N):
                bp = descriptors.fit(structures[i])
-               d[str(i)] = bp
+               d[i] = bp
        
        else:
            msg = f"The {model} is invalid."
