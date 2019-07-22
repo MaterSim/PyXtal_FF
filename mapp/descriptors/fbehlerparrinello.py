@@ -7,7 +7,7 @@ from ..utilities.neighborhood import Element, Neighborhood
 ################################ Gaussian Class ###############################
 
 
-class fBehlerParrinello:
+class BehlerParrinello:
     """A class that calculates Behler-Parrinello symmetry functions.
     
     The forms of the functions are consistent with the 
@@ -20,8 +20,6 @@ class fBehlerParrinello:
         
     Parameters
     ----------
-    crystal: object
-        Pymatgen Structure object.
     symmetry_parameters: dict
         The parameters for the symmetry functions to be calculated.
         i.e. {'G2': {'eta': [0.05, 0.1]}}
@@ -30,13 +28,15 @@ class fBehlerParrinello:
     derivative: bool
         If True, calculate the derivatives of symmetry functions.
     
-    To do:
-        1. Implement G1
-        2. Derivative = False
+    Not very important to do list:
+        1. Implement G1.
+        2. Derivative = False (Now the derivative is always True).
         3. Add a variety of cutoff functionals: Polynomial or Tanh.
-        4. Fix warning pair_atoms
+        4. Fix warning pair_atoms.
     """
-    def __init__(self, crystal, symmetry_parameters, Rc=6.5, derivative=True):
+    def __init__(self, symmetry_parameters, Rc=6.5, derivative=True):
+        self._type = 'BehlerParrinello'
+        
         # Set up the symmetry parameters keywords. If a string are not in the
         # keyword, code will return an error.
         self.G1_keywords = []
@@ -45,6 +45,51 @@ class fBehlerParrinello:
         self.G4_keywords = ['eta', 'lambda', 'zeta',]
         self.G5_keywords = ['eta', 'lambda', 'zeta',]
         
+        # Setting up parameters for each of the symmetry function type.
+        self.symmetry_parameters = symmetry_parameters
+        self.G_types = [] # ['G2', 'G4']
+        self.G1_parameters = None
+        self.G2_parameters = None
+        self.G3_parameters = None
+        self.G4_parameters = None
+        self.G5_parameters = None
+        for key, value in self.symmetry_parameters.items():
+            if key == 'G1':
+                self.G1_parameters = value
+                self.G_types.append(key)
+            elif key == 'G2':
+                self.G2_parameters = value
+                self.G_types.append(key)
+            elif key == 'G3':
+                self.G3_parameters = value
+                self.G_types.append(key)
+            elif key == 'G4':
+                self.G4_parameters = value
+                self.G_types.append(key)
+            else:
+                self.G5_parameters = value
+                self.G_types.append(key)
+        
+        self.Rc = Rc
+        
+        self.derivative = derivative
+        
+    
+    def fit(self, crystal):
+        """This method calculates all the symmetry functions defined in the 
+        symmetry_parameters. This method also arranges the symmetry functions
+        to a desireable format for Neural Network model.
+        
+        Parameters
+        ----------
+        crystal: object
+            Pymatgen Structure object.
+        
+        Returns
+        -------
+        all_G: dict of symmetry functions
+            All desired symmetry functions converted from a crystal structure.
+        """
         # Extract useful quantities from Pymatgen Structure object.
         self.crystal = crystal
         self.num_of_cores = crystal.num_sites # Integer
@@ -64,7 +109,7 @@ class fBehlerParrinello:
         self.cores_coordinates = np.asarray(self.cores_coordinates)
         
         # Obtain neighbors info.
-        neighbors = crystal.get_all_neighbors(Rc,
+        neighbors = crystal.get_all_neighbors(self.Rc,
                                               include_index=True,
                                               include_image=True)
         neighbors_species = []
@@ -95,57 +140,12 @@ class fBehlerParrinello:
         self.neighbors_images = neighbors.get_images()
         self.neighbors_indexes = neighbors.get_indexes()
         
-        self.Rc = Rc
-        
-        # Setting up parameters for each of the symmetry function type.
-        self.symmetry_parameters = symmetry_parameters
-        self.G_types = [] # ['G2', 'G4']
-        self.G1_parameters = None
-        self.G2_parameters = None
-        self.G3_parameters = None
-        self.G4_parameters = None
-        self.G5_parameters = None
-        for key, value in self.symmetry_parameters.items():
-            if key == 'G1':
-                self.G1_parameters = value
-                self.G_types.append(key)
-            elif key == 'G2':
-                self.G2_parameters = value
-                self.G_types.append(key)
-            elif key == 'G3':
-                self.G3_parameters = value
-                self.G_types.append(key)
-            elif key == 'G4':
-                self.G4_parameters = value
-                self.G_types.append(key)
-            else:
-                self.G5_parameters = value
-                self.G_types.append(key)
-        
-        # Calculate and obtain all the symmetry functions defined in the
-        # symmetry_parameters.
-        # This is the attribute that needed to be passed in the main script
-        # to the Neural Network model.
-        self.Gs = self.get_all_G(derivative)
-        
-    
-    def get_all_G(self, derivative):
-        """This method calculates all the symmetry functions defined in the 
-        symmetry_parameters. This method also arranges the symmetry functions
-        to a desireable format for Neural Network model.
-        
-        Parameters
-        ----------
-        derivative: bool
-        If True, calculate the derivatives of symmetry functions.
-        (Note: this still needs to be fixed for False.)
-        """
         all_G = None
                 
         if self.G1_parameters is not None:
             G1 = {}
             
-            self.G1, self.G1_prime = get_G1(derivative)
+            self.G1, self.G1_prime = get_G1(self.derivative)
             G1['G'] = self.G1
             G1['Gprime'] = self.G1_prime
             all_G = G1
@@ -200,17 +200,17 @@ class fBehlerParrinello:
             for i in range(self.num_of_cores):
                 G2['G'].append((self.c_species[i], g2[i]))
                 for q in range(3):
-                    G2['Gprime'].append(((i, self.c_species[i], i, 
-                                          self.c_species[i], q),
+                    G2['Gprime'].append(((int(i), self.c_species[i], int(i), 
+                                          self.c_species[i], int(q)),
                                         g2Prime[count]))
                     count += 1
                     for j in range(self.neighbors_limit[i]):
                         if (self.neighbors_images[i][j] == [0., 0., 0.]).all():
                             index = self.neighbors_indexes[i][j]
-                            G2['Gprime'].append(((i, self.c_species[i],
-                                                  index,
+                            G2['Gprime'].append(((int(i), self.c_species[i],
+                                                  int(index),
                                                   self.c_species[index],
-                                                  q), g2Prime[count]))
+                                                  int(q)), g2Prime[count]))
                             count += 1
             
             # Arrange G2 to be combined with all_G
@@ -286,17 +286,17 @@ class fBehlerParrinello:
             for i in range(self.num_of_cores):
                 G3['G'].append((self.c_species[i], g3[i]))
                 for q in range(3):
-                    G3['Gprime'].append(((i, self.c_species[i], i,
-                                          self.c_species[i], q),
+                    G3['Gprime'].append(((int(i), self.c_species[i], int(i),
+                                          self.c_species[i], int(q)),
                                         g3Prime[count]))
                     count += 1
                     for j in range(self.neighbors_limit[i]):
                         if (self.neighbors_images[i][j] == [0., 0., 0.]).all():
                             index = self.neighbors_indexes[i][j]
-                            G3['Gprime'].append(((i, self.c_species[i],
-                                                  index,
+                            G3['Gprime'].append(((int(i), self.c_species[i],
+                                                  int(index),
                                                   self.c_species[index],
-                                                  q), g3Prime[count]))
+                                                  int(q)), g3Prime[count]))
                             count += 1
 
             # Arrange G3 to be combined with all_G
@@ -381,17 +381,17 @@ class fBehlerParrinello:
             for i in range(self.num_of_cores):
                 G4['G'].append((self.c_species[i], g4[i]))
                 for q in range(3):
-                    G4['Gprime'].append(((i, self.c_species[i], i, 
-                                          self.c_species[i], q),
+                    G4['Gprime'].append(((int(i), self.c_species[i], int(i), 
+                                          self.c_species[i], int(q)),
                                         g4Prime[count]))
                     count += 1
                     for j in range(self.neighbors_limit[i]):
                         if (self.neighbors_images[i][j] == [0., 0., 0.]).all():
                             index = self.neighbors_indexes[i][j]
-                            G4['Gprime'].append(((i, self.c_species[i],
-                                                  index,
+                            G4['Gprime'].append(((int(i), self.c_species[i],
+                                                  int(index),
                                                   self.c_species[index],
-                                                  q), g4Prime[count]))
+                                                  int(q)), g4Prime[count]))
                             count += 1
                             
             # Arrange G4 to be combined with all_G
@@ -476,17 +476,17 @@ class fBehlerParrinello:
             for i in range(self.num_of_cores):
                 G5['G'].append((self.c_species[i], g5[i]))
                 for q in range(3):
-                    G5['Gprime'].append(((i, self.c_species[i], i, 
-                                          self.c_species[i], q), 
+                    G5['Gprime'].append(((int(i), self.c_species[i], int(i), 
+                                          self.c_species[i], int(q)), 
                                         g5Prime[count]))
                     count += 1
                     for j in range(self.neighbors_limit[i]):
                         if (self.neighbors_images[i][j] == [0., 0., 0.]).all():
                             index = self.neighbors_indexes[i][j]
-                            G5['Gprime'].append(((i, self.c_species[i],
-                                                  index, 
+                            G5['Gprime'].append(((int(i), self.c_species[i],
+                                                  int(index), 
                                                   self.c_species[index], 
-                                                  q), g5Prime[count]))
+                                                  int(q)), g5Prime[count]))
                             count += 1
                             
             # Arrange G5 to be combined with all_G
@@ -515,8 +515,10 @@ class fBehlerParrinello:
                         print("Defected!")
             else:
                 all_G = G5
-                
-        return all_G
+         
+        self.all_G = all_G
+        
+        return self.all_G
         
 
 ########################### Symmetry Functions ################################
@@ -1710,9 +1712,6 @@ def Kronecker(a,b):
     return kronecker
 
 # Test
-# To run this test script you need to make sure fbehlerparrinello.py 
-# know where to find neighborhood (see line 4).
-
 #from ase.calculators.emt import EMT
 #from ase.build import fcc110
 #from ase import Atoms, Atom
