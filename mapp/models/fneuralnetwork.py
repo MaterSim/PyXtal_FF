@@ -95,7 +95,7 @@ class fNeuralNetwork(Model):
 
         
         self.no_of_structures = len(self.descriptors)                     # number of columns
-        self.no_of_descriptors = len(self.descriptors["0"]['G'][0][1])    # number of rows
+        self.no_of_descriptors = len(self.descriptors[0]['G'][0][1])    # number of rows
         
         # Calculate the range of the descriptors and scaling the energy.
         self.drange = self.descriptor_range(self.no_of_structures,
@@ -140,9 +140,9 @@ class fNeuralNetwork(Model):
         for i in range(self.no_of_structures):
             nd = []
             nde = []
-            for j in range(len(self.descriptors[str(i)]['G'])):
-                nd.append(np.asarray(self.descriptors[str(i)]['G'][j][1]))
-                nde.append(self.descriptors[str(i)]['G'][j][0])
+            for j in range(len(self.descriptors[i]['G'])):
+                nd.append(np.asarray(self.descriptors[i]['G'][j][1]))
+                nde.append(self.descriptors[i]['G'][j][0])
             self.nb_descriptors[i] = np.asarray(nd)
             nb_descriptor_elements.append(nde)
             
@@ -174,7 +174,8 @@ class fNeuralNetwork(Model):
         for i in range(self.no_of_structures):
             ndt = []
             ndp = []
-            for x, y in descriptors[str(i)]['Gprime']:
+
+            for x, y in self.descriptors[i]['Gprime']:
                 ndt.append(_convert_tuple(x, self.elements))
                 ndp.append(y)
             self.nb_dprime_tuple[i] = np.asarray(ndt)
@@ -279,9 +280,9 @@ class fNeuralNetwork(Model):
             The range of the descriptors for each element species.
         """
         drange = {}
-
+        
         for i in range(no_of_structures):
-            for _ in descriptors[str(i)]['G']:
+            for _ in descriptors[i]['G']:
                 element = _[0]
                 descriptor = _[1]
                 if element not in drange.keys():
