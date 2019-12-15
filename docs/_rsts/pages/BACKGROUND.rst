@@ -41,7 +41,21 @@ In order to calculate the force, :math:`\frac{\partial G}{\partial r}` are also 
 
 Bispectrum Coefficients
 ^^^^^^^^^^^^^^^^^^^^^^^
-Originally proposed by *** [3]_. A similar descriptor was also implemented to the LAMMPS code [4]_.
+Similar to Gaussian symmetry functions, SO(4) bispectrum can be used to represent the local atomic environments. It was first introduced by Bartok [3]_. Later, Thompson *et al.* proposed the spectral neighbor analysis method (SNAP) method and demonstrated that the SO(4) bispectrum could achieve satisfactory accuracy based on the simple linear [4]_ and quadratic regressions [5]_. Following the original work, the expression of SO(4) bispectrum is formed by the expansion coefficients of 4D hyperspherical harmonics:
+
+.. math::
+    B_{i}^{l_1,l_2,l} = \sum_{m, m'=-l}^{l} (c^{l}_{m',m})^* 
+    \sum_{m_1, m_1'=-l_1}^{l_1} \sum_{m_2, m_2'=-l_2}^{l_2}c^{l_1}_{m_1',m_1} c^{l_2}_{m_2',m_2} H^{l, m, m'}_{l_1,m_1,m_1',l_2,m_2,m_2'}
+
+where $H^{l_1, l_2, l}_{m_1',m_2',m',m_1,m_2,m}$ is the analog to the Clebsch-Gordan coefficients on the 3-sphere.  In application, it is the product of two ordinary Clebsch-Gordan coefficients on the 2-sphere. $c^{l,m}_{l_1, m_1, l_2, m_2}$ are the expansion coefficients from the hyperspherical harmonics ($U^{l}_{m',m}$) functions that are projected from the atomic neighborhood density within a cutoff radius onto the surface of four-dimensional sphere:
+
+.. math::
+    \rho = \sum_{l=0}^{+\infty}\sum_{m=-l}^{+l}\sum_{m'=-l}^{+l}c^l_{m',m}U^{l}_{m',m}
+
+where the expansion coefficients are defined as
+
+.. math::
+    c^l_{m',m} = \left<U^l_{m',m}|\rho\right>
 
 Force Field Training
 --------------------
@@ -51,7 +65,8 @@ Type of nns, optimazation techniques, etc.
 .. [1] Albert P Bartok, Risi Kondor and Gabor Csanyi, “On representing chemical environments,” Phys. Rev. B 87, 184115 (2013)
 .. [2] Jorg Behler and Michele Parrinello, “Generalized neural-network representation of high-dimensional potential-energy surfaces,” Phys. Rev. Lett. 98, 146401 (2007)
 .. [3] Albert P Bartok, Mike C Payne, Risi Kondor and Gabor Csanyi, “Gaussian approximation potentials: The accuracy of quantum mechan-ics, without the electrons,” Phys. Rev. Lett. 104, 136403 (2010)
-.. [4] A.P. Thompson, L.P. Swiler, C.R. Trott, S.M. Foiles and G.J. Tucker, “Spectral neighbor analysis method for automated generation ofquantum-accurate interatomic potentials,” J. Comput. Phys. 285, 316–330 (2015)  
+.. [4] A.P. Thompson, L.P. Swiler, C.R. Trott, S.M. Foiles and G.J. Tucker, “Spectral neighbor analysis method for automated generation ofquantum-accurate interatomic potentials,” J. Comput. Phys. 285, 316–330 (2015) 
+.. [5] M. A. Wood and A. P. Thompson, J. Chem. Phys. 148, 241721 (2018).
 
 
 
