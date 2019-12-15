@@ -8,21 +8,7 @@ PyXtalFF involves two important components: `crystal descriptors` and `force fie
  
 Atomic Descriptors
 ------------------
-Descriptors---representations of a crystal structure---play an essential part in constructing MLIAP. Due to the periodic boundary conditions, Cartesian coordinates poorly describe the structural environment. While the energy of a crystal structure remains unchanged, the Cartesian coordinates change as transnational or rotational operation is applied to it [1]_. Thus, physically meaningful descriptors must withhold the change as the alterations are performed to the structural environment. In another words, the descriptors need to be invariant with respect to translation and rotational operations, and the exchanges of any equivalent atom. With invariant descriptors (:math:`\delta`) for each atom, the total energy as a sum of each atomic energy can be written in the following form:
-
-.. math::
-
-    E_s = \sum_i^{\textrm{all atoms}} \textrm{E}_i(\delta_i) 
-
-where :math:`\textrm{func}(\delta_i)` is a function of atomic environment (:math:`\textbf{R}_i`) within a cutoff distance (:math:`R_c`).
-
-The atomic energy contributions depend on the local structural environment within a cutoff radius with respect to the center atom *i*. Furthermore, accurate representation of the potential energy surface (PES) is also dependent on the contributions of forces. The force acted on atom j can be expressed by the negative gradient of the energy with respect to its atomic positions (:math:`\boldsymbol{r}_j`):
-
-.. math::
-     \boldsymbol{F}_j=-\sum_i ^{\textrm{all atoms}} \frac{\partial E_i(\boldsymbol{X}_{ij})}{\partial \boldsymbol{X}_{ij}} \cdot \frac{\partial
-    \boldsymbol{X}_{ij}}{\partial \boldsymbol{r}_j}
-
-The functional forms of *E* and *F* are fully dependent on the regression algorithm. Generalized linear regression and neural network (NN) regression will be discussed in the following sections. 
+Descriptors---representations of a crystal structure---play an essential part in constructing MLIAP. Due to the periodic boundary conditions, Cartesian coordinates poorly describe the structural environment. While the energy of a crystal structure remains unchanged, the Cartesian coordinates change as transnational or rotational operation is applied to it [1]_. Thus, physically meaningful descriptors must withhold the change as the alterations are performed to the structural environment. In another words, the descriptors need to be invariant with respect to translation and rotational operations, and the exchanges of any equivalent atom. 
 
 
 Gaussian Symmetry Function
@@ -66,8 +52,48 @@ where the expansion coefficients are defined as
 .. math::
     c^l_{m',m} = \left<U^l_{m',m}|\rho\right>
 
-Force Field Training
---------------------
+Expression of Energy and Forces
+--------------------------------
+With invariant descriptors (:math:`\delta`) for each atom, the total energy as a sum of each atomic energy can be written in the following form:
+
+.. math::
+    E_s = \sum_i^{\textrm{all atoms}} \textrm{E}_i(\delta_i) 
+
+:math:`\delta_i` is a function of atomic environment (:math:`\textbf{R}_i`) within a cutoff distance (:math:`R_c`).
+
+The atomic energy contributions depend on the local structural environment within a cutoff radius with respect to the center atom *i*. Furthermore, accurate representation of PES is also dependent on the contributions of forces. The force acted on atom j can be expressed by the negative gradient of the energy with respect to its atomic positions (:math:`\boldsymbol{r}_j`):
+
+.. math::
+     \boldsymbol{F}_j=-\sum_i ^{\textrm{all atoms}} \frac{\partial E_i(\boldsymbol{X}_{ij})}{\partial \boldsymbol{X}_{ij}} \cdot \frac{\partial
+    \boldsymbol{X}_{ij}}{\partial \boldsymbol{r}_j}
+
+The functional forms of *E* and *F* are fully dependent on the regression algorithm. Generalized linear regression and neural network (NN) regression will be discussed in the following sections. 
+
+Regression Techniques
+----------------------
+The objective in force field fitting is to obtain an explicit (or implicit) functional form which leads to the minimum error compared the energy and forces from quantum calculations. 
+
+Objective Loss Function
+^^^^^^^^^^^^^^^^^^^^^^^
+We can define the objective function as follows,
+
+.. math::
+    \Delta = \frac{1}{2s}\sum_{i=1}^s\Bigg[\bigg(\frac{E_i - E^{\textrm{Ref}}_i}{N_{\textrm{atom}}^i}\bigg)^2 +
+             \frac{\beta} {3N_{\textrm{atom}}^i}\sum_{j=1}^{3N_{\textrm{atom}}^i}
+    (F_{i, j} - F_{i, j}^{\textrm{Ref}})^2 \Bigg]
+    + \frac{\alpha}{2s} \sum_{i=1}^{m} (\boldsymbol{w}^i)^2
+
+where *s* is the total number of structures, *i* loops over all structures, and *j* loops over all atoms for each structure *i* in all directions. :math:`N^{\textrm{atom}}_i` is the total number of atoms in the structure *i*. Here, :math:`\beta` is acting as the balance parameters, as the number of force components is much larger than the number of energies. The cost function compares the predicted values obtained from the regression (:math:`E_i` and :math:`F_{i, j}`) to the true values of :math:`E^{\textrm{Ref}}` and :math:`F_{i, j}^{\textrm{Ref}}`. Then, the optimum solution can be solved by finding the **w** leading to the zero partial derivative of :math:`\Delta` with respect to each element in **w**. 
+
+Linear Regression
+^^^^^^^^^^^^^^^^^^
+
+Neural Networks
+^^^^^^^^^^^^^^^
+
+Gaussian Process Regression
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+We can define the objective function as follows,
 Type of nns, optimazation techniques, etc.
 
 
