@@ -25,7 +25,7 @@ To install
 To install it, one can simply type ``pip install pyxtal_ff`` or make a copy of the source code, and then install it manually.
 ::
 
-    $ git clone https://github.com/qzhu2017/FF-project.git
+    $ git clone https://github.com/qzhu2017/PyXtal_FF.git
     $ cd FF-project
     $ python setup.py install
 
