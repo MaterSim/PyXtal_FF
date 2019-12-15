@@ -10,6 +10,8 @@ Dependencies
 - `Matplotlib>=2.0.0 <https://matplotlib.org>`_
 - `Sklearn>=0.20.0 <http://scikit-learn.github.io/stable>`_
 - `Numba>=0.44.1 <https://numba.pydata.org>`_
+- `ase>=3.18.0 <https://wiki.fysik.dtu.dk/ase/>`_
+
 
 Optionally, the performance of code has been optimized based on GPU accerlation for neural network training.
 
