@@ -1,0 +1,75 @@
+#!/usr/bin/env  python
+# encoding: utf-8
+from optparse import OptionParser
+from pyxtal_ff import PyXtal_FF
+import os
+
+if __name__ == "__main__":
+    parser = OptionParser()
+    parser.add_option("-s", "--source", dest="source", type=str,
+                      help="path of data source, string", metavar='dataset')
+
+    parser.add_option("-l", "--hiddenlayer", dest="hiddenlayer", type=str, default='6, 6',
+                      help="hidden layer, ints separated by comma, e.g. 6, 6")
+
+    parser.add_option("-a", "--activation", dest="activation", type=str,
+                      help="activation function, e.g., tanh, tanh")
+
+    parser.add_option("-d", "--derivative", dest="derivative", default=False, 
+                      action='store_true',
+                      help="calculate dxdr or not, default: False")
+
+    parser.add_option("-e", "--elements", dest="elements", type=str,
+                      help="elements separated by comma, e.g., Si, O")
+
+    parser.add_option("-r", "--runner", dest="runner", default='numpy',
+                      help="backend for NN training, numpy, cupy or torch")
+
+    parser.add_option("-i", "--iteration", dest="iteration", type=int, default=100,
+                      help="number of iterations for NN training, default: 100")
+
+    parser.add_option("-o", "--optimization", dest="optimization", type=str, default='L-BFGS-B',
+                      help="optimization method used in trainning")
+
+    parser.add_option("-t", "--type", dest="type", type=str, default='Bispectrum',
+                      help="descriptor type: default: Bispectrum")
+
+    parser.add_option("-c", "--cutoff", dest="cutoff", type=float, default=6.0,
+                      help="cut off for descriptor calc: default: 6.0")
+
+
+    (options, args) = parser.parse_args()
+
+    train_data = options.source
+    system = options.elements.split(',')
+
+    descriptor = {'type': options.type,
+                  'Rc': options.cutoff,
+                  'derivative': options.derivative,
+                 }
+
+
+    hidden_layers = []
+    for item in options.hiddenlayer.split(','):
+        hidden_layers.append(int(item))
+
+    activation = []
+    if options.activation is None:
+        for h in hidden_layers:
+            activation.append('tanh')
+    else:
+        activation = options.activation.split(',')
+
+    activation.append('linear')
+
+    optimizer = {'method': options.optimization,
+                 'parameters': {'options': {'maxiter': options.iteration}}}
+
+    NN_model = {'system': system,
+                'hiddenlayers': hidden_layers,
+                'activation': activation,
+                'runner': options.runner,
+                'optimizer': optimizer,
+               }
+    mode = PyXtal_FF(TrainData=train_data, descriptors=descriptor, model=NN_model)
+    mode.run()
