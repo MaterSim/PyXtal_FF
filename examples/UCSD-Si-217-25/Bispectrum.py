@@ -1,8 +1,8 @@
 # a slight modification based on table S5 from https://arxiv.org/pdf/1906.08888.pdf
 from pyxtal_ff import PyXtal_FF
 
-train_data = "../../pyxtal_ff/datasets/Si/UCSD/training.json"
-test_data = "../../pyxtal_ff/datasets/Si/UCSD/test.json" 
+train_data = "training.json"
+test_data = "test.json" 
 
 NN_model = {'system': ['Si'],
             'hiddenlayers': [3,3],
@@ -16,7 +16,7 @@ NN_model = {'system': ['Si'],
            }
 descriptors = {'derivative': True,
                'Rc': 4.9,
-               'parameters': {'lmax': 4, 'opt': 'recursive', 'rfac':0.99363}}
+               'parameters': {'lmax': 4}}
 
 #-------------------------------- Run NN calculation ------------------------------
 trainer = PyXtal_FF(TrainData=train_data, TestData=test_data, 
