@@ -1,5 +1,5 @@
 import os
-from pyxtal_ff.models import NeuralNetwork
+from pyxtal_ff.models.neuralnetwork import NeuralNetwork
 from pyxtal_ff.models.polynomialregression import PR
 from pyxtal_ff.utilities import convert_to_descriptor
 from pyxtal_ff.version import __version__
@@ -73,11 +73,14 @@ class PyXtal_FF():
             - batch_size: int (*NN)
                 batch_size is used for online learning. The weights of the 
                 Neural Network is updated for each batch_size.
+            - epoch: int (*NN)
+                A measure of the number of times all of the training vectors 
+                are used once to update the weights.
+            - device: str (*NN)
+                The device used to train: 'cpu' or 'cuda'.
             - force_coefficient: float (*NN and *PR)
                 This parameter is used in the penalty function to scale 
                 the force contribution relative to the energy.
-            - alpha: float (*NN)
-                L2 penalty (regularization term) parameter.
             - softmax_beta: float (*NN)
                 The parameters for Softmax Energy Penalty function.
             - unit: str (*NN)
@@ -88,9 +91,6 @@ class PyXtal_FF():
                 ???
             - restart: str (*NN)
                 To continue Neural Network training from where it was left off.
-            - runner: str (*NN)
-                CPU or GPU mode.
-                CPU mode is 'numpy', and GPU mode is 'pytorch' or 'cupy'.
             - optimizer: dict (*NN)
                 Define the optimization method used to update NN parameters.
             - path: str (*NN and *PR)
@@ -119,10 +119,9 @@ class PyXtal_FF():
 
         # Checking Neural Network' keys
         keywords = ['algorithm', 'system', 'hiddenlayers', 'activation', 
-                    'random_seed', 'batch_size', 'force_coefficient', 
-                    'alpha', 'unit', 'softmax_beta', 'logging', 'restart', 
-                    'runner', 'optimizer', 'path', 'order', 'N_max',
-                    'atoms_per_batch']
+                    'random_seed', 'force_coefficient', 'unit', 'softmax_beta', 
+                    'logging', 'restart', 'optimizer', 'path', 'order', 'N_max', 
+                    'epoch', 'device', 'alpha', 'batch_size']
         for key in model.keys():
             if key not in keywords:
                 msg = f"Don't recognize {key} in model. "+\
@@ -202,63 +201,65 @@ class PyXtal_FF():
         
     def _MODEL(self, model, descriptors_type):
         """ Model is created here. """
-        # Polynomial regression doesn't applied to gaussian descriptors.
-        #if self.algorithm == 'PR' and descriptors_type != 'Bispectrum':
-        #    msg = "Polynomial Regression does not predict bispectrum!"
-        #    raise NotImplementedError(msg)
-            
+                    
         if self.algorithm == 'NN':
             _model = {'system': None,
                       'hiddenlayers': [6, 6],
-                      'activation': ['tanh', 'tanh', 'linear'],
+                      'activation': ['Tanh', 'Tanh', 'Linear'],
                       'random_seed': None,
+                      'epoch': 100,
                       'batch_size': None,
+                      'device': 'cpu',
                       'force_coefficient': 0.03,
-                      'alpha': 1e-4,
                       'softmax_beta': None,
+                      'alpha': None,
                       'unit': 'eV',
                       'logging': None,
                       'restart': None,
                       'path': self.path,
-                      'runner': 'numpy',
                       'optimizer': {},
-                      'atoms_per_batch': 1000,
                       }
-            _model.update(model) # Update model
+            _model.update(model)
             
             if len(_model['activation']) != len(_model['hiddenlayers']) + 1:
                 msg = '\nWarning: Incompatible activation functions and hiddenlayers.'
                 print(msg)
                 print('hiddenlayers: ', _model['hiddenlayers'])
                 print('activations: ', _model['activation'])
-                _model['activation'] = ['tanh']*len(model['hiddenlayers'])+['linear']
+                _model['activation'] = ['Tanh']*len(model['hiddenlayers'])+['Linear']
                 print('revised activations: ', _model['activation'])
     
             if 'parameters' not in _model['optimizer']:
-                _model['optimizer']['parameters'] = None
+                _model['optimizer']['parameters'] = {}
             if 'derivative' not in _model['optimizer']:
                 _model['optimizer']['derivative'] = True
             if 'method' not in _model['optimizer']:
-                _model['optimizer']['method'] = 'L-BFGS-B'
-            # Only do minibatch for SGD and ADAM
-            if _model['optimizer']['method'] not in ['SGD', 'ADAM']:
-                _model['batch_size'] = None
+                _model['optimizer']['method'] = 'lbfgs'
+
+            # If LBFGS is used, epoch is 1.
+            if _model['optimizer']['method'] in ['lbfgs', 'LBFGS', 'lbfgsb']:
+                if 'max_iter' in _model['optimizer']['parameters'].items():
+                    if _model['epoch'] > _model['optimizer']['parameters']['max_iter']:
+                        _model['optimizer']['parameters']['max_iter'] = _model['epoch']
+                else:
+                    _model['optimizer']['parameters']['max_iter'] = _model['epoch']
+                _model['epoch'] = 1
+
             self.model = NeuralNetwork(elements=_model['system'],
                                        hiddenlayers=_model['hiddenlayers'],
                                        activation=_model['activation'],
                                        random_seed=_model['random_seed'],
+                                       epoch=_model['epoch'],
                                        batch_size=_model['batch_size'],
-                                       atoms_per_batch=_model['atoms_per_batch'],
-                                       force_coefficient=_model['force_coefficient'],
+                                       device=_model['device'],
                                        alpha=_model['alpha'],
+                                       force_coefficient=_model['force_coefficient'],
                                        softmax_beta=_model['softmax_beta'],
                                        unit=_model['unit'],
                                        logging=_model['logging'],
                                        restart=_model['restart'],
                                        path=_model['path'])
-            self.runner = _model['runner']
             self.optimizer = _model['optimizer']
-
                 
         elif self.algorithm == 'PR':
             _model = {'system': None,
@@ -273,39 +274,32 @@ class PyXtal_FF():
                             force_coefficient=_model['force_coefficient'],
                             order =_model['order'],
                             path = _model['path'],
-                            N_max = _model['N_max'],
-                            )
+                            N_max = _model['N_max'])
             
-        if _model['force_coefficient'] is None:
-            self.use_force = False
-        else:
-            self.use_force = True
-    
     
     def run(self):
-        """ Invoke the pyxtal_ff run. """
+        """ Invoke the pyxtal_ff to run. """
         # Train
         if self.algorithm == 'NN':
             self.model.train(self.TrainDescriptors, self.TrainFeatures, 
-                             runner=self.runner, optimizer=self.optimizer, 
-                             use_force=self.use_force)
+                             optimizer=self.optimizer)
         elif self.algorithm == 'PR':
-            self.model.train(self.TrainDescriptors, self.TrainFeatures,
-                             use_force=self.use_force)
+            self.model.train(self.TrainDescriptors, self.TrainFeatures)
         
         # Evaluate Trained Data Set
         self.model.evaluate(self.TrainDescriptors, self.TrainFeatures,
                             figname='Train.png')
         
-        # # Evaluate Test Data Set
+        # Evaluate Test Data Set
         if self.EvaluateTest:
             self.model.evaluate(self.TestDescriptors, self.TestFeatures, 
                                 figname='Test.png')
-            
+
 
     def print_descriptors(self, _descriptors):
         """ Print the descriptors information. """
-        print('The following parameters are used in descriptor calculation')
+
+        print('Descriptor parameters:')
         keys = ['type', 'Rc', 'derivative']
         for key in keys:
             print('{:12s}: {:}'.format(key, _descriptors[key]))
@@ -318,21 +312,23 @@ class PyXtal_FF():
         for key in key_params:
             print('{:12s}: {:}'.format(key, _descriptors['parameters'][key]))
         print('\n')
-        
+
 
     def print_logo(self):
         """ Print PyXtal_FF logo and version. """
-
+        
+        print("\n")
         print("""
-         ______       _    _          _         _______ _______ 
-        (_____ \     \ \  / /        | |       (_______|_______)
-         _____) )   _ \ \/ / |_  ____| |        _____   _____   
-        |  ____/ | | | )  (|  _)/ _  | |       |  ___) |  ___)  
-        | |    | |_| |/ /\ \ |_( ( | | |_______| |     | |      
-        |_|     \__  /_/  \_\___)_||_|_(_______)_|     |_|      
-               (____/      """)
-        print('\n')
-        print('------------------------(version', __version__,')----------------------\n')
-        print('A Python package for Machine Learning Interatomic Force Field')
-        print('The source code is available at https://github.com/qzhu2017/FF-project')
-        print('Developed by Zhu\'s group at University of Nevada Las Vegas\n\n')
+               ______       _    _          _         _______ _______ 
+              (_____ \     \ \  / /        | |       (_______|_______)
+               _____) )   _ \ \/ / |_  ____| |        _____   _____   
+              |  ____/ | | | )  (|  _)/ _  | |       |  ___) |  ___)  
+              | |    | |_| |/ /\ \ |_( ( | | |_______| |     | |      
+              |_|     \__  /_/  \_\___)_||_|_(_______)_|     |_|      
+                     (____/      """)
+        print("\n")
+        print('          A Python package for Machine Learning Interatomic Force Field')
+        print('           Developed by Zhu\'s group at University of Nevada Las Vegas')
+        print('      The source code is available at https://github.com/qzhu2017/FF-project')
+        print("\n")
+        print('================================= version', __version__,'=================================\n\n')

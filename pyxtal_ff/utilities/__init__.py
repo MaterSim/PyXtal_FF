@@ -6,10 +6,7 @@ from monty.serialization import loadfn
 #@profile
 def convert_to_descriptor(structure_file, descriptor_file, function, \
             fmt=None, show_progress=True, ncpu=1):
-      
-    """
-    Obtain training features, structures, and descriptors
-    """
+    """ Obtain training features, structures, and descriptors. """
     if fmt is None:
         if structure_file.find('json')>0:
             fmt = 'json'
@@ -29,7 +26,7 @@ def convert_to_descriptor(structure_file, descriptor_file, function, \
         Structures, Features = parse_xyz(structure_file, N)
     else:
         raise NotImplementedError('We support only json and vasp-out format')
-    print("{:d} structures have been loaded".format(len(Structures)))
+    print("{:d} structures have been loaded.".format(len(Structures)))
 
     # compute the descriptors
     if os.path.exists(descriptor_file):
@@ -40,10 +37,11 @@ def convert_to_descriptor(structure_file, descriptor_file, function, \
             del descriptors #does not help to free memory at the moment
         else:
             Descriptors = descriptors
-        print('\nLoaded precomputed descriptors from {:s}, {:d} entries'.format(\
+        print('Load precomputed descriptors from {:s}, {:d} entries'.format(\
                 descriptor_file, len(Descriptors)))
+        print("\n")
     else:
-        print('Computing the descriptors -----------')
+        print('Computing the descriptors...')
         if ncpu == 1:
             des = []
             for i in range(len(Structures)):
@@ -60,8 +58,8 @@ def convert_to_descriptor(structure_file, descriptor_file, function, \
                 p.join()
         np.save(descriptor_file, des)
         Descriptors = des
-        print('\nComputed descriptors for {:d} entries'.format(len(Structures)))
-        print('Saved the descriptors to ', descriptor_file)
+        print('\nSaved the descriptors to', descriptor_file)
+        print("\n")
     return Features, Descriptors
     
 def compute_descriptor(function, structure):
@@ -166,7 +164,10 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
                     coor[i,:] = array[:3]
                     force[i,:] = array[3:]
                 energy = float(lines[count+line_number-3].split()[-2])
-                Structures.append(Structure(lat, symbol_array, coor))
+                structure = Atoms(symbols=symbol_array,
+                                  positions=coor,
+                                  cell=lat, pbc=True)
+                Structures.append(structure)
                 id = len(Structures) - 1
                 Features[id] = {}
                 Features[id]['energy'] = energy
