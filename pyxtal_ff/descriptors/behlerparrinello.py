@@ -120,8 +120,12 @@ class BehlerParrinello:
         neighbors.update(crystal)
         
         for i in range(len(crystal)):
-            element = crystal.get_chemical_symbols()[0]
+            element = crystal.get_chemical_symbols()[i]
             indices, offsets = neighbors.get_neighbors(i)
+            
+            assert len(indices)>0, \
+            f"There's no neighbor for this structure at Rc = {self.Rc} A."
+
             Ri = crystal.get_positions()[i]
             total_neighbors = len(indices) # total number of neighbors of atom i
             

@@ -2,13 +2,14 @@ import os
 import numpy as np
 from ase import Atoms
 from monty.serialization import loadfn
+from random import sample
 
 #@profile
 def convert_to_descriptor(structure_file, descriptor_file, function, \
             fmt=None, show_progress=True, ncpu=1):
     """ Obtain training features, structures, and descriptors. """
     if fmt is None:
-        if structure_file.find('json')>0:
+        if os.path.isdir(structure_file) or structure_file.find('json')>0:
             fmt = 'json'
         elif structure_file.find('xyz')>0:
             fmt = 'xyz'
@@ -16,14 +17,15 @@ def convert_to_descriptor(structure_file, descriptor_file, function, \
             fmt = 'vasp-out'
 
     N = function['N']
+    rand = function['random_sample']
 
     # extract the structures and energy/force information
     if fmt == 'json':      
-        Structures, Features = parse_json(structure_file, N)
+        Structures, Features = parse_json(structure_file)
     elif fmt == 'vasp-out':
-        Structures, Features = parse_OUTCAR_comp(structure_file, N)
+        Structures, Features = parse_OUTCAR_comp(structure_file)
     elif fmt == 'xyz':
-        Structures, Features = parse_xyz(structure_file, N)
+        Structures, Features = parse_xyz(structure_file)
     else:
         raise NotImplementedError('We support only json and vasp-out format')
     print("{:d} structures have been loaded.".format(len(Structures)))
@@ -33,8 +35,15 @@ def convert_to_descriptor(structure_file, descriptor_file, function, \
         descriptors = np.load(descriptor_file, allow_pickle=True) 
         N1 = len(descriptors)
         if N is not None and N < N1:
-            Descriptors = descriptors[:N]    
-            del descriptors #does not help to free memory at the moment
+            if rand:
+                lists = sample(range(N1), N)
+                Descriptors = descriptors[lists]
+                Features = [Features[i] for i in lists]
+            else:
+                Descriptors = descriptors[:N]    
+                Features = Features[:N]
+            #del descriptors #does not help to free memory at the moment
+            print("{:d} structures have been extracted.".format(N))
         else:
             Descriptors = descriptors
         print('Load precomputed descriptors from {:s}, {:d} entries'.format(\
@@ -44,10 +53,21 @@ def convert_to_descriptor(structure_file, descriptor_file, function, \
         print('Computing the descriptors...')
         if ncpu == 1:
             des = []
-            for i in range(len(Structures)):
-                des.append(compute_descriptor(function, Structures[i]))
+            #for i in range(len(Structures)):
+            N1 = len(Structures)
+            if N is not None and N < N1:
+                if rand:
+                    lists = sample(range(N1), N)
+                    Features = [Features[i] for i in lists]
+                else:
+                    lists = range(N)
+                    Features = Features[:N]
+            else:
+                lists = range(N1)
+            for i, index in enumerate(lists):
+                des.append(compute_descriptor(function, Structures[index]))
                 if show_progress:
-                    print('\r{:4d} out of {:4d}'.format(i+1, len(Structures)), flush=True, end='') 
+                    print('\r{:4d} out of {:4d}'.format(i+1, len(lists)), flush=True, end='') 
         else:
             from multiprocessing import Pool, cpu_count
             from functools import partial
@@ -71,44 +91,59 @@ def compute_descriptor(function, structure):
     elif function['type'] == 'Bispectrum':
         from pyxtal_ff.descriptors.bispectrum import SO4_Bispectrum
         d = SO4_Bispectrum(function['parameters']['lmax'],
-                              function['Rc'],
-                              derivative=function['derivative'],
+                           function['Rc'],
+                           derivative=function['derivative'],
                            normalize_U=function['parameters']['normalize_U']).calculate(structure)
+    elif function['type'] == 'SOAP':
+        from pyxtal_ff.descriptors.SOAP import SOAP
+        d = SOAP(function['parameters']['nmax'],
+                 function['parameters']['lmax'],
+                 function['Rc'],
+                 derivative=function['derivative']).calculate(structure)
+
     else:
         raise NotImplementedError
 
     return d
 
 
-def parse_json(structure_file, N=None):
+def parse_json(path, N=None, Random=False):
     """
     Extract structures/enegy/force information from json file
     """
-    Structures = []
-    Features = {}
+    if os.path.isfile(path):
+        structure_dict = loadfn(path)
+    elif os.path.isdir(path):
+        import glob
+        cwd = os.getcwd()
+        os.chdir(path)
+        files = glob.glob('*.json')
+        os.chdir(cwd)
+        structure_dict = []
+        for file in files:
+            fp = os.path.join(path, file)
+            structure_dict += loadfn(fp)
 
-    structure_dict = loadfn(structure_file)
     if N is None:
         N = len(structure_dict)
+    elif Random and N < len(structure_dict):
+        structure_dict = sample(structure_dict, N)
 
     ## Train features
-    Features = {}
+    Features = []
     Structures = []
     for i, d in enumerate(structure_dict):
-        Features[i] = {}
         if 'structure' in d:
             structure = Atoms(symbols=d['structure'].atomic_numbers,
                               positions=d['structure'].cart_coords,
                               cell=d['structure'].lattice._matrix, pbc=True)
             Structures.append(structure)
-            Features[i]['energy'] = d['outputs']['energy']
-            Features[i]['force'] = d['outputs']['forces']
+            Features.append({'energy': d['outputs']['energy'], 'force': d['outputs']['forces']})
         else:
             structure = Atoms(symbols=d['elements'], scaled_positions=d['coords'], 
                               cell=d['lattice'], pbc=True)
             Structures.append(structure)
-            Features[i]['energy'] = d['energy']
-            Features[i]['force'] = d['force']
+            Features.append({'energy': d['energy'], 'force': d['force']})
            
         if i == (N-1):
             break
@@ -121,7 +156,7 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
     Extract structures/enegy/force information from compressed OUTCAR file
     """
     Structures = []
-    Features = {}
+    Features = []
     with open(structure_file, 'r') as f:
         lines = f.readlines()
         read_symbol = True
@@ -135,7 +170,7 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
                 if line.find('POTCAR') > 0:
                     symbol = line.split()[2]
                     if symbol in symbols:
-                        print(symbols)
+                        #print(symbols)
                         read_symbol = False
                         read_composition = True
                     else:
@@ -168,10 +203,7 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
                                   positions=coor,
                                   cell=lat, pbc=True)
                 Structures.append(structure)
-                id = len(Structures) - 1
-                Features[id] = {}
-                Features[id]['energy'] = energy
-                Features[id]['force'] = force
+                Features.append({'energy': energy, 'force': force})
                 count += line_number - 1
             count += 1
             if count >= len(lines) or len(Structures) == N:
@@ -224,7 +256,7 @@ def parse_xyz(structure_file, N=1000000):
     Extract structures/enegy/force information of xyz file provided by the Cambridge group
     """
     Structures = []
-    Features = {}
+    Features = []
     with open(structure_file, 'r') as f:
         lines = f.readlines()
         count = 0
@@ -254,10 +286,7 @@ def parse_xyz(structure_file, N=1000000):
                 forces.append([float(num) for num in infos[8:]])
                 
             Structures.append(Structure(lat, symbols, np.array(coords)))
-            id = len(Structures) - 1
-            Features[id] = {}
-            Features[id]['energy'] = energy
-            Features[id]['force'] = np.array(forces)
+            Features.append({'energy': energy, 'force': np.array(forces)})
 
             count = count + number + 2
             if count >= len(lines) or len(Structures) == N:

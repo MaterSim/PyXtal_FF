@@ -1,6 +1,7 @@
 import os
 from pyxtal_ff.models.neuralnetwork import NeuralNetwork
 from pyxtal_ff.models.polynomialregression import PR
+from pyxtal_ff.models.gaussianprocess import GaussianProcess
 from pyxtal_ff.utilities import convert_to_descriptor
 from pyxtal_ff.version import __version__
 
@@ -25,11 +26,13 @@ class PyXtal_FF():
         
         descriptors: dict
             The atom-centered descriptors parameters are defined here.
+            
             The list of the descriptors keys:
             - type: str
                 The type of atom-centered descriptors.
-                + BehlerParrinello (Gaussian symmetry)
+                + BehlerParrinello (Gaussian symmetry function)
                 + Bispectrum
+                + SOAP
             - Rc: float
                 The radial cutoff of the descriptors.
             - derivative: bool
@@ -40,25 +43,31 @@ class PyXtal_FF():
             - N_test: int
                 The number of crystal structures in test data set 
                 to be converted into descriptors.
+            - random_sample: bool
+                To shuffle the samples randomly.
             - ncpu: int
                 The number of cpu core to use for converting crystal structures 
                 into descriptors.
             - parameters: dict
-                Example,
+                Examples:
                 + BehlerParrinello
                   {'G2': {'eta': [1.3, 2.], 'Rs': [.1, .2]},
                    'G4': {'eta': [.3, .7], 'lambda': [-1, 1], 'zeta': [.8, 2]}}
                 + Bispectrum
                   {'lmax': 3, opt: 'polynomial', 'rfac': 1.}
+                + SOAP
+                  {'nmax': 1, 'lmax': 3}
 
         model: dict
-            The Neural Network or Polynomial Regression parameters are defined.
+            The Neural Network, Polynomial Regression, or Gaussian Process Regression 
+            parameters are defined.
+
             The list of the model keys:
             - algorithm: str (*NN and *PR)
                 The desired machine learning algorithm for potential 
                 development. Choose between ['PolynomialRegression', 'PR'] or
                 ['NeuralNetwork', 'NN'].
-            - system: list of str (*; *NN and *PR)
+            - system: list of str (*; *NN, *PR and *GPR)
                 A list of atomic species in the crystal system.
                 e.g. ['Si', 'O']
             - hiddenlayers: list of int (*NN)
@@ -73,12 +82,12 @@ class PyXtal_FF():
             - batch_size: int (*NN)
                 batch_size is used for online learning. The weights of the 
                 Neural Network is updated for each batch_size.
-            - epoch: int (*NN)
+            - epoch: int (*NN, *GPR)
                 A measure of the number of times all of the training vectors 
                 are used once to update the weights.
-            - device: str (*NN)
+            - device: str (*NN, *GPR)
                 The device used to train: 'cpu' or 'cuda'.
-            - force_coefficient: float (*NN and *PR)
+            - force_coefficient: float (*NN, *PR, *GPR)
                 This parameter is used in the penalty function to scale 
                 the force contribution relative to the energy.
             - softmax_beta: float (*NN)
@@ -87,29 +96,43 @@ class PyXtal_FF():
                 The unit of energy ('eV' or 'Ha'). 
                 The default unit of energy is 'eV'. If 'Ha' is used,
                 Bohr is the unit length; otherwise, Angstrom is used.
-            - logging: ? (*NN and *PR)
+            - logging: ? (*NN, *PR and *GPR)
                 ???
             - restart: str (*NN)
                 To continue Neural Network training from where it was left off.
-            - optimizer: dict (*NN)
+            - optimizer: dict (*NN and *GPR)
                 Define the optimization method used to update NN parameters.
-            - path: str (*NN and *PR)
-                The user defined path to store the NN results.
-                path has to be ended with '/'.
+            - path: str (*NN, *PR, *GPR)
+                The user defined path to a directory for storing the ML results.
+                Note: path has to be ended with '/'.
             - order: int (*PR)
-                Order is used to determined the polynomial order. 
+                Order is used to determined the polynomial order.
                 For order = 1, linear is employed, and quadratic is employed 
                 for order = 2.
-                
+            - d_max: int (*PR)
+                The maximum number of descriptors used.
+            - alpha: float (*NN and *PR)
+                L2 penalty (regularization term) parameter.
+            - norm: int (*PR)
+                This argument defines a model to calculate the regularization
+                term. It takes only 1 or 2 as its value: Manhattan or Euclidean 
+                norm, respectively. If alpha is None, norm is ignored.
+            - noise: float (*GPR)
+                The noise added to the Gaussian Kernel
+            - kernel: str (*GPR)
+                The kernel specifying the covariance function of the GPR.
+                The current development allows "RBF" and "DotProduct".
+
         (*) required.
         (*NN) for Neural Network algorithm only.
         (*PR) for Polynomial Regression algorithm only.
+        (*GPR) for Gaussian Process Regressor algorithm only.
         """
         self.print_logo()
         
         # Checking descriptors' keys
         descriptors_keywords = ['type', 'Rc', 'derivative', 'N_train', 
-                                'N_test', 'ncpu', 'parameters']
+                                'N_test', 'random_sample', 'ncpu', 'parameters']
         if descriptors is not None:
             for key in descriptors.keys():
                 if key not in descriptors_keywords:
@@ -120,8 +143,9 @@ class PyXtal_FF():
         # Checking Neural Network' keys
         keywords = ['algorithm', 'system', 'hiddenlayers', 'activation', 
                     'random_seed', 'force_coefficient', 'unit', 'softmax_beta', 
-                    'logging', 'restart', 'optimizer', 'path', 'order', 'N_max', 
-                    'epoch', 'device', 'alpha', 'batch_size']
+                    'logging', 'restart', 'optimizer', 'path', 'order', 'd_max', 
+                    'epoch', 'device', 'alpha', 'batch_size', 'noise', 'kernel',
+                    'norm']
         for key in model.keys():
             if key not in keywords:
                 msg = f"Don't recognize {key} in model. "+\
@@ -135,6 +159,7 @@ class PyXtal_FF():
                         'N': None,
                         'N_train': None,
                         'N_test': None,
+                        'random_sample': False,
                         'ncpu': 1,
                         }
         
@@ -142,8 +167,7 @@ class PyXtal_FF():
         if descriptors is not None:
             _descriptors.update(descriptors)
 
-        _parameters = {'lmax': 3, 'rfac': 1.0,
-                       'normalize_U': False}
+        _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False}
         if 'parameters' in descriptors:
             _parameters.update(descriptors['parameters'])
             _descriptors['parameters'] = _parameters
@@ -159,9 +183,10 @@ class PyXtal_FF():
             self.path += _descriptors['type'] + "/"
         if not os.path.exists(self.path):
             os.mkdir(self.path)
-
-        self.print_descriptors(_descriptors)
-        self.TrainFeatures, self.TrainDescriptors = convert_to_descriptor(
+        self._descriptors = _descriptors
+        self.print_descriptors()
+        if TrainData is not None:
+            self.TrainFeatures, self.TrainDescriptors = convert_to_descriptor(
                                                         TrainData,
                                                         self.path+'Train.npy',
                                                         _descriptors,
@@ -180,6 +205,7 @@ class PyXtal_FF():
         # Create model
         pr_keywords = ['PolynomialRegression', 'PR']
         nn_keywords = ['NeuralNetwork', 'NN']
+        gr_keywords = ['GaussianProcessRegressor', 'GPR']
         if 'algorithm' not in model:
             model['algorithm'] = 'NN'
 
@@ -187,6 +213,8 @@ class PyXtal_FF():
             self.algorithm = 'PR'
         elif model['algorithm'] in nn_keywords:
             self.algorithm = 'NN'
+        elif model['algorithm'] in gr_keywords:
+            self.algorithm = 'GPR'
         else:
             msg = f"{model['algorithm']} is not implemented."
             raise NotImplementedError(msg)
@@ -201,7 +229,7 @@ class PyXtal_FF():
         
     def _MODEL(self, model, descriptors_type):
         """ Model is created here. """
-                    
+
         if self.algorithm == 'NN':
             _model = {'system': None,
                       'hiddenlayers': [6, 6],
@@ -213,6 +241,7 @@ class PyXtal_FF():
                       'force_coefficient': 0.03,
                       'softmax_beta': None,
                       'alpha': None,
+                      'norm': 2,
                       'unit': 'eV',
                       'logging': None,
                       'restart': None,
@@ -267,38 +296,79 @@ class PyXtal_FF():
                       'order': 1,
                       'logging': None,
                       'path': self.path,
-                      'N_max': None,
+                      'alpha': None,
+                      'norm': 2,
+                      'd_max': None,
                       }
             _model.update(model)
             self.model = PR(elements=_model['system'],
                             force_coefficient=_model['force_coefficient'],
-                            order =_model['order'],
-                            path = _model['path'],
-                            N_max = _model['N_max'])
+                            order=_model['order'],
+                            path=_model['path'],
+                            alpha=_model['alpha'],
+                            norm=_model['norm'],
+                            d_max=_model['d_max'])
+
+        elif self.algorithm == 'GPR':
+            _model = {'force_coefficient': 0.0001,
+                      'path': self.path,
+                      'system': None,
+                      'epoch': 100,
+                      'noise': 1e-10,
+                      'kernel': 'RBF'
+                      }
+            _model.update(model)
+                        
+            if 'parameters' not in _model['optimizer']:
+                _model['optimizer']['parameters'] = {}
+            if 'derivative' not in _model['optimizer']:
+                _model['optimizer']['derivative'] = True
+            if 'method' not in _model['optimizer']:
+                _model['optimizer']['method'] = 'lbfgs'
+
+            # If LBFGS is used, epoch is 1.
+            if _model['optimizer']['method'] in ['lbfgs', 'LBFGS', 'lbfgsb']:
+                if 'max_iter' in _model['optimizer']['parameters'].items():
+                    if _model['epoch'] > _model['optimizer']['parameters']['max_iter']:
+                        _model['optimizer']['parameters']['max_iter'] = _model['epoch']
+                else:
+                    _model['optimizer']['parameters']['max_iter'] = _model['epoch']
+                _model['epoch'] = 1
+            
+            self.model = GaussianProcess(elements=_model['system'],
+                                         force_coefficient=_model['force_coefficient'],
+                                         noise=_model['noise'],
+                                         epoch=_model['epoch'],
+                                         kernel=_model['kernel'],
+                                         path=_model['path'],)
+            self.optimizer = _model['optimizer']
             
     
     def run(self):
         """ Invoke the pyxtal_ff to run. """
         # Train
-        if self.algorithm == 'NN':
+        if self.algorithm in ['NN', 'GPR']:
             self.model.train(self.TrainDescriptors, self.TrainFeatures, 
                              optimizer=self.optimizer)
         elif self.algorithm == 'PR':
             self.model.train(self.TrainDescriptors, self.TrainFeatures)
         
         # Evaluate Trained Data Set
-        self.model.evaluate(self.TrainDescriptors, self.TrainFeatures,
-                            figname='Train.png')
+            Train_stat = self.model.evaluate(\
+            self.TrainDescriptors, self.TrainFeatures,figname='Train.png')
         
         # Evaluate Test Data Set
         if self.EvaluateTest:
-            self.model.evaluate(self.TestDescriptors, self.TestFeatures, 
-                                figname='Test.png')
+            Test_stat = self.model.evaluate(\
+            self.TestDescriptors, self.TestFeatures, figname='Test.png')
+        else:
+            Test_stat = None
+        
+        return (Train_stat, Test_stat)
 
-
-    def print_descriptors(self, _descriptors):
+    def print_descriptors(self):
         """ Print the descriptors information. """
-
+        _descriptors = self._descriptors
         print('Descriptor parameters:')
         keys = ['type', 'Rc', 'derivative']
         for key in keys:
@@ -306,6 +376,8 @@ class PyXtal_FF():
 
         if _descriptors['type'] == 'Bispectrum':
             key_params = ['lmax', 'normalize_U']
+        elif _descriptors['type'] == 'SOAP':
+            key_params = ['nmax', 'lmax']
         else:
             key_params = []
 

@@ -6,6 +6,7 @@ from optparse import OptionParser
 from copy import deepcopy
 from pyxtal_ff.descriptors.angular_momentum import Wigner_D, factorial, deltacg, Wigner_D_wDerivative
 from numba import prange
+from pymatgen.io.ase import AseAtomsAdaptor
 
 class SO4_Bispectrum:
     '''
@@ -39,6 +40,12 @@ class SO4_Bispectrum:
     @lmax.setter
     def lmax(self, lmax):
         if isinstance(lmax, int) is True:
+            if lmax < 0:
+                raise ValueError('lmax must be greater than or equal to zero')
+            elif lmax > 32:
+                raise NotImplementedError('''Currently we only support Wigner-D matrices and spherical harmonics
+                                          for arguments up to l=32.  If you need higher functionality, raise an issue
+                                          in our github and we will expand the set of supported functions''')
             self._twol = 2*lmax
         else:
             raise ValueError('lmax must be an integer')
@@ -50,6 +57,8 @@ class SO4_Bispectrum:
     @rcut.setter
     def rcut(self, rcut):
         if isinstance(rcut, float) is True or isinstance(rcut, int) is True:
+            if rcut <= 0:
+                raise ValueError('rcut must be greater than zero')
             self._rcut = rcut
         else:
             raise ValueError('rcut must be a float')
@@ -86,7 +95,7 @@ class SO4_Bispectrum:
                 delattr(self, attr)
         return
 
-    def calculate(self, atoms):
+    def calculate(self, atoms, backend='ase'):
         '''
         args:
             atoms:  ASE atoms object for the corresponding structure
@@ -96,6 +105,7 @@ class SO4_Bispectrum:
         object
         '''
         self._atoms = atoms
+        self._backend = backend
 
         self.build_neighbor_list()
         self.initialize_arrays()
@@ -122,57 +132,84 @@ class SO4_Bispectrum:
         Builds a neighborlist for the calculation of bispectrum components for
         a given ASE atoms object given in the calculate method.
         '''
-        atoms = self._atoms
-        # cutoffs for each atom
-        cutoffs = [self.rcut/2]*len(atoms)
-        # instantiate neighborlist calculator
-        nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
-        # provide atoms object to neighborlist calculator
-        nl.update(atoms)
-        # instantiate memory for neighbor separation vectors, periodic indices, and atomic numbers
-        neighbors = []
-        neighbor_indices = []
-        atomic_numbers = []
+        if self._backend == 'ase':
+            atoms = self._atoms
+            # cutoffs for each atom
+            cutoffs = [self.rcut/2]*len(atoms)
+            # instantiate neighborlist calculator
+            nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
+            # provide atoms object to neighborlist calculator
+            nl.update(atoms)
+            # instantiate memory for neighbor separation vectors, periodic indices, and atomic numbers
+            neighbors = []
+            neighbor_indices = []
+            atomic_numbers = []
 
-        max_len = 0
-        for i in range(len(atoms)):
-            # get center atom position
-            center_atom = atoms.positions[i]
-            # get indices and cell offsets of each neighbor
-            indices, offsets = nl.get_neighbors(i)
-            # add an empty list to neighbors and atomic numbers for population
-            neighbors.append([])
-            atomic_numbers.append([])
-            # the indices are already numpy arrays so just append as is
-            neighbor_indices.append(indices)
-            for j, offset in zip(indices, offsets):
-                # compute separation vector
-                pos = atoms.positions[j] + np.dot(offset, atoms.get_cell()) - center_atom
-                neighbors[i].append(pos)
-                atomic_numbers[i].append(atoms[j].number)
+            max_len = 0
+            for i in range(len(atoms)):
+                # get center atom position
+                center_atom = atoms.positions[i]
+                # get indices and cell offsets of each neighbor
+                indices, offsets = nl.get_neighbors(i)
+                # add an empty list to neighbors and atomic numbers for population
+                neighbors.append([])
+                atomic_numbers.append([])
+                # the indices are already numpy arrays so just append as is
+                neighbor_indices.append(indices)
+                for j, offset in zip(indices, offsets):
+                    # compute separation vector
+                    pos = atoms.positions[j] + np.dot(offset, atoms.get_cell()) - center_atom
+                    neighbors[i].append(pos)
+                    atomic_numbers[i].append(atoms[j].number)
 
-            if len(neighbors[i]) > max_len:
-                max_len = len(neighbors[i])
+                if len(neighbors[i]) > max_len:
+                    max_len = len(neighbors[i])
 
-        # declare arrays to store the separation vectors, neighbor indices
-        # atomic numbers of each neighbor, and the atomic numbers of each
-        # site
-        neighborlist = np.zeros((len(atoms), max_len, 3), dtype=np.float64)
-        neighbor_inds = np.zeros((len(atoms), max_len), dtype=np.int64)
-        atm_nums = np.zeros((len(atoms), max_len), dtype=np.int64)
-        site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.int64)
+            # declare arrays to store the separation vectors, neighbor indices
+            # atomic numbers of each neighbor, and the atomic numbers of each
+            # site
+            neighborlist = np.zeros((len(atoms), max_len, 3), dtype=np.float64)
+            neighbor_inds = np.zeros((len(atoms), max_len), dtype=np.int64)
+            atm_nums = np.zeros((len(atoms), max_len), dtype=np.int64)
+            site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.int64)
 
-        # populate the arrays with list elements
-        for i in range(len(atoms)):
-            neighborlist[i, :len(neighbors[i]), :] = neighbors[i]
-            neighbor_inds[i, :len(neighbors[i])] = neighbor_indices[i]
-            atm_nums[i, :len(neighbors[i])] = atomic_numbers[i]
+            # populate the arrays with list elements
+            for i in range(len(atoms)):
+                neighborlist[i, :len(neighbors[i]), :] = neighbors[i]
+                neighbor_inds[i, :len(neighbors[i])] = neighbor_indices[i]
+                atm_nums[i, :len(neighbors[i])] = atomic_numbers[i]
+
+
+        elif self._backend == 'pymatgen':
+            struc = AseAtomsAdaptor.get_structure(self._atoms)
+            neighbors = struc.get_all_neighbors(self._rcut, include_index=True)
+
+            max_len = 0
+            for i, neighlist in enumerate(neighbors):
+                if len(neighlist) > max_len:
+                    max_len = len(neighlist)
+
+            neighborlist = np.zeros((len(struc), max_len, 3), dtype=np.float64)
+            neighbor_inds = np.zeros((len(struc), max_len), dtype=np.int64)
+            atm_nums = np.zeros((len(struc), max_len), dtype=np.int64)
+            site_atomic_numbers = np.zeros(len(struc), dtype=np.int64)
+
+            for i, site in enumerate(struc):
+                neighlist = neighbors[i]
+                site_atomic_numbers[i] = site.specie.number
+                for j, neighbor in enumerate(neighlist):
+                    neighborlist[i, j, :] = neighbor[0].coords - site.coords
+                    neighbor_inds[i, j] = neighbor[2]
+                    atm_nums[i, j] = neighbor[0].specie.number
+
+        else: raise NotImplementedError('Specified backend not supported')
 
         # assign these arrays to attributes
         self.neighborlist = neighborlist
         self.neighbor_indices = neighbor_inds
         self.atomic_numbers = atm_nums
         self.site_atomic_numbers = site_atomic_numbers
+
         return
 
     def initialize_arrays(self):
@@ -722,7 +759,6 @@ def compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist, zlist, dblist):
         llz = idxz_block[l1,l2,l]
         llu = idxu_block[l]
 
-        # make sure to use np.newaxis with zlist for this
         sumzdu = np.zeros(3, np.complex128)
 
         mb = 0
@@ -1036,7 +1072,7 @@ def get_bispectrum_components(neighborlist, neighbor_indices, neighbor_ANs, site
                 ulist *= weight
                 dulist[neighbor] *= weight
                 # normalize the derivative expansion coefficient array
-                dulist *= u_norm
+                dulist[neighbor] *= u_norm
 
                 # add the Wigner U function array to the expansion coefficient array
                 add_uarraytot(r, rcut, ulisttot, ulist)
@@ -1081,13 +1117,12 @@ def get_bispectrum_components(neighborlist, neighbor_indices, neighbor_ANs, site
                 # angle of rotation
                 psi = np.pi*r/rcut
                 # populate ulist and dulist with Wigner U functions
-                # and derivatives
                 zero_uarraytot(ulist)
                 compute_uarray_polynomial(x, y, z, psi, r, twolmax, ulist,
                                              idxu_block)
 
 
-                # weight ulist and dulist by the neighbors atomic number
+                # weight ulist by the neighbors atomic number
                 weight = neighbor_ANs[site, neighbor]
                 ulist *= weight
 
@@ -1118,13 +1153,13 @@ if  __name__ == "__main__":
                       )
 
     parser.add_option("-l", "--lmax", dest="lmax", default=1, type=int,
-                      help="lmax, default: 3"
+                      help="lmax, default: 1"
                       )
 
-    parser.add_option("-d", dest="der",
+    parser.add_option("-t", dest="der",
                       action='store_true',help='derivative flag')
 
-    parser.add_option("-n", dest="der",
+    parser.add_option("-f", dest="der",
                       action='store_false',help='derivative flag')
 
     (options, args) = parser.parse_args()
@@ -1142,7 +1177,7 @@ if  __name__ == "__main__":
 
     import time
     start1 = time.time()
-    f = SU2_Bispectrum(lmax, rcut, derivative=der, normalize_U=False)
+    f = SO4_Bispectrum(lmax, rcut, derivative=der, normalize_U=False)
     x = f.calculate(test)
     start2 = time.time()
 

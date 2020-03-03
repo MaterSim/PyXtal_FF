@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch.utils import data
 import torch.nn.functional as F
+torch.set_default_tensor_type(torch.DoubleTensor)
 
 import matplotlib as mpl
 mpl.use("Agg")
@@ -23,7 +24,8 @@ class NeuralNetwork():
     """ Atom-centered Neural Network model. The inputs are atom-centered 
     descriptors: BehlerParrinello or Bispectrum. The forward propagation of 
     the Neural Network predicts energy per atom, and the derivative of the 
-    forward propagation predicts force. 
+    forward propagation predicts force.
+
     A machine learning interatomic potential can developed by optimizing the 
     weights of the Neural Network for a given system.
     
@@ -39,24 +41,30 @@ class NeuralNetwork():
         Options: tanh, sigmoid, and linear.
     random_seed: int
         Random seed for generating random initial random weights.
+    batch_size: int
+        Determine the number of structures in a batch per optimization step.
     epoch: int
         A measure of the number of times all of the training vectors 
         are used once to update the weights.
     device: str
         The device used to train: 'cpu' or 'cuda'.
-    alpha: float
-        L2 penalty (regularization) parameter.
     force_coefficient: float
         This parameter is used in the penalty function to scale the force
         contribution relative to the energy.
-    softmax_beta:
+    alpha: float
+        L2 penalty (regularization) parameter.
+        softmax_beta:
         The parameters for Softmax Energy Penalty function.
+    softmax_beta: float
+        The parameters used for Softmax Energy Penalty function.
     unit: str
         The unit of energy ('eV' or 'Ha').
+    logging: ?
+        ???
     restart: str
-        continuing Neural Network training from where it was left off.
+        Continuing Neural Network training from where it was left off.
     path: str
-        The path of the directory where everything is saved.
+        A path to the directory where everything is saved.
     """
     def __init__(self, elements, hiddenlayers, activation, random_seed, 
                  batch_size, epoch, device, force_coefficient, alpha, 
@@ -87,7 +95,7 @@ class NeuralNetwork():
                             'Softplus', 'Softshrink', 'Softsign', 'Tanhshrink',
                             'Softmin', 'Softmax', 'LogSoftmax', 'LogSigmoid',
                             'LeakyReLU', 'Hardtanh', 'Hardshrink', 'ELU',]
-        
+
         if isinstance(activation, str):
             for e in self.elements:
                 self.activation[e] = [activation] * \
@@ -96,7 +104,7 @@ class NeuralNetwork():
             for element in self.elements:
                 self.activation[element] = activation
         else:
-            # Users construct their own activation
+            # Users construct their own activations.
             self.activation = activation
         
         # Check if each of the activation functions is implemented.
@@ -117,14 +125,15 @@ class NeuralNetwork():
             self.shuffle = False
         else:
             self.shuffle = True
+        self.batch_size = batch_size
 
-        self.batch_size = batch_size   
         self.epoch = epoch
         self.device = device
-        self.alpha = alpha
+        self.alpha = alpha  # l2 regulization
         self.softmax_beta = softmax_beta
         self.force_coefficient = force_coefficient
 
+        # Set-up unit
         unit_options = ['eV', 'Ha']
         if unit not in unit_options:
             msg = f"{unit} is not implemented. " +\
@@ -137,7 +146,7 @@ class NeuralNetwork():
         self.path = path
         
 
-    def train(self, TrainDescriptors, TrainFeatures, optimizer, use_force=None):
+    def train(self, TrainDescriptors, TrainFeatures, optimizer):
         """ Training of Neural Network Potential. """
         
         # If batch_size is None and optimizer is Adam or SGD, 
@@ -149,9 +158,9 @@ class NeuralNetwork():
         # Preprocess descriptors and features.
         self.preprocess(TrainDescriptors, TrainFeatures)
 
-        # Creating Neural Network Architecture based on chemical species.
+        # Creating Neural Network architectures.
         self.models = {}
-        for element in self.elements:
+        for element in self.elements: # Number of models depend on species
             m = 'nn.Sequential('
             for i, act in enumerate(self.activation[element]):
                 if i == 0:
@@ -160,7 +169,7 @@ class NeuralNetwork():
                 else:
                     m += f'nn.Linear({self.hiddenlayers[element][i-1]}, \
                            {self.hiddenlayers[element][i]}), '
-
+                               
                 if act == 'Linear':
                     continue
                 else:
@@ -169,10 +178,11 @@ class NeuralNetwork():
 
             self.models[element] = eval(m).double().to(self.device)
 
-        # Set up optimizer to train the Neural Network Potential
+        # Set-up optimizer for optimizing NeuralNetwork weights.
         self.regressor = Regressor(optimizer['method'], optimizer['parameters'])
         self.optimizer = self.regressor.regress(models=self.models)
         
+        # Look for previously saved models and continue optimizing from the last checkpoint.
         if self.restart:
             self.load_checkpoint(filename=self.restart, 
                                  method=optimizer['method'], args=optimizer['parameters'])
@@ -187,7 +197,7 @@ class NeuralNetwork():
         for epoch in range(self.epoch):
             if optimizer['method'] in ['lbfgs', 'LBFGS', 'lbfgsb']:
                 print("Initial state : ")
-                def closure():
+                def closure(): # LBFGS gets loss and its gradient here.
                     train_loss, E_mae, F_mae = self.calculate_loss(self.models, self.data)
                     print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}".\
                             format(train_loss, E_mae, F_mae))
@@ -223,12 +233,138 @@ class NeuralNetwork():
         self.save_checkpoint()
         print("\n============================== Training is Completed =============================\n")
 
+            
+    def evaluate(self, TestDescriptors, TestFeatures, figname):
+        """ Evaluating the train or test data set based on trained Neural Network model. 
+        Evaluate will only be performed in cpu mode. """
+        
+        # If-else for consistent separations in printing.
+        if figname[:-4] == 'Train':
+            print(f"============================= Evaluating {figname[:-4]}ing Set ============================\n")
+        else:
+            print("============================= Evaluating Testing Set =============================\n")
+        
+        # Normalized data set based on the training data set (drange).
+        TestDescriptors = self.normalized(TestDescriptors, self.drange, self.unit)
+        no_of_structures = TestDescriptors['no_of_structures']
+
+        # Parse descriptors and Features
+        energy, force = [], []
+        X = [{} for _ in range(len(TestDescriptors['x']))]
+        if self.force_coefficient:
+            DXDR = [{} for _ in range(len(TestDescriptors['dxdr']))]
+        else:
+            DXDR = [None]*len(X)
+
+        for i in range(no_of_structures):
+            energy.append(TestFeatures[i]['energy']/len(TestFeatures[i]['force']))
+            force.append(np.ravel(TestFeatures[i]['force']))
+            for element in self.elements:
+                X[i][element] = torch.DoubleTensor(TestDescriptors['x'][i][element])
+                if self.force_coefficient:
+                    DXDR[i][element] = torch.DoubleTensor(TestDescriptors['dxdr'][i][element])
+        
+        # Switch models device to cpu if training is done in cuda.
+        models = {}
+        for element in self.elements:
+            if next(self.models[element].parameters()).is_cuda:
+                models[element] = self.models[element].cpu()
+            else:
+                models[element] = self.models[element]
+        
+        # Predicting the data set.
+        _energy, _force = [], [] # Predicted energy and forces
+        test_data = zip(X, DXDR)
+        for x, dxdr in test_data:
+            n_atoms = sum(len(value) for value in x.values())
+            _Energy = 0.
+            _Force = torch.zeros([n_atoms, 3], dtype=torch.float64)
+
+            for element, model in models.items():
+                if x[element].nelement() > 0:
+                    _x = x[element].requires_grad_()
+                    _e = model(_x).sum()
+                    _Energy += _e
+                    if self.force_coefficient:
+                        dedx = torch.autograd.grad(_e, _x)[0]
+                        _Force += -torch.einsum("ik, ijkl -> jl", dedx, dxdr[element])
+            _force.append(np.ravel(_Force.numpy()))
+            _energy.append(_Energy.item()/n_atoms)
+        
+        energy = np.array(energy)
+        _energy = np.array(_energy)
+        force = np.array([x for i in force for x in i])
+        _force = np.array([x for i in _force for x in i])
+        
+        # Dump the true and predicted values into text file.
+        self.dump_evaluate(_energy, energy, filename=figname[:-4]+'Energy.txt')
+        if self.force_coefficient:
+            self.dump_evaluate(_force, force, filename=figname[:-4]+'Force.txt')
+
+        # Calculate the statistical metrics for energy.
+        E_mae = self.mean_absolute_error(energy, _energy)
+        E_mse = self.mean_squared_error(energy, _energy)
+        E_r2 = self.r2_score(energy, _energy)
+        print("The results for energy: ")
+        print("    Energy R2     {:8.6f}".format(E_r2))
+        print("    Energy MAE    {:8.6f}".format(E_mae))
+        print("    Energy RMSE   {:8.6f}".format(E_mse))
+
+        # Plotting the energy results.
+        energy_str = 'Energy: r2({:.4f}), MAE({:.4f} {}/atom)'. \
+                     format(E_r2, E_mae, self.unit)
+        plt.title(energy_str)
+        plt.scatter(energy, _energy, label='Energy', s=5)
+        plt.legend(loc=2)
+        plt.xlabel('True ({}/atom)'.format(self.unit))
+        plt.ylabel('Prediction ({}/atom)'.format(self.unit))
+        plt.tight_layout()
+        plt.savefig(self.path+'Energy_'+figname)
+        plt.close()
+        print("The energy figure is exported to: {:s}".format(self.path+'Energy_'+figname))
+        print("\n")
+
+        if self.force_coefficient:
+            # Calculate the statistical metrics for forces.
+            F_mae = self.mean_absolute_error(force, _force)
+            F_mse = self.mean_squared_error(force, _force)
+            F_r2 = self.r2_score(force, _force)
+            print("The results for force: ")
+            print("    Force R2      {:8.6f}".format(F_r2))
+            print("    Force MAE     {:8.6f}".format(F_mae))
+            print("    Force RMSE    {:8.6f}".format(F_mse))
+
+            # Plotting the forces results.
+            length = 'A'
+            if self.unit == 'Ha':
+                length == 'Bohr'
+            force_str = 'Force: r2({:.4f}), MAE({:.3f} {}/{})'. \
+                        format(F_r2, F_mae, self.unit, length)
+            plt.title(force_str)
+            plt.scatter(force, _force, s=5, label='Force')
+            plt.legend(loc=2)
+            plt.xlabel('True ({}/{})'.format(self.unit, length))
+            plt.ylabel('Prediction ({}/{})'.format(self.unit, length))
+            plt.tight_layout()
+            plt.savefig(self.path+'Force_'+figname)
+            plt.close()
+            print("The force figure is exported to: {:s}".format(self.path+'Force_'+figname))
+            print("\n")
+
+        else:
+            F_mae, F_mse, F_r2 = None, None, None
+
+        print("============================= Evaluation is Completed ============================")
+        print("\n")
+        
+        return (E_mae, E_mse, E_r2, F_mae, F_mse, F_r2)
+
 
     def preprocess(self, descriptors, features):
-        """ Split the input descriptors and energy & forces. 
-        Then, generate Softmax for structure importance. """
-
-        self.no_of_descriptors, self.no_of_structures = len(descriptors[0]['x'][0]), len(descriptors)
+        """ Preprocess the descriptors and features to a convenient format
+        for training Neural Network model. """
+        self.no_of_descriptors = len(descriptors[0]['x'][0]) 
+        self.no_of_structures = len(descriptors)
 
         # Generate and plot descriptor range.
         self.drange = self.get_descriptors_range(descriptors)
@@ -246,13 +382,12 @@ class NeuralNetwork():
 
         for i in range(self.no_of_structures):
             for element in self.elements:
-                x[i][element] = torch.DoubleTensor(descriptors['x'][i][element]).to(self.device)
+                x[i][element] = torch.DoubleTensor(descriptors['x'][i][element], ).to(self.device)
                 if self.force_coefficient:
                     dxdr[i][element] = torch.DoubleTensor(descriptors['dxdr'][i][element]).to(self.device)
+        
         del(descriptors)
-
-        # Flush memory
-        gc.collect()
+        gc.collect() # Flush memory
 
         # Parse Energy & Forces
         energy = []
@@ -262,8 +397,10 @@ class NeuralNetwork():
             force.append(torch.DoubleTensor(features[i]['force']).to(self.device))
         energy = torch.DoubleTensor(energy).to(self.device)
 
+        # Emphazising the importance of lower Energy mode.
         softmax = self._SOFTMAX(energy, x, beta=self.softmax_beta)
-
+        
+        # Compile x, dxdr, energy, force, and softmax into PyTorch DataLoader.
         self.data = data.DataLoader(Dataset(x, dxdr, energy, force, softmax),
                                     batch_size=self.batch_size,
                                     shuffle=self.shuffle,
@@ -274,167 +411,52 @@ class NeuralNetwork():
         del(energy)
         del(force)
         del(softmax)
-
-        # Flush memory
-        gc.collect()
-        
-        
-    def evaluate(self, TestDescriptors, TestFeatures, figname):
-        """ Evaluating the train or test data set. """
-
-        if figname[:-4] == 'Train':
-            print(f"============================= Evaluating {figname[:-4]}ing Set ============================\n")
-        else:
-            print("============================= Evaluating Testing Set =============================\n")
-
-        TestDescriptors = self.normalized(TestDescriptors, 
-                                          self.drange, self.unit)
-        no_of_structures = TestDescriptors['no_of_structures']
-
-        X = [{} for _ in range(len(TestDescriptors['x']))]
-        if self.force_coefficient:
-            DXDR = [{} for _ in range(len(TestDescriptors['dxdr']))]
-        else:
-            DXDR = [None]*len(X)
-
-        energy, force = [], []
-
-        for i in range(no_of_structures):
-            energy.append(TestFeatures[i]['energy']/len(TestFeatures[i]['force']))
-            force.append(np.ravel(np.asarray(TestFeatures[i]['force'])))
-            for element in self.elements:
-                X[i][element] = torch.DoubleTensor(TestDescriptors['x'][i][element]).to('cpu')
-                if self.force_coefficient:
-                    DXDR[i][element] = torch.DoubleTensor(TestDescriptors['dxdr'][i][element]).to('cpu')
-        
-        # Switch models device to cpu
-        models = {}
-        for element in self.elements:
-            if next(self.models[element].parameters()).is_cuda:
-                models[element] = self.models[element].cpu()
-            else:
-                models[element] = self.models[element]
-
-        # If multi-species doesn't work here is the first place to look for mistake
-        _energy, _force = [], []
-        test_data = zip(X, DXDR)
-        for x, dxdr in test_data:
-            n_atoms = sum(len(value) for value in x.values())
-            _Energy = 0.
-            _Force = torch.zeros([n_atoms, 3], dtype=torch.float64)
-
-            for element, model in models.items():
-                _x = x[element].requires_grad_()
-                _e = model(_x).sum()
-                _Energy += _e
-                if self.force_coefficient:
-                    dedx = torch.autograd.grad(_e, _x)[0]
-                    _Force += -torch.einsum("ik, ijkl -> jl", dedx, dxdr[element])
-            _force.append(np.ravel(_Force.numpy()))
-            _energy.append(_Energy.item()/n_atoms)
-        
-        energy = np.array(energy)
-        _energy = np.array(_energy)
-        force = np.array([x for i in force for x in i])
-        _force = np.array([x for i in _force for x in i])
-        
-        # Dump the true and predicted values into text file.
-        self.dump_evaluate(_energy, energy, filename=figname[:-4]+'Energy.txt')
-        if self.force_coefficient:
-            self.dump_evaluate(_force, force, filename=figname[:-4]+'Force.txt')
-
-        # Calculate the mean absolute error and r2
-        E_mae = self.mean_absolute_error(energy, _energy)
-        E_mse = self.mean_squared_error(energy, _energy)
-        E_r2 = self.r2_score(energy, _energy)
-        print("The results for energy: ")
-        print("    Energy R2     {:8.6f}".format(E_r2))
-        print("    Energy MAE    {:8.6f}".format(E_mae))
-        print("    Energy RMSE   {:8.6f}".format(E_mse))
-        energy_str = 'Energy: r2({:.4f}), MAE({:.4f} {}/atom)'. \
-                     format(E_r2, E_mae, self.unit)
-
-        plt.title(energy_str)
-        plt.scatter(energy, _energy, label='Energy', s=5)
-        plt.legend(loc=2)
-        plt.xlabel('True ({}/atom)'.format(self.unit))
-        plt.ylabel('Prediction ({}/atom)'.format(self.unit))
-        plt.tight_layout()
-        plt.savefig(self.path+'Energy_'+figname)
-        plt.close()
-        print("The energy figure is exported to: {:s}".format(self.path+'Energy_'+figname))
-        print("\n")
-
-        if self.force_coefficient:
-            F_mae = self.mean_absolute_error(force, _force)
-            F_mse = self.mean_squared_error(force, _force)
-            F_r2 = self.r2_score(force, _force)
-            print("The results for force: ")
-            print("    Force R2      {:8.6f}".format(F_r2))
-            print("    Force MAE     {:8.6f}".format(F_mae))
-            print("    Force RMSE    {:8.6f}".format(F_mse))
-            length = 'A'
-            if self.unit == 'Ha':
-                length == 'Bohr'
-            force_str = 'Force: r2({:.4f}), MAE({:.3f} {}/{})'. \
-                        format(F_r2, F_mae, self.unit, length)
-            plt.title(force_str)
-            plt.scatter(force, _force, s=5, label='Force')
-            plt.legend(loc=2)
-            plt.xlabel('True ({}/{})'.format(self.unit, length))
-            plt.ylabel('Prediction ({}/{})'.format(self.unit, length))
-            plt.tight_layout()
-            plt.savefig(self.path+'Force_'+figname)
-            plt.close()
-            print("The force figure is exported to: {:s}".format(self.path+'Force_'+figname))
-            print("\n")
-        else:
-            F_mae, F_mse, F_r2 = None, None, None
-        print("============================= Evaluation is Completed ============================")
-        print("\n")
-        
-        return (E_mae, E_mse, E_r2, F_mae, F_mse, F_r2)
+        gc.collect() # Flush memory
 
 
     def calculate_loss(self, models, batch):
-        """ Calculate mean square error and mean absolute error of 
-        energy and force. """
+        """ Calculate the total loss and MAE for energy and forces
+        for a batch of structures per one optimization step. """ 
 
         energy_loss, force_loss = 0., 0.
         energy_mae, force_mae = 0., 0.
+        all_atoms = 0
 
         for x, dxdr, energy, force, sf in batch:
             n_atoms = sum(len(value) for value in x.values())
-            _Energy = 0  # total energy for the structure
+            all_atoms += n_atoms
+            _Energy = 0  # Predicted total energy for a structure
             _force = torch.zeros([n_atoms, 3], dtype=torch.float64, device=self.device)
             dedx = {}
             for element, model in models.items():
-                _x = x[element].requires_grad_()
-                _energy = model(_x).sum() #total energy for each specie
-                _Energy += _energy
+                if x[element].nelement() > 0:
+                    _x = x[element].requires_grad_()
+                    _energy = model(_x).sum() # total energy for each specie
+                    _Energy += _energy
 
-                if self.force_coefficient:
-                    dedx[element] = torch.autograd.grad(_energy, _x, create_graph=True)[0]
-                    _force += -torch.einsum("ik, ijkl -> jl", dedx[element], dxdr[element]) #always natoms*3 array
+                    if self.force_coefficient:
+                        dedx[element] = torch.autograd.grad(_energy, _x, create_graph=True)[0]
+                        _force += -torch.einsum("ik, ijkl -> jl", 
+                                                dedx[element], dxdr[element]) # [natoms, 3]
             
             energy_loss += sf.item()*((_Energy - energy) / n_atoms) ** 2
             energy_mae  += sf.item()*F.l1_loss(_Energy / n_atoms, energy / n_atoms)
 
             if self.force_coefficient:
-                force_loss  += sf.item()*self.force_coefficient * ((_force - force) ** 2).mean()
-                force_mae   += sf.item()*F.l1_loss(_force, force)
+                force_loss += sf.item()*self.force_coefficient * ((_force - force) ** 2).sum()
+                force_mae  += sf.item()*F.l1_loss(_force, force) * n_atoms
 
         energy_loss = energy_loss / (2. * len(batch))
         energy_mae /= len(batch)
-        
+
         if self.force_coefficient:
-            force_loss = force_loss / (2. * len(batch))
-            force_mae /= len(batch)
+            force_loss = force_loss / (2. * all_atoms)
+            force_mae /= all_atoms
             loss = energy_loss + force_loss
         else:
             loss = energy_loss
 
-        # Add regularization term
+        # Add regularization to the total loss.
         if self.alpha: 
             reg = 0.
             for element, model in models.items():
@@ -466,10 +488,8 @@ class NeuralNetwork():
 
     def dump_evaluate(self, predicted, true, filename):
         """ Dump the evaluate results to text files. """
-        
         absolute_diff = np.abs(np.subtract(predicted, true))
         combine = np.vstack((predicted, true, absolute_diff)).T
-        
         np.savetxt(self.path+filename, combine, header='Predicted True Diff', fmt='%.7e')
 
         
@@ -497,7 +517,6 @@ class NeuralNetwork():
                       'optimizer': self.optimizer.state_dict()}
         
         torch.save(checkpoint, self.filename)
-
         print("The NNP is exported to {:s}".format(self.filename))
 
 
@@ -549,7 +568,7 @@ class NeuralNetwork():
         Returns
         -------
         dict
-            The range of the descriptors for each element species.
+            The ranges of the descriptors for each chemical specie.
         """
         _DRANGE = {}
         no_of_structures = len(descriptors)
@@ -572,7 +591,11 @@ class NeuralNetwork():
     
     def normalized(self, descriptors, drange, unit, norm=[0., 1.]):
         """ Normalizing the descriptors to the range of [0., 1.] based on the
-        min and max value of the descriptors in the crystal structures. 
+        min and max value of the entire descriptors.
+
+        Example:
+        X.shape == [60, 10]; len(self.elements) == 2
+        X_norm -> {'element1': [40, 10], 'element2': [20, 10]}
         
         Parameters
         ----------
@@ -582,12 +605,13 @@ class NeuralNetwork():
             The range of the descriptors for each element species.
         unit: str
             The unit of energy ('eV' or 'Ha').
+        norm: tuple of floats.
+            The lower and upper bounds of the normalization.
             
         Returns
         -------
         dict
             The normalized descriptors.
-        
         """
         d = {}
         d['no_of_structures'] = len(descriptors)
@@ -649,7 +673,7 @@ class NeuralNetwork():
     def _SOFTMAX(self, energy, x, beta=-1):
         """ Assign the weight to each sample based on the softmax function. """
 
-        # Ensure that the sum of smax is equal to number of samples
+        # Length of smax is equal to the number of samples.
         smax = np.ones(len(energy))
 
         if beta is not None:
@@ -741,6 +765,11 @@ class NeuralNetwork():
 
 
 class Dataset(data.Dataset):
+    """ Defined a Dataset class based on PyTorch Dataset. 
+
+    Tutorial:
+    https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
+    """
     def __init__(self, x, dxdr, energy, force, softmax):
         self.x = x
         self.dxdr = dxdr
