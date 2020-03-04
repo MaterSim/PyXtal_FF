@@ -1,7 +1,7 @@
 import os
 from pyxtal_ff.models.neuralnetwork import NeuralNetwork
 from pyxtal_ff.models.polynomialregression import PR
-from pyxtal_ff.models.gaussianprocess import GaussianProcess
+#from pyxtal_ff.models.gaussianprocess import GaussianProcess
 from pyxtal_ff.utilities import convert_to_descriptor
 from pyxtal_ff.version import __version__
 
@@ -309,39 +309,39 @@ class PyXtal_FF():
                             norm=_model['norm'],
                             d_max=_model['d_max'])
 
-        elif self.algorithm == 'GPR':
-            _model = {'force_coefficient': 0.0001,
-                      'path': self.path,
-                      'system': None,
-                      'epoch': 100,
-                      'noise': 1e-10,
-                      'kernel': 'RBF'
-                      }
-            _model.update(model)
-                        
-            if 'parameters' not in _model['optimizer']:
-                _model['optimizer']['parameters'] = {}
-            if 'derivative' not in _model['optimizer']:
-                _model['optimizer']['derivative'] = True
-            if 'method' not in _model['optimizer']:
-                _model['optimizer']['method'] = 'lbfgs'
+        #elif self.algorithm == 'GPR':
+        #    _model = {'force_coefficient': 0.0001,
+        #              'path': self.path,
+        #              'system': None,
+        #              'epoch': 100,
+        #              'noise': 1e-10,
+        #              'kernel': 'RBF'
+        #              }
+        #    _model.update(model)
+        #                
+        #    if 'parameters' not in _model['optimizer']:
+        #        _model['optimizer']['parameters'] = {}
+        #    if 'derivative' not in _model['optimizer']:
+        #        _model['optimizer']['derivative'] = True
+        #    if 'method' not in _model['optimizer']:
+        #        _model['optimizer']['method'] = 'lbfgs'
 
-            # If LBFGS is used, epoch is 1.
-            if _model['optimizer']['method'] in ['lbfgs', 'LBFGS', 'lbfgsb']:
-                if 'max_iter' in _model['optimizer']['parameters'].items():
-                    if _model['epoch'] > _model['optimizer']['parameters']['max_iter']:
-                        _model['optimizer']['parameters']['max_iter'] = _model['epoch']
-                else:
-                    _model['optimizer']['parameters']['max_iter'] = _model['epoch']
-                _model['epoch'] = 1
-            
-            self.model = GaussianProcess(elements=_model['system'],
-                                         force_coefficient=_model['force_coefficient'],
-                                         noise=_model['noise'],
-                                         epoch=_model['epoch'],
-                                         kernel=_model['kernel'],
-                                         path=_model['path'],)
-            self.optimizer = _model['optimizer']
+        #    # If LBFGS is used, epoch is 1.
+        #    if _model['optimizer']['method'] in ['lbfgs', 'LBFGS', 'lbfgsb']:
+        #        if 'max_iter' in _model['optimizer']['parameters'].items():
+        #            if _model['epoch'] > _model['optimizer']['parameters']['max_iter']:
+        #                _model['optimizer']['parameters']['max_iter'] = _model['epoch']
+        #        else:
+        #            _model['optimizer']['parameters']['max_iter'] = _model['epoch']
+        #        _model['epoch'] = 1
+        #    
+        #    self.model = GaussianProcess(elements=_model['system'],
+        #                                 force_coefficient=_model['force_coefficient'],
+        #                                 noise=_model['noise'],
+        #                                 epoch=_model['epoch'],
+        #                                 kernel=_model['kernel'],
+        #                                 path=_model['path'],)
+        #    self.optimizer = _model['optimizer']
             
     
     def run(self):

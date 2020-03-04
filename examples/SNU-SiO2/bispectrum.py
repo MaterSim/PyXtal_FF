@@ -14,7 +14,7 @@ model = {'system' : ['Si', 'O'],
          'force_coefficient': 0.1,
          'epoch': 1000,
          'device': 'cpu',
-         'restart': 'Si-O-Bispectrum/30-30-checkpoint.pth',
+         #'restart': 'Si-O-Bispectrum/30-30-checkpoint.pth',
          'optimizer': {'method': 'lbfgs'}}
 
 #-------------------------------- Run NN calculation ------------------------------

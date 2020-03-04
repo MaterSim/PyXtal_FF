@@ -24,6 +24,4 @@ pyxtal_ff/models/neuralnetwork.py
 pyxtal_ff/models/optimize.py
 pyxtal_ff/utilities/__init__.py
 pyxtal_ff/utilities/gradient.py
-pyxtal_ff/utilities/poscar_to_lammps.py
-pyxtal_ff/utilities/zbl.py
 scripts/pyxtal_ff
