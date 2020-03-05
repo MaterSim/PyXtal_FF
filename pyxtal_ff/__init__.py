@@ -354,8 +354,8 @@ class PyXtal_FF():
             self.model.train(self.TrainDescriptors, self.TrainFeatures)
         
         # Evaluate Trained Data Set
-            Train_stat = self.model.evaluate(\
-            self.TrainDescriptors, self.TrainFeatures,figname='Train.png')
+        Train_stat = self.model.evaluate(\
+        self.TrainDescriptors, self.TrainFeatures,figname='Train.png')
         
         # Evaluate Test Data Set
         if self.EvaluateTest:
