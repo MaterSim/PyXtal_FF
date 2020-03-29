@@ -38,6 +38,7 @@ setup(
         'scipy>=1.1.0', 
         'matplotlib>=2.0.0',
         'numba>=0.44.1',
+        'phonopy>=2.3.2',
         'ase>=3.18.0'],
     python_requires='>=3.6.1',
     license='MIT',
