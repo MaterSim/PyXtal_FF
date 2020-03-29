@@ -4,7 +4,7 @@ from pyxtal_ff.version import __version__
 from pyxtal_ff.utilities import convert_to_descriptor
 from pyxtal_ff.models.polynomialregression import PR
 from pyxtal_ff.models.neuralnetwork import NeuralNetwork
-from pyxtal_ff.models.gaussianprocess import GaussianProcess
+#from pyxtal_ff.models.gaussianprocess import GaussianProcess
 
 
 class PyXtal_FF():

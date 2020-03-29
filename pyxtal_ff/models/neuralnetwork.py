@@ -844,7 +844,7 @@ class NeuralNetwork():
                     d['dxdr'][i][element] = np.zeros([i_size, j_size, d['no_of_descriptors'], 3])
                 #else:
                 #    d['dxdr'][i][element] = None
-                if descriptors[i]['rdxdr'] is not None:
+                if 'rdxdr' in descriptors[i] and descriptors[i]['rdxdr'] is not None:
                     d['rdxdr'][i][element] = np.zeros([i_size, d['no_of_descriptors'], 6])
                 #else:
                 #    d['rdxdr'][i][element] = None
@@ -865,7 +865,7 @@ class NeuralNetwork():
                         desp = 0.529177 * np.einsum('j, ijk->ijk', scale, descriptors[i]['dxdr'][m])
                     d['dxdr'][i][element][count[element]] = desp
                 
-                if descriptors[i]['rdxdr'] is not None:
+                if 'rdxdr' in descriptors[i] and descriptors[i]['rdxdr'] is not None:
                     dess = np.einsum('k, kl->kl', scale, descriptors[i]['rdxdr'][m])
                     if unit == 'eV':
                         pass
