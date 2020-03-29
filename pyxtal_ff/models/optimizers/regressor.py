@@ -75,38 +75,43 @@ class Regressor:
         regressor
             PyTorch optimizer or Scipy LBFGS-B.
         """
+        try:
+            params = models['model'].parameters()
+        except:
+            params = [p for model in models.values() for p in model.parameters()]
+
         if self.method in ['LBFGS', 'lbfgs']:
-            regressor = self.optimizer([param for model in models.values() for param in model.parameters()], 
-                                    lr=self.kwargs['lr'],
-                                    max_iter=self.kwargs['max_iter'],
-                                    max_eval=self.kwargs['max_eval'],
-                                    tolerance_grad=self.kwargs['tolerance_grad'],
-                                    tolerance_change=self.kwargs['tolerance_change'],
-                                    history_size=self.kwargs['history_size'],
-                                    line_search_fn=self.kwargs['line_search_fn'])
+            regressor = self.optimizer(params, 
+                                       lr=self.kwargs['lr'],
+                                       max_iter=self.kwargs['max_iter'],
+                                       max_eval=self.kwargs['max_eval'],
+                                       tolerance_grad=self.kwargs['tolerance_grad'],
+                                       tolerance_change=self.kwargs['tolerance_change'],
+                                       history_size=self.kwargs['history_size'],
+                                       line_search_fn=self.kwargs['line_search_fn'])
 
         elif self.method in ['SGD', 'sgd']:
-            regressor = self.optimizer([param for model in models.values() for param in model.parameters()],
-                                    lr=self.kwargs['lr'],
-                                    momentum=self.kwargs['momentum'],
-                                    dampening=self.kwargs['dampening'],
-                                    weight_decay=self.kwargs['weight_decay'],
-                                    nesterov=self.kwargs['nesterov'])
+            regressor = self.optimizer(params,
+                                       lr=self.kwargs['lr'],
+                                       momentum=self.kwargs['momentum'],
+                                       dampening=self.kwargs['dampening'],
+                                       weight_decay=self.kwargs['weight_decay'],
+                                       nesterov=self.kwargs['nesterov'])
 
         elif self.method in ['adam', 'ADAM', 'Adam']:
-            regressor = self.optimizer([param for model in models.values() for param in model.parameters()],
-                                    lr=self.kwargs['lr'],
-                                    betas=self.kwargs['betas'],
-                                    eps=self.kwargs['eps'],
-                                    weight_decay=self.kwargs['weight_decay'],
-                                    amsgrad=self.kwargs['amsgrad'])
+            regressor = self.optimizer(params,
+                                       lr=self.kwargs['lr'],
+                                       betas=self.kwargs['betas'],
+                                       eps=self.kwargs['eps'],
+                                       weight_decay=self.kwargs['weight_decay'],
+                                       amsgrad=self.kwargs['amsgrad'])
 
         elif self.method in ['lbfgsb']: 
-            regressor = self.optimizer([param for model in models.values() for param in model.parameters()], 
-                                    max_iter=self.kwargs['max_iter'],
-                                    max_eval=self.kwargs['max_eval'],
-                                    tolerance_grad=self.kwargs['tolerance_grad'],
-                                    tolerance_change=self.kwargs['tolerance_change'],
-                                    history_size=self.kwargs['history_size'])
+            regressor = self.optimizer(params,
+                                       max_iter=self.kwargs['max_iter'],
+                                       max_eval=self.kwargs['max_eval'],
+                                       tolerance_grad=self.kwargs['tolerance_grad'],
+                                       tolerance_change=self.kwargs['tolerance_change'],
+                                       history_size=self.kwargs['history_size'])
        
         return regressor

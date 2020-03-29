@@ -20,11 +20,12 @@ class SO4_Bispectrum:
     U-functions using horner form
     '''
 
-    def __init__(self, lmax, rcut, derivative=True, normalize_U=False):
+    def __init__(self, lmax, rcut, derivative=True, stress=False, normalize_U=False):
         # populate attributes
         self.lmax = lmax
         self.rcut = rcut
         self.derivative = derivative
+        self.stress = stress
         self.normalize_U = normalize_U
 
     def __repr__(self):
@@ -75,6 +76,17 @@ class SO4_Bispectrum:
             raise ValueError('derivative must be a boolean value')
 
     @property
+    def stress(self):
+        return self._stress
+
+    @stress.setter
+    def stress(self, stress):
+        if isinstance(stress, bool) is True:
+            self._stress = stress
+        else:
+            raise ValueError('stress must be a boolean value')
+
+    @property
     def normalize_U(self):
         return self._norm
 
@@ -91,7 +103,7 @@ class SO4_Bispectrum:
         '''
         attrs = list(vars(self).keys())
         for attr in attrs:
-            if attr not in {'_twol', '_rcut', '_derivative', '_norm'}:
+            if attr not in {'_twol', '_rcut', '_derivative', '_stress', '_norm'}:
                 delattr(self, attr)
         return
 
@@ -110,21 +122,29 @@ class SO4_Bispectrum:
         self.build_neighbor_list()
         self.initialize_arrays()
 
-        get_bispectrum_components(self.neighborlist, self.neighbor_indices,
+        get_bispectrum_components(self.center_atoms,self.neighborlist, self.neighbor_indices,
                                   self.atomic_numbers, self.site_atomic_numbers,
                                   self._twol, self.rcut, self._norm, self.derivative,
-                                  self._blist, self._dblist)
+                                  self.stress, self._blist, self._dblist, self._bstress)
 
         if self.derivative is True:
-            blist = deepcopy(self._blist)
-            dblist = deepcopy(self._dblist)
 
-            x = {'x':blist.real, 'dxdr':dblist.real, 'elements':list(atoms.symbols)}
+            x = {'x':self._blist.real, 'dxdr':self._dblist.real, 'elements':list(atoms.symbols)}
+
+            if self.stress is True:
+                x['rdxdr'] = self._bstress.real
+            else:
+                x['rdxdr'] = None
 
         else:
-            blist = deepcopy(self._blist)
-            x = {'x':blist.real, 'elements':list(atoms.symbols)}
-        self.clear_memory()
+            x = {'x':self._blist.real, 'dxdr': None, 'elements':list(atoms.symbols)}
+            
+            if self.stress is True:
+                x['rdxdr'] = self._bstress.real
+            else:
+                x['rdxdr'] = None
+
+            self.clear_memory()
         return x
 
     def build_neighbor_list(self):
@@ -141,6 +161,7 @@ class SO4_Bispectrum:
             # provide atoms object to neighborlist calculator
             nl.update(atoms)
             # instantiate memory for neighbor separation vectors, periodic indices, and atomic numbers
+            center_atoms = np.zeros((len(atoms), 3), dtype=np.float64)
             neighbors = []
             neighbor_indices = []
             atomic_numbers = []
@@ -149,6 +170,7 @@ class SO4_Bispectrum:
             for i in range(len(atoms)):
                 # get center atom position
                 center_atom = atoms.positions[i]
+                center_atoms[i] = center_atom
                 # get indices and cell offsets of each neighbor
                 indices, offsets = nl.get_neighbors(i)
                 # add an empty list to neighbors and atomic numbers for population
@@ -189,6 +211,7 @@ class SO4_Bispectrum:
                 if len(neighlist) > max_len:
                     max_len = len(neighlist)
 
+            center_atoms = np.zeros((len(struc), 3), dtype=np.float64)
             neighborlist = np.zeros((len(struc), max_len, 3), dtype=np.float64)
             neighbor_inds = np.zeros((len(struc), max_len), dtype=np.int64)
             atm_nums = np.zeros((len(struc), max_len), dtype=np.int64)
@@ -197,6 +220,7 @@ class SO4_Bispectrum:
             for i, site in enumerate(struc):
                 neighlist = neighbors[i]
                 site_atomic_numbers[i] = site.specie.number
+                center_atoms[i] = site.coords
                 for j, neighbor in enumerate(neighlist):
                     neighborlist[i, j, :] = neighbor[0].coords - site.coords
                     neighbor_inds[i, j] = neighbor[2]
@@ -205,6 +229,7 @@ class SO4_Bispectrum:
         else: raise NotImplementedError('Specified backend not supported')
 
         # assign these arrays to attributes
+        self.center_atoms = center_atoms
         self.neighborlist = neighborlist
         self.neighbor_indices = neighbor_inds
         self.atomic_numbers = atm_nums
@@ -226,6 +251,7 @@ class SO4_Bispectrum:
         # allocate memory for the bispectrum and its derivative
         self._blist = np.zeros([ncell, ncoefs], dtype=np.complex128)
         self._dblist = np.zeros([ncell, ncell, ncoefs, 3], dtype=np.complex128)
+        self._bstress = np.zeros([ncell, ncell, ncoefs, 3, 3], dtype=np.complex128)
         return
 
 @nb.njit(nb.void(nb.i8, nb.f8[:]), cache=True,
@@ -862,35 +888,36 @@ def compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist, zlist, dblist):
 
 @nb.njit(nb.void(nb.c16[:,:]),
          cache=True, fastmath=True, nogil=True)
-def zero_uarraytot(uarraytot):
+def zero_1d(arr):
     # zero a generic 1-d array
-    for i in range(uarraytot.shape[0]):
-        uarraytot[i] = 0
+    for i in range(arr.shape[0]):
+        arr[i] = 0
     return
 
 @nb.njit(nb.void(nb.c16[:,:]),
          cache=True, fastmath=True, nogil=True)
-def zero_zlist(zarray):
-    # zero a generic 1d array
-    for i in range(zarray.shape[0]):
-        zarray[i] = 0
+def zero_2d(arr):
+    # zero a generic 2d array
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            arr[i,j] = 0
     return
 
 @nb.njit(nb.void(nb.c16[:,:,:]),
          cache=True, fastmath=True, nogil=True)
-def zero_dulist(dulist):
+def zero_3d(arr):
     # zero a generic 3d array
-    for i in range(dulist.shape[0]):
-        for j in range(dulist.shape[1]):
-            for k in range(dulist.shape[2]):
-                dulist[i,j,k] = 0
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            for k in range(arr.shape[2]):
+                arr[i,j,k] = 0
     return
 
-@nb.njit(nb.void(nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8[:], nb.i8, nb.f8,
-                 nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:,:]),
+@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8[:], nb.i8, nb.f8,
+                 nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:,:], nb.c16[:,:,:,:,:]),
          cache=True, fastmath=True, nogil=True)
-def get_bispectrum_components(neighborlist, neighbor_indices, neighbor_ANs, site_ANs,
-                              twolmax, rcut, norm, derivative, blist, dblist):
+def get_bispectrum_components(center_atoms, neighborlist, neighbor_indices, neighbor_ANs, site_ANs,
+                              twolmax, rcut, norm, derivative, stress, blist, dblist, bstress):
     '''
     Calculate the bispectrum components, and their derivatives (if specified)
     for a given neighbor list.  This is the main work function.
@@ -1036,13 +1063,15 @@ def get_bispectrum_components(neighborlist, neighbor_indices, neighbor_ANs, site
     zlist = np.zeros((idxz_count, 1), dtype=np.complex128)
     dulist = np.zeros((nneighbors, idxu_count, 3), dtype=np.complex128)
     ulist = np.zeros((idxu_count, 1), dtype=np.complex128)
+    tempdb = np.zeros((idxb_count, 3), dtype=np.complex128)
+    Rj = np.zeros(3, dtype=np.float64)
 
     if derivative == True:
 
         for site in range(nsites):
-            zero_uarraytot(ulisttot)
-            zero_zlist(zlist)
-            zero_dulist(dulist)
+            zero_1d(ulisttot)
+            zero_1d(zlist)
+            zero_3d(dulist)
             addself_uarraytot(twolmax, idxu_block, ulisttot)
             # multiply center atom atomic number to contribution
             ulisttot *= site_ANs[site]
@@ -1060,7 +1089,7 @@ def get_bispectrum_components(neighborlist, neighbor_indices, neighbor_ANs, site
                 psi = np.pi*r/rcut
                 # populate ulist and dulist with Wigner U functions
                 # and derivatives
-                zero_uarraytot(ulist)
+                zero_1d(ulist)
                 compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
                                              dulist[neighbor], idxu_block)
 
@@ -1084,23 +1113,58 @@ def get_bispectrum_components(neighborlist, neighbor_indices, neighbor_ANs, site
             # compute bispectrum components for one site
             compute_bi(ncoefs, idxb, idxz_block, idxu_block, ulisttot, zlist, blist[site])
 
-            # compute dbidrj for one site
-            for neighbor in range(nneighbors):
-                # compute dbidrj for one neighbor according to neighbor index
-                compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
-                               zlist, dblist[site, neighbor_indices[site, neighbor]])
+            if stress == True:
+                # compute dbidrj for one site
+                Ri = center_atoms[site]
+                for neighbor in prange(nneighbors):
+                    zero_2d(tempdb)
+                    # compute dbidrj for one neighbor according to neighbor index
+                    compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
+                                   zlist, tempdb)
+                    # add it to the proper place in dblist
+                    dblist[site, neighbor_indices[site, neighbor]] += tempdb
 
-        # finalize dbidrj
-        for i in range(nsites):
-            for j in range(nsites):
-                if i != j:
-                    dblist[i,i] -= dblist[i,j]
+                    # get neighbors for stress calc
+                    xj = neighborlist[site, neighbor, 0] + Ri[0]
+                    yj = neighborlist[site, neighbor, 1] + Ri[1]
+                    zj = neighborlist[site, neighbor, 2] + Ri[2]
+
+                    # arrange into array for outer product
+                    Rj[0] = xj
+                    Rj[1] = yj
+                    Rj[2] = zj
+
+                    for k in range(idxb_count):
+                        # get outer product for ri and grad b
+                        bstress[site, site, k] += np.outer(Ri, tempdb[k])
+                        # get outer product for rj and the grad b
+                        bstress[site, neighbor_indices[site, neighbor], k] -= np.outer(Rj, tempdb[k])
+
+            else:
+                # compute dbidrj for one site
+                for neighbor in prange(nneighbors):
+                    # compute dbidrj for one neighbor according to neighbor index
+                    compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
+                                   zlist, dblist[site, neighbor_indices[site, neighbor]])
+
+        if stress == True:
+            # finalize dbidrj and stress
+            for i in range(nsites):
+                for j in range(nsites):
+                    if i != j:
+                        dblist[i,i] -= dblist[i,j]
+        else:
+            # finalize dbidrj
+            for i in range(nsites):
+                for j in range(nsites):
+                    if i != j:
+                        dblist[i,i] -= dblist[i,j]
 
     else:
 
         for site in range(nsites):
-            zero_uarraytot(ulisttot)
-            zero_zlist(zlist)
+            zero_1d(ulisttot)
+            zero_1d(zlist)
             addself_uarraytot(twolmax, idxu_block, ulisttot)
             # multiply center atom atomic number to contribution
             ulisttot *= site_ANs[site]
@@ -1117,7 +1181,7 @@ def get_bispectrum_components(neighborlist, neighbor_indices, neighbor_ANs, site
                 # angle of rotation
                 psi = np.pi*r/rcut
                 # populate ulist and dulist with Wigner U functions
-                zero_uarraytot(ulist)
+                zero_1d(ulist)
                 compute_uarray_polynomial(x, y, z, psi, r, twolmax, ulist,
                                              idxu_block)
 
@@ -1144,7 +1208,7 @@ if  __name__ == "__main__":
     import time
     # ---------------------- Options ------------------------
     parser = OptionParser()
-    parser.add_option("-c", "--crystal", dest="structure", default='',
+    parser.add_option("-c", "--crystal", dest="structure",
                       help="crystal from file, cif or poscar, REQUIRED",
                       metavar="crystal")
 
@@ -1156,31 +1220,35 @@ if  __name__ == "__main__":
                       help="lmax, default: 1"
                       )
 
-    parser.add_option("-t", dest="der",
+    parser.add_option("-s", dest="stress", default=True, 
                       action='store_true',help='derivative flag')
 
-    parser.add_option("-f", dest="der",
+    parser.add_option("-f", dest="der", default=True,
                       action='store_false',help='derivative flag')
 
     (options, args) = parser.parse_args()
 
-    if options.structure.find('cif') > 0:
-        fileformat = 'cif'
+    if options.structure is None:
+        from ase.build import bulk
+        test = bulk('Si', 'diamond', a=5.459)
+        cell = test.get_cell()
+        cell[0,1] += 0.5
+        test.set_cell(cell)
     else:
-        fileformat = 'poscar'
-
-    test = read(options.structure, format='vasp')
-
+        test = read(options.structure, format='vasp')
+    print(test)
     lmax = options.lmax
     rcut = options.rcut
     der = options.der
+    stress = options.stress
 
-    import time
-    start1 = time.time()
-    f = SO4_Bispectrum(lmax, rcut, derivative=der, normalize_U=False)
+    #import time
+    f = SO4_Bispectrum(lmax, rcut, derivative=der, stress=stress, normalize_U=False)
     x = f.calculate(test)
-    start2 = time.time()
-
-    for key, item in x.items():
-        print(key, item)
-    print('time elapsed: {}'.format(start2 - start1))
+    #start2 = time.time()
+    #for key, item in x.items():
+    #    print(key, item)
+    #print('time elapsed: {}'.format(start2 - start1))
+    print(x['rdxdr'].shape)
+    print(x['rdxdr'])
+    #print(np.einsum('ijklm->klm', x['rdxdr']))

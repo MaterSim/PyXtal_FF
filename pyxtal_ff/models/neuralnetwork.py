@@ -49,12 +49,16 @@ class NeuralNetwork():
     device: str
         The device used to train: 'cpu' or 'cuda'.
     force_coefficient: float
-        This parameter is used in the penalty function to scale the force
-        contribution relative to the energy.
+        This parameter is used as the penalty parameter to scale 
+        the force contribution relative to the energy.
+    stress_coefficient: float 
+        This parameter is used as the balance parameter scaling
+        the stress contribution relative to the energy.
+    stress_group: list of strings
+        Only the intended group will be considered in stress training,
+        i.e. ['Elastic'].
     alpha: float
         L2 penalty (regularization) parameter.
-        softmax_beta:
-        The parameters for Softmax Energy Penalty function.
     softmax_beta: float
         The parameters used for Softmax Energy Penalty function.
     unit: str
@@ -67,8 +71,9 @@ class NeuralNetwork():
         A path to the directory where everything is saved.
     """
     def __init__(self, elements, hiddenlayers, activation, random_seed, 
-                 batch_size, epoch, device, force_coefficient, alpha, 
-                 softmax_beta, unit, logging, restart, path):
+                 batch_size, epoch, device, alpha, softmax_beta, unit, 
+                 force_coefficient, stress_coefficient, stress_group,
+                 logging, restart, path):
         
         self.elements = sorted(elements)
         
@@ -132,6 +137,8 @@ class NeuralNetwork():
         self.alpha = alpha  # l2 regulization
         self.softmax_beta = softmax_beta
         self.force_coefficient = force_coefficient
+        self.stress_coefficient = stress_coefficient
+        self.stress_group = stress_group
 
         # Set-up unit
         unit_options = ['eV', 'Ha']
@@ -144,7 +151,9 @@ class NeuralNetwork():
         self.logger = logging
         self.restart = restart
         self.path = path
-        
+
+        self.drange = None
+
 
     def train(self, TrainDescriptors, TrainFeatures, optimizer):
         """ Training of Neural Network Potential. """
@@ -158,39 +167,51 @@ class NeuralNetwork():
         # Preprocess descriptors and features.
         self.preprocess(TrainDescriptors, TrainFeatures)
 
-        # Creating Neural Network architectures.
-        self.models = {}
-        for element in self.elements: # Number of models depend on species
-            m = 'nn.Sequential('
-            for i, act in enumerate(self.activation[element]):
+        # Calculate total number of parameters.
+        self.total_parameters = 0
+        for element in self.elements:
+            for i, hl in enumerate(self.hiddenlayers[element]):
                 if i == 0:
-                    m += f'nn.Linear({self.no_of_descriptors}, \
-                           {self.hiddenlayers[element][i]}), '
+                    self.total_parameters += (self.no_of_descriptors+1)*hl
                 else:
-                    m += f'nn.Linear({self.hiddenlayers[element][i-1]}, \
-                           {self.hiddenlayers[element][i]}), '
-                               
-                if act == 'Linear':
-                    continue
-                else:
-                    m += f'nn.{act}(), '
-            m += f')'
-
-            self.models[element] = eval(m).double().to(self.device)
-
-        # Set-up optimizer for optimizing NeuralNetwork weights.
-        self.regressor = Regressor(optimizer['method'], optimizer['parameters'])
-        self.optimizer = self.regressor.regress(models=self.models)
+                    self.total_parameters += (self.hiddenlayers[element][i-1]+1)*hl
         
-        # Look for previously saved models and continue optimizing from the last checkpoint.
-        if self.restart:
+        if self.restart is None:
+            # Creating Neural Network architectures.
+            self.models = {}
+            for element in self.elements: # Number of models depend on species
+                m = 'nn.Sequential('
+                for i, act in enumerate(self.activation[element]):
+                    if i == 0:
+                        m += f'nn.Linear({self.no_of_descriptors}, \
+                               {self.hiddenlayers[element][i]}), '
+                    else:
+                        m += f'nn.Linear({self.hiddenlayers[element][i-1]}, \
+                               {self.hiddenlayers[element][i]}), '
+                                   
+                    if act == 'Linear':
+                        continue
+                    else:
+                        m += f'nn.{act}(), '
+                m += f')'
+
+                self.models[element] = eval(m).double().to(self.device)
+
+            self.regressor = Regressor(optimizer['method'], optimizer['parameters'])
+            self.optimizer = self.regressor.regress(models=self.models)
+
+        else:
+            # Look for previously saved models and continue optimizing from the last checkpoint.
             self.load_checkpoint(filename=self.restart, 
                                  method=optimizer['method'], args=optimizer['parameters'])
-        
-        print("==================================== Training ====================================")
-        print("\n")
+                
+        print(f"No of structures  : {self.no_of_structures}")
+        print(f"No of descriptors : {self.no_of_descriptors}")
+        print(f"No of parameters  : {self.total_parameters}")
         print(f"Optimizer         : {optimizer['method']}")
-        print(f"Force_coefficient : {self.force_coefficient}\n")
+        print(f"Force_coefficient : {self.force_coefficient}")
+        if self.stress_coefficient:
+            print(f"Stress_coefficient : {self.stress_coefficient}\n")
 
         # Run Neural Network Potential Training
         t0 = time.time()
@@ -198,72 +219,79 @@ class NeuralNetwork():
             if optimizer['method'] in ['lbfgs', 'LBFGS', 'lbfgsb']:
                 print("Initial state : ")
                 def closure(): # LBFGS gets loss and its gradient here.
-                    train_loss, E_mae, F_mae = self.calculate_loss(self.models, self.data)
-                    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}".\
-                            format(train_loss, E_mae, F_mae))
+                    train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, self.data)
+                    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
+                            format(train_loss, E_mae, F_mae, S_mae))
                     self.optimizer.zero_grad()
                     train_loss.backward()
                     return train_loss
                 self.optimizer.step(closure)
 
             elif optimizer['method'] in ['sgd', 'SGD', 'Adam', 'adam', 'ADAM']:
-                if epoch != 0:
-                    print("\nIteration {:4d}: ".format(epoch+1))
-                    for batch in self.data:
-                        train_loss, E_mae, F_mae = self.calculate_loss(self.models, batch)
-                        self.optimizer.zero_grad()
-                        train_loss.backward()
-                        self.optimizer.step()
-                        print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}".\
-                                format(train_loss, E_mae, F_mae))
-                else:
+                if epoch == 0:
                     print("Initial state : ")
-                    train_loss, E_mae, F_mae = 0., 0., 0.
+                    train_loss, E_mae, F_mae, S_mae = 0., 0., 0.
+                    total = 0
                     for batch in self.data:
-                        tl, Emae, Fmae = self.calculate_loss(self.models, batch)
-                        train_loss += tl
-                        E_mae += Emae
-                        F_mae += Fmae
-                    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}".\
-                            format(train_loss, E_mae, F_mae))
-                    
+                        total += len(batch)
+                        tl, Emae, Fmae, Smae = self.calculate_loss(self.models, batch)
+                        train_loss += tl * len(batch)
+                        E_mae += Emae * len(batch)
+                        F_mae += Fmae * len(batch)
+                        S_mae += Smae * len(batch)
+                    train_loss /= total
+                    E_mae /= total
+                    F_mae /= total
+                    S_mae /= total
+                    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
+                            format(train_loss, E_mae, F_mae, S_mae))
+
+                print("\nIteration {:4d}: ".format(epoch+1))
+                for batch in self.data:
+                    train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, batch)
+                    self.optimizer.zero_grad()
+                    train_loss.backward()
+                    self.optimizer.step()
+                    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
+                            format(train_loss, E_mae, F_mae, S_mae))
+                                        
         t1 = time.time()
         print("\nThe training time: {:.2f} s".format(t1-t0))
         
-        self.save_checkpoint()
-        print("\n============================== Training is Completed =============================\n")
 
-            
     def evaluate(self, TestDescriptors, TestFeatures, figname):
         """ Evaluating the train or test data set based on trained Neural Network model. 
         Evaluate will only be performed in cpu mode. """
         
-        # If-else for consistent separations in printing.
-        if figname[:-4] == 'Train':
-            print(f"============================= Evaluating {figname[:-4]}ing Set ============================\n")
-        else:
-            print("============================= Evaluating Testing Set =============================\n")
-        
         # Normalized data set based on the training data set (drange).
-        TestDescriptors = self.normalized(TestDescriptors, self.drange, self.unit)
+        TestDescriptors = self.normalize(TestDescriptors, self.drange, self.unit)
         no_of_structures = TestDescriptors['no_of_structures']
 
         # Parse descriptors and Features
-        energy, force = [], []
+        energy, force, stress = [], [], []
         X = [{} for _ in range(len(TestDescriptors['x']))]
         if self.force_coefficient:
             DXDR = [{} for _ in range(len(TestDescriptors['dxdr']))]
         else:
             DXDR = [None]*len(X)
+        if self.stress_coefficient:
+            RDXDR = [{} for _ in range(len(TestDescriptors['rdxdr']))]
+        else:
+            RDXDR = [None]*len(X)
 
         for i in range(no_of_structures):
-            energy.append(TestFeatures[i]['energy']/len(TestFeatures[i]['force']))
-            force.append(np.ravel(TestFeatures[i]['force']))
             for element in self.elements:
                 X[i][element] = torch.DoubleTensor(TestDescriptors['x'][i][element])
                 if self.force_coefficient:
                     DXDR[i][element] = torch.DoubleTensor(TestDescriptors['dxdr'][i][element])
-        
+                if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
+                    RDXDR[i][element] = torch.DoubleTensor(TestDescriptors['rdxdr'][i][element])
+            
+            energy.append(TestFeatures[i]['energy']/len(TestFeatures[i]['force']))
+            force.append(np.ravel(TestFeatures[i]['force']))
+            if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
+                stress.append(np.array(TestFeatures[i]['stress']))
+                    
         # Switch models device to cpu if training is done in cuda.
         models = {}
         for element in self.elements:
@@ -271,14 +299,18 @@ class NeuralNetwork():
                 models[element] = self.models[element].cpu()
             else:
                 models[element] = self.models[element]
-        
+
         # Predicting the data set.
-        _energy, _force = [], [] # Predicted energy and forces
-        test_data = zip(X, DXDR)
-        for x, dxdr in test_data:
+        _energy, _force, _stress = [], [], [] # Predicted energy and forces
+        test_data = zip(X, DXDR, RDXDR)
+
+        for i, (x, dxdr, rdxdr) in enumerate(test_data):
+            dedx = None
             n_atoms = sum(len(value) for value in x.values())
             _Energy = 0.
             _Force = torch.zeros([n_atoms, 3], dtype=torch.float64)
+            if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
+                _Stress = torch.zeros([6], dtype=torch.float64)
 
             for element, model in models.items():
                 if x[element].nelement() > 0:
@@ -287,7 +319,14 @@ class NeuralNetwork():
                     _Energy += _e
                     if self.force_coefficient:
                         dedx = torch.autograd.grad(_e, _x)[0]
-                        _Force += -torch.einsum("ik, ijkl -> jl", dedx, dxdr[element])
+                        _Force += -1 * torch.einsum("ik, ijkl->jl", dedx, dxdr[element])
+                    if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
+                        if self.force_coefficient is None:
+                            dedx = torch.autograd.grad(_e, _x)[0]
+                        _Stress += -1 * torch.einsum("ik, ikl->l", dedx, rdxdr[element])
+            
+            if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
+                _stress.append(np.ravel(_Stress))
             _force.append(np.ravel(_Force.numpy()))
             _energy.append(_Energy.item()/n_atoms)
         
@@ -295,11 +334,16 @@ class NeuralNetwork():
         _energy = np.array(_energy)
         force = np.array([x for i in force for x in i])
         _force = np.array([x for i in _force for x in i])
+        if self.stress_coefficient:
+            stress = np.ravel(stress)
+            _stress = np.ravel(_stress)
         
         # Dump the true and predicted values into text file.
         self.dump_evaluate(_energy, energy, filename=figname[:-4]+'Energy.txt')
         if self.force_coefficient:
             self.dump_evaluate(_force, force, filename=figname[:-4]+'Force.txt')
+        if self.stress_coefficient:
+            self.dump_evaluate(_stress, stress, filename=figname[:-4]+'Stress.txt')
 
         # Calculate the statistical metrics for energy.
         E_mae = self.mean_absolute_error(energy, _energy)
@@ -353,11 +397,37 @@ class NeuralNetwork():
 
         else:
             F_mae, F_mse, F_r2 = None, None, None
-
-        print("============================= Evaluation is Completed ============================")
-        print("\n")
         
-        return (E_mae, E_mse, E_r2, F_mae, F_mse, F_r2)
+        if self.stress_coefficient:
+            S_mae = self.mean_absolute_error(stress, _stress)
+            S_mse = self.mean_squared_error(stress, _stress)
+            S_r2 = self.r2_score(stress, _stress)
+            print("The results for stress: ")
+            print("    Stress R2      {:8.6f}".format(S_r2))
+            print("    Stress MAE     {:8.6f}".format(S_mae))
+            print("    Stress RMSE    {:8.6f}".format(S_mse))
+
+            # Plotting the stress results.
+            length = 'A'
+            if self.unit == 'Ha':
+                length == 'Bohr'
+            stress_str = 'Stress: r2({:.4f}), MAE({:.3f} {}/{})'. \
+                        format(S_r2, S_mae, self.unit, length)
+            plt.title(stress_str)
+            plt.scatter(stress, _stress, s=5, label='Stress')
+            plt.legend(loc=2)
+            plt.xlabel('True ({}/{}^3)'.format(self.unit, length))
+            plt.ylabel('Prediction ({}/{}^3)'.format(self.unit, length))
+            plt.tight_layout()
+            plt.savefig(self.path+'Stress_'+figname)
+            plt.close()
+            print("The stress figure is exported to: {:s}".format(self.path+'Stress_'+figname))
+            print("\n")
+        else:
+            S_mae, S_mse, S_r2 = None, None, None
+
+        
+        return (E_mae, E_mse, E_r2, F_mae, F_mse, F_r2, S_mae, S_mse, S_r2)
 
 
     def preprocess(self, descriptors, features):
@@ -366,42 +436,59 @@ class NeuralNetwork():
         self.no_of_descriptors = len(descriptors[0]['x'][0]) 
         self.no_of_structures = len(descriptors)
 
+        if self.stress_coefficient and (self.stress_group is None):
+            sg = []
+            for i in range(len(features)):
+                if features[i]['group'] not in sg:
+                    sg.append(features[i]['group'])
+            self.stress_group = sg
+
         # Generate and plot descriptor range.
-        self.drange = self.get_descriptors_range(descriptors)
-        self.plot_hist(descriptors, figname=self.path+"histogram.png", figsize=(12, 24))
+        if self.drange is None:
+            self.drange = self.get_descriptors_range(descriptors)
+            #self.plot_hist(descriptors, figname=self.path+"histogram.png", figsize=(12, 24))
 
         # Transform descriptors into normalized descriptors
-        descriptors = self.normalized(descriptors, self.drange, self.unit)
+        descriptors = self.normalize(descriptors, self.drange, self.unit)
         
-        # Parsing descriptors in Torch mode
+        # Convert to Torch
         x = [{} for _ in range(len(descriptors['x']))]
         if self.force_coefficient:
             dxdr = [{} for _ in range(len(descriptors['dxdr']))]
         else:
             dxdr = [None]*len(x)
-
+        if self.stress_coefficient:
+            rdxdr = [{} for _ in range(len(descriptors['rdxdr']))]
+        else:
+            rdxdr = [None]*len(x)
+        
+        energy, force, stress = [], [], []
         for i in range(self.no_of_structures):
             for element in self.elements:
-                x[i][element] = torch.DoubleTensor(descriptors['x'][i][element], ).to(self.device)
+                x[i][element] = torch.DoubleTensor(descriptors['x'][i][element]).to(self.device)
                 if self.force_coefficient:
                     dxdr[i][element] = torch.DoubleTensor(descriptors['dxdr'][i][element]).to(self.device)
+                if self.stress_coefficient and features[i]['group'] in self.stress_group:
+                    rdxdr[i][element] = torch.DoubleTensor(descriptors['rdxdr'][i][element]).to(self.device)
+            
+            # Parse energy, forces, and stress
+            energy.append(features[i]['energy'])
+            force.append(torch.DoubleTensor(features[i]['force']).to(self.device))
+            if self.stress_coefficient and features[i]['group'] in self.stress_group:
+                s = features[i]['stress']
+                stress.append((torch.DoubleTensor(s)).to(self.device))
+            else:
+                stress.append(None)
+        energy = torch.DoubleTensor(energy).to(self.device)
         
         del(descriptors)
         gc.collect() # Flush memory
-
-        # Parse Energy & Forces
-        energy = []
-        force = []
-        for i in range(self.no_of_structures):
-            energy.append(features[i]['energy'])
-            force.append(torch.DoubleTensor(features[i]['force']).to(self.device))
-        energy = torch.DoubleTensor(energy).to(self.device)
 
         # Emphazising the importance of lower Energy mode.
         softmax = self._SOFTMAX(energy, x, beta=self.softmax_beta)
         
         # Compile x, dxdr, energy, force, and softmax into PyTorch DataLoader.
-        self.data = data.DataLoader(Dataset(x, dxdr, energy, force, softmax),
+        self.data = data.DataLoader(Dataset(x, dxdr, rdxdr, energy, force, stress, softmax),
                                     batch_size=self.batch_size,
                                     shuffle=self.shuffle,
                                     collate_fn=self.collate_fn)
@@ -418,16 +505,20 @@ class NeuralNetwork():
         """ Calculate the total loss and MAE for energy and forces
         for a batch of structures per one optimization step. """ 
 
-        energy_loss, force_loss = 0., 0.
-        energy_mae, force_mae = 0., 0.
+        energy_loss, force_loss, stress_loss = 0., 0., 0.
+        energy_mae, force_mae, stress_mae = 0., 0., 0.
         all_atoms = 0
-
-        for x, dxdr, energy, force, sf in batch:
+        s_count = 0
+        
+        for x, dxdr, rdxdr, energy, force, stress, sf in batch:
             n_atoms = sum(len(value) for value in x.values())
             all_atoms += n_atoms
             _Energy = 0  # Predicted total energy for a structure
             _force = torch.zeros([n_atoms, 3], dtype=torch.float64, device=self.device)
-            dedx = {}
+            if stress is not None:
+                _stress = torch.zeros([6], dtype=torch.float64, device=self.device)
+            
+            dedx, sdedx = {}, {}
             for element, model in models.items():
                 if x[element].nelement() > 0:
                     _x = x[element].requires_grad_()
@@ -436,8 +527,13 @@ class NeuralNetwork():
 
                     if self.force_coefficient:
                         dedx[element] = torch.autograd.grad(_energy, _x, create_graph=True)[0]
-                        _force += -torch.einsum("ik, ijkl -> jl", 
+                        _force += -1 * torch.einsum("ik, ijkl -> jl", 
                                                 dedx[element], dxdr[element]) # [natoms, 3]
+
+                    if stress is not None:
+                        if self.force_coefficient is None:
+                            dedx[element] = torch.autograd.grad(_energy, _x, create_graph=True)[0]
+                        _stress += -1 * torch.einsum("ik, ikl->l", dedx[element], rdxdr[element]) # [6]
             
             energy_loss += sf.item()*((_Energy - energy) / n_atoms) ** 2
             energy_mae  += sf.item()*F.l1_loss(_Energy / n_atoms, energy / n_atoms)
@@ -446,15 +542,29 @@ class NeuralNetwork():
                 force_loss += sf.item()*self.force_coefficient * ((_force - force) ** 2).sum()
                 force_mae  += sf.item()*F.l1_loss(_force, force) * n_atoms
 
+            if stress is not None:
+                stress_loss += sf.item()*self.stress_coefficient * ((_stress - stress) ** 2).sum()
+                stress_mae += sf.item()*F.l1_loss(_stress, stress) * 6
+                s_count += 6
+
         energy_loss = energy_loss / (2. * len(batch))
         energy_mae /= len(batch)
 
         if self.force_coefficient:
             force_loss = force_loss / (2. * all_atoms)
             force_mae /= all_atoms
-            loss = energy_loss + force_loss
+            if self.stress_coefficient:
+                stress_loss = stress_loss / (2. * s_count)
+                stress_mae /= s_count
+                loss = energy_loss + force_loss + stress_loss
+            else:
+                loss = energy_loss + force_loss
+
         else:
-            loss = energy_loss
+            if self.stress_coefficient:
+                loss = energy_loss + stress_loss
+            else:
+                loss = energy_loss
 
         # Add regularization to the total loss.
         if self.alpha: 
@@ -465,7 +575,7 @@ class NeuralNetwork():
                         reg += self.alpha * params.pow(2).sum()
             loss += reg
         
-        return loss, energy_mae, force_mae
+        return loss, energy_mae, force_mae, stress_mae
 
 
     def mean_absolute_error(self, true, predicted):
@@ -492,47 +602,125 @@ class NeuralNetwork():
         combine = np.vstack((predicted, true, absolute_diff)).T
         np.savetxt(self.path+filename, combine, header='Predicted True Diff', fmt='%.7e')
 
+
+    def calculate_properties(self, descriptor, bforce=True, bstress=False):
+        """ A routine to compute energy, forces, and stress.
         
-    def save_checkpoint(self, filename=None):
+        Parameters:
+        -----------
+        descriptor: list
+            list of x, dxdr, and rdxdr.
+        energy, force, stress: bool
+            If False, excluding the property from calculation.
+
+        Returns:
+        --------
+        energy: float
+            The predicted energy
+        forces: 2D array [N_atom, 3] (if dxdr is provided)
+            The predicted forces
+        stress: 2D array [3, 3] (if rdxdr is provided)
+            The predicted stress
+        """
+        no_of_atoms = len(descriptor['elements'])
+        energy, force, stress = 0., np.zeros([no_of_atoms, 3]), np.zeros([6])
+        
+        d = self.normalize([descriptor], self.drange, unit=self.unit)
+        x = d['x'][0]
+        if bforce:
+            dxdr = d['dxdr'][0]
+        if bstress:
+            rdxdr = d['rdxdr'][0]
+        
+        for element, model in self.models.items():
+            if len(x[element]) > 0:
+                _x = torch.DoubleTensor(x[element]).requires_grad_()
+                if bforce:
+                    _dxdr = torch.DoubleTensor(dxdr[element])
+                if bstress:
+                    _rdxdr = torch.DoubleTensor(rdxdr[element])
+                _e = model(_x).sum()
+                energy += _e
+                
+                if bforce:
+                    dedx = torch.autograd.grad(_e, _x)[0]
+                    force += -torch.einsum("ik, ijkl->jl", dedx, _dxdr).numpy()
+
+                if bstress:
+                    if bforce == False:
+                        dedx = torch.autograd.grad(_e, _x)[0]
+                    stress += -torch.einsum("ik, ikl->l", dedx, _rdxdr).numpy()
+
+        return energy/no_of_atoms, force, stress
+
+
+    def save_checkpoint(self, des_info, filename=None):
         """ Save PyTorch Neural Network models at a checkpoint. """
-        self.filename = self.path
+        _filename = self.path
 
         if filename:
-            self.filename += filename
+            _filename += filename
         else:
             if isinstance(self._hiddenlayers, list):
                 _hl = "-".join(str(x) for x in self._hiddenlayers)
-                self.filename += _hl + '-checkpoint.pth'
+                _filename += _hl + '-checkpoint.pth'
             else:
                 count = 0
                 for i in range(len(self.elements)):
-                    self.filename += "-".join(str(x) \
+                    _filename += "-".join(str(x) \
                         for x in self._hiddenlayers[self.elements[i]])
                     if count < len(self.elements)-1:
-                        self.filename += "_"
-                self.filename += '-checkpoint.pth'
+                        _filename += "_"
+                _filename += '-checkpoint.pth'
 
-        checkpoint = {'model': [mode for mode in self.models.values()],
-                      'state_dict': [sd.state_dict() for sd in self.models.values()],
-                      'optimizer': self.optimizer.state_dict()}
-        
-        torch.save(checkpoint, self.filename)
-        print("The NNP is exported to {:s}".format(self.filename))
+        checkpoint = {'models': self.models,
+                      'algorithm': 'NN',
+                      'elements': self.elements,
+                      'optimizer': self.optimizer.state_dict(),
+                      'drange': self.drange,
+                      'unit': self.unit,
+                      'force_coefficient': self.force_coefficient,
+                      'alpha': self.alpha,
+                      'softmax_beta': self.softmax_beta,
+                      'batch_size': self.batch_size,
+                      'des_info': des_info}
+                      
+        torch.save(checkpoint, _filename)
+        print("The Neural Network Potential is exported to {:s}".format(_filename))
+        print("\n")
 
 
-    def load_checkpoint(self, filename, method, args):
+    def load_checkpoint(self, filename=None, method=None, args=None):
         """ Load PyTorch Neural Network models at previously saved checkpoint. """
         checkpoint = torch.load(filename)
 
-        for i, element in enumerate(self.elements):
-            self.models[element].load_state_dict(checkpoint['state_dict'][i])
-            for parameter in self.models[element].parameters():
-                parameter.requires_grad = True
+        # Inconsistent algorithm.
+        if checkpoint['algorithm'] != 'NN':
+            msg = "The loaded algorithm is not Neural Network."
+            raise NotImplementedError(msg)
+
+        # Check the consistency with the system of elements
+        msg = f"The system, {self.elements}, are not consistent with "\
+                    +"the loaded system, {checkpoint['elements']}."
+
+        if len(self.elements) != len(checkpoint['elements']):
+            raise ValueError(msg)
         
-        # If different optimizer is used in loading, start the opt. from the beginning.
-        # Else load the optimizer state.
-        if method in ['lbfgs', 'LBFGS', 'lbfgsb']:
-            if 'line_search_fn' in checkpoint['optimizer']['param_groups'][0].keys():
+        for i in range(len(self.elements)):
+            if self.elements[i] != checkpoint['elements'][i]:
+                raise ValueError(msg)
+
+        self.models = checkpoint['models']
+
+        if method:
+            # Set-up optimizer for optimizing NN weights.
+            self.regressor = Regressor(method, args)
+            self.optimizer = self.regressor.regress(models=self.models)
+
+            # If different optimizer is used in loading, start the opt. from scratch.
+            # Else load the optimizer state.
+            pg = checkpoint['optimizer']['param_groups'][0].keys()
+            if method in ['lbfgs', 'LBFGS', 'lbfgsb'] and 'line_search_fn' in pg:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
                 for key, value in args.items():
                     if key == 'max_eval':
@@ -543,18 +731,22 @@ class NeuralNetwork():
                     else:
                         self.optimizer.param_groups[0][key] = args[key]
 
-        elif method in ['sgd', 'SGD']:
-            if 'nesterov' in checkpoint['optimizer']['param_groups'][0].keys():
+            elif method in ['sgd', 'SGD'] and 'nesterov' in pg:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
                 for key, value in args.items():
                     self.optimizer.param_groups[0][key] = args[key]
 
-        elif method in ['adam', 'ADAM', 'Adam']:
-            if 'amsgrad' in checkpoint['optimizer']['param_groups'][0].keys():
+            elif method in ['adam', 'ADAM', 'Adam'] and 'amsgrad' in pg:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
                 for key, value in args.items():
                     self.optimizer.param_groups[0][key] = args[key]
-                    
+
+        else: # For predict()
+            self.drange = checkpoint['drange']
+            self.unit = checkpoint['unit']
+
+        return checkpoint['des_info']
+    
     
     def get_descriptors_range(self, descriptors):
         """ Calculate the range (min and max values) of the descriptors 
@@ -589,7 +781,7 @@ class NeuralNetwork():
         return _DRANGE
     
     
-    def normalized(self, descriptors, drange, unit, norm=[0., 1.]):
+    def normalize(self, descriptors, drange, unit, norm=[0., 1.]):
         """ Normalizing the descriptors to the range of [0., 1.] based on the
         min and max value of the entire descriptors.
 
@@ -620,12 +812,16 @@ class NeuralNetwork():
         d['x'] = {}
         if 'dxdr' in descriptors[0]:
             d['dxdr'] = {}
+        if 'rdxdr' in descriptors[0]:
+            d['rdxdr'] = {}
         
         # Normalize each structure.
         for i in range(d['no_of_structures']):
             d['x'][i] = {}
             if 'dxdr' in descriptors[0]:
                 d['dxdr'][i] = {}
+            if 'rdxdr' in descriptors[0]:
+                d['rdxdr'][i] = {}
             
             no_of_center_atom = {}
             count = {}
@@ -642,10 +838,16 @@ class NeuralNetwork():
             for element in self.elements:
                 i_size = no_of_center_atom[element]
                 j_size = no_of_neighbors
-                d['x'][i][element] = np.zeros((i_size, d['no_of_descriptors']))
-                if 'dxdr' in descriptors[0]:
-                    d['dxdr'][i][element] = np.zeros((i_size, j_size, 
-                                                    d['no_of_descriptors'], 3))
+                d['x'][i][element] = np.zeros([i_size, d['no_of_descriptors']])
+                #if 'dxdr' in descriptors[0]:
+                if descriptors[i]['dxdr'] is not None:
+                    d['dxdr'][i][element] = np.zeros([i_size, j_size, d['no_of_descriptors'], 3])
+                #else:
+                #    d['dxdr'][i][element] = None
+                if descriptors[i]['rdxdr'] is not None:
+                    d['rdxdr'][i][element] = np.zeros([i_size, d['no_of_descriptors'], 6])
+                #else:
+                #    d['rdxdr'][i][element] = None
             
             for m in range(len(descriptors[i]['x'])):
                 _des = descriptors[i]['x'][m]
@@ -655,16 +857,22 @@ class NeuralNetwork():
                 des = norm[0] + scale * (_des - _drange[:, 0])
                 d['x'][i][element][count[element]] = des
                 
-                if 'dxdr' in descriptors[i].keys():
-                    for n in range(len(descriptors[i]['dxdr'][m])):
-                        for p in range(3):
-                            index = count[element]
-                            _desp = descriptors[i]['dxdr'][m, n, :, p]
-                            if unit == 'eV':
-                                desp = scale * _desp
-                            elif unit == 'Ha':
-                                desp = 0.529177 * scale * _desp # to 1/Bohr
-                            d['dxdr'][i][element][index, n, :, p] = desp
+                #if 'dxdr' in descriptors[i].keys():
+                if descriptors[i]['dxdr'] is not None:
+                    if unit == 'eV':
+                        desp = np.einsum('j, ijk->ijk', scale, descriptors[i]['dxdr'][m])
+                    elif unit == 'Ha':
+                        desp = 0.529177 * np.einsum('j, ijk->ijk', scale, descriptors[i]['dxdr'][m])
+                    d['dxdr'][i][element][count[element]] = desp
+                
+                if descriptors[i]['rdxdr'] is not None:
+                    dess = np.einsum('k, kl->kl', scale, descriptors[i]['rdxdr'][m])
+                    if unit == 'eV':
+                        pass
+                    elif unit == 'Ha':
+                        dess *= 0.529177
+                    d['rdxdr'][i][element][count[element]] = dess
+                
                 count[element] += 1
 
         return d
@@ -753,6 +961,7 @@ class NeuralNetwork():
                     ax.legend(loc=1)
                     ax.yaxis.set_major_formatter(mticker.NullFormatter())
                     plt.setp(ax.get_xticklabels(), visible=False)
+            print("\n")
         plt.subplots_adjust(hspace=.0)
         #plt.tight_layout()
         plt.savefig(figname)
@@ -770,12 +979,14 @@ class Dataset(data.Dataset):
     Tutorial:
     https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
     """
-    def __init__(self, x, dxdr, energy, force, softmax):
+    def __init__(self, x, dxdr, rdxdr, energy, force, stress, softmax):
         self.x = x
         self.dxdr = dxdr
         self.energy = energy
         self.force = force
         self.softmax = softmax
+        self.rdxdr = rdxdr
+        self.stress = stress
 
 
     def __len__(self):
@@ -785,8 +996,10 @@ class Dataset(data.Dataset):
     def __getitem__(self, index):
         x = self.x[index]
         dxdr = self.dxdr[index]
+        rdxdr = self.rdxdr[index]
         energy = self.energy[index]
         force = self.force[index]
         sf = self.softmax[index]
+        stress = self.stress[index]
 
-        return x, dxdr, energy, force, sf
+        return x, dxdr, rdxdr, energy, force, stress, sf
