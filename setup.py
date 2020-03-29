@@ -20,6 +20,7 @@ setup(
     packages=['pyxtal_ff', 
               'pyxtal_ff.datasets', 
               'pyxtal_ff.descriptors', 
+              'pyxtal_ff.calculator', 
               'pyxtal_ff.models', 
               'pyxtal_ff.models.optimizers', 
               'pyxtal_ff.utilities'],

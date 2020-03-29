@@ -111,8 +111,10 @@ class BehlerParrinello:
         # Initialize dict for the symmetry functions
         self.all_G = {'x':[], 
                       'elements': []}
-        self.all_G['dxdr'] = None
-        self.all_G['rdxdr'] = None
+        if self.derivative:
+            self.all_G['dxdr'] = []
+        if self.stress:
+            self.all_G['rdxdr'] = []
 
         # Obtain neighbors info.
         rc = [self.Rc/2]*len(self.crystal)
@@ -213,6 +215,8 @@ class BehlerParrinello:
             self.all_G['dxdr'] = np.asarray(self.all_G['dxdr'])
             if self.stress:
                 self.all_G['rdxdr'] = -np.asarray(self.all_G['rdxdr'])
+            else:
+                self.all_G['rdxdr'] = None
         return self.all_G
     
         
