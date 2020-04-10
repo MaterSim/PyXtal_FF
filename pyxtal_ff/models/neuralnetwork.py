@@ -230,7 +230,7 @@ class NeuralNetwork():
             elif optimizer['method'] in ['sgd', 'SGD', 'Adam', 'adam', 'ADAM']:
                 if epoch == 0:
                     print("Initial state : ")
-                    train_loss, E_mae, F_mae, S_mae = 0., 0., 0.
+                    train_loss, E_mae, F_mae, S_mae = 0., 0., 0., 0
                     total = 0
                     for batch in self.data:
                         total += len(batch)
@@ -865,7 +865,9 @@ class NeuralNetwork():
                         desp = 0.529177 * np.einsum('j, ijk->ijk', scale, descriptors[i]['dxdr'][m])
                     d['dxdr'][i][element][count[element]] = desp
                 
+                #if descriptors[i]['rdxdr'] is not None:
                 if 'rdxdr' in descriptors[i] and descriptors[i]['rdxdr'] is not None:
+
                     dess = np.einsum('k, kl->kl', scale, descriptors[i]['rdxdr'][m])
                     if unit == 'eV':
                         pass

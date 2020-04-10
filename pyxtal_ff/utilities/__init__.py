@@ -99,6 +99,8 @@ def get_descriptors_and_features(descriptors, features, N, rand):
             descriptors = descriptors[:N]
             features = features[:N]
         print("{:d} structures have been extracted.".format(N))
+    if len(features) != len(descriptors):
+        raise ValueError('Number of features/descriptors are inconsistent {:d}/{:d}'.format(len(features), len(descriptors)))
 
     return features, descriptors
 
@@ -149,7 +151,6 @@ def compute_descriptors(function, structures, features, des_file, show_progress=
             X.append({'x': d['x'], 'elements': d['elements'], 'compressed': d['compressed']})
             DXDR.append({'dxdr': d['dxdr']})
             RDXDR.append({'rdxdr': d['rdxdr']})
-
     np.save(des_file+'x.npy', X)
     print('\nSaving x to', des_file+'x.npy')
     if _force:
@@ -394,10 +395,10 @@ def parse_xyz(structure_file, N=1000000):
         count = 0
         while True:
             line = lines[count]
-            coords = []
-            forces = []
             symbols = []
             number = int(line)
+            coords = np.zeros([number, 3])
+            forces = np.zeros([number, 3])
             infos = lines[count+1].split('=')
             for i, info in enumerate(infos):
                 if info.find('energy') == 0:
@@ -411,14 +412,28 @@ def parse_xyz(structure_file, N=1000000):
                             lat.append(float(num))
                     lat = np.array(lat).reshape([3,3])
                     break
+                elif info.find('virial') > 0:
+                    s = []
+                    tmp = infos[i+1].split()
+                    for num in tmp:
+                        num = num.replace('"','')
+                        if num.replace('.', '', 1).replace('-', '', 1).isdigit():
+                            s.append(float(num))
+                    s = np.array(s).flatten()
+                    stress = np.array([s[0], s[4], s[7], s[1], s[2], s[5]])
+
             for i in range(number):
                 infos = lines[count+2+i].split()
                 symbols.append(infos[0])
-                coords.append([float(num) for num in infos[5:8]])
-                forces.append([float(num) for num in infos[8:]])
-                
-            Structures.append(Structure(lat, symbols, np.array(coords)))
-            Features.append({'energy': energy, 'force': np.array(forces)})
+                coords[i, :] = np.array([float(num) for num in infos[5:8]])
+                forces[i, :] = np.array([float(num) for num in infos[-3:]])
+
+            structure = Atoms(symbols=symbols,
+                              positions=coords,
+                              cell=lat, pbc=True)
+            Structures.append(structure)
+            Features.append({'energy': energy, 'force': forces, 
+                'stress': stress, 'group': 'random'})
 
             count = count + number + 2
             if count >= len(lines) or len(Structures) == N:
@@ -477,7 +492,8 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
                                   positions=coor,
                                   cell=lat, pbc=True)
                 Structures.append(structure)
-                Features.append({'energy': energy, 'force': force})
+                Features.append({'energy': energy, 'force': force, 
+                    'stress': None, 'group': 'random'})
                 count += line_number - 1
             count += 1
             if count >= len(lines) or len(Structures) == N:
