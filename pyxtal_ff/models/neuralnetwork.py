@@ -3,6 +3,7 @@
 import os
 import gc
 import time
+import shelve
 import numpy as np
 import torch
 import torch.nn as nn
@@ -69,11 +70,14 @@ class NeuralNetwork():
         Continuing Neural Network training from where it was left off.
     path: str
         A path to the directory where everything is saved.
+    memory: str
+        There are two options: 'in' or 'out'. 'in' will use load all
+        descriptors to memory as 'out' will call from disk as needed.
     """
     def __init__(self, elements, hiddenlayers, activation, random_seed, 
                  batch_size, epoch, device, alpha, softmax_beta, unit, 
                  force_coefficient, stress_coefficient, stress_group,
-                 logging, restart, path):
+                 logging, restart, path, memory):
         
         self.elements = sorted(elements)
         
@@ -151,22 +155,23 @@ class NeuralNetwork():
         self.logger = logging
         self.restart = restart
         self.path = path
+        self.memory = memory
 
         self.drange = None
 
 
-    def train(self, TrainDescriptors, TrainFeatures, optimizer):
+    def train(self, TrainData, optimizer):
         """ Training of Neural Network Potential. """
-        
         # If batch_size is None and optimizer is Adam or SGD, 
         # then batch_size equals total structures.
         if optimizer['method'] in ['sgd', 'SGD', 'Adam', 'adam', 'ADAM']:
             if self.batch_size == None:
-                self.batch_size = len(TrainDescriptors)
+                db = shelve.open(self.path+TrainData)
+                self.batch_size = len(db.keys())
+                db.close()
 
-        # Preprocess descriptors and features.
-        self.preprocess(TrainDescriptors, TrainFeatures)
-
+        self.preprocess(TrainData)
+        
         # Calculate total number of parameters.
         self.total_parameters = 0
         for element in self.elements:
@@ -230,7 +235,7 @@ class NeuralNetwork():
             elif optimizer['method'] in ['sgd', 'SGD', 'Adam', 'adam', 'ADAM']:
                 if epoch == 0:
                     print("Initial state : ")
-                    train_loss, E_mae, F_mae, S_mae = 0., 0., 0., 0
+                    train_loss, E_mae, F_mae, S_mae = 0., 0., 0., 0.
                     total = 0
                     for batch in self.data:
                         total += len(batch)
@@ -256,42 +261,17 @@ class NeuralNetwork():
                             format(train_loss, E_mae, F_mae, S_mae))
                                         
         t1 = time.time()
+
+        self.data.dataset.close()
         print("\nThe training time: {:.2f} s".format(t1-t0))
         
 
-    def evaluate(self, TestDescriptors, TestFeatures, figname):
+    def evaluate(self, data, figname):
         """ Evaluating the train or test data set based on trained Neural Network model. 
         Evaluate will only be performed in cpu mode. """
-        
-        # Normalized data set based on the training data set (drange).
-        TestDescriptors = self.normalize(TestDescriptors, self.drange, self.unit)
-        no_of_structures = TestDescriptors['no_of_structures']
 
-        # Parse descriptors and Features
-        energy, force, stress = [], [], []
-        X = [{} for _ in range(len(TestDescriptors['x']))]
-        if self.force_coefficient:
-            DXDR = [{} for _ in range(len(TestDescriptors['dxdr']))]
-        else:
-            DXDR = [None]*len(X)
-        if self.stress_coefficient:
-            RDXDR = [{} for _ in range(len(TestDescriptors['rdxdr']))]
-        else:
-            RDXDR = [None]*len(X)
+        self.normalize(data, self.drange, self.unit)
 
-        for i in range(no_of_structures):
-            for element in self.elements:
-                X[i][element] = torch.DoubleTensor(TestDescriptors['x'][i][element])
-                if self.force_coefficient:
-                    DXDR[i][element] = torch.DoubleTensor(TestDescriptors['dxdr'][i][element])
-                if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
-                    RDXDR[i][element] = torch.DoubleTensor(TestDescriptors['rdxdr'][i][element])
-            
-            energy.append(TestFeatures[i]['energy']/len(TestFeatures[i]['force']))
-            force.append(np.ravel(TestFeatures[i]['force']))
-            if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
-                stress.append(np.array(TestFeatures[i]['stress']))
-                    
         # Switch models device to cpu if training is done in cuda.
         models = {}
         for element in self.elements:
@@ -300,36 +280,48 @@ class NeuralNetwork():
             else:
                 models[element] = self.models[element]
 
-        # Predicting the data set.
-        _energy, _force, _stress = [], [], [] # Predicted energy and forces
-        test_data = zip(X, DXDR, RDXDR)
+        db = shelve.open(self.path+data+'_norm')
+        db2 = shelve.open(self.path+data)
 
-        for i, (x, dxdr, rdxdr) in enumerate(test_data):
+        # Predicting the data set
+        _energy, _force, _stress = [], [], [] # Predicted energy and forces
+        energy, force, stress = [], [] ,[]
+        for item, value in db.items():
             dedx = None
-            n_atoms = sum(len(value) for value in x.values())
+            n_atoms = sum(len(value) for value in value['x'].values())
             _Energy = 0.
             _Force = torch.zeros([n_atoms, 3], dtype=torch.float64)
-            if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
+            if self.stress_coefficient and (db2[item]['group'] in self.stress_group):
                 _Stress = torch.zeros([6], dtype=torch.float64)
 
             for element, model in models.items():
-                if x[element].nelement() > 0:
-                    _x = x[element].requires_grad_()
+                if value['x'][element].nelement() > 0:
+                    _x = value['x'][element].requires_grad_()
                     _e = model(_x).sum()
                     _Energy += _e
                     if self.force_coefficient:
                         dedx = torch.autograd.grad(_e, _x)[0]
-                        _Force += -1 * torch.einsum("ik, ijkl->jl", dedx, dxdr[element])
-                    if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
+                        _dxdr = value['dxdr'][element]
+                        _Force += -1 * torch.einsum("ik, ijkl->jl", dedx, _dxdr)
+                    if self.stress_coefficient and (db2[item]['group'] in self.stress_group):
                         if self.force_coefficient is None:
                             dedx = torch.autograd.grad(_e, _x)[0]
-                        _Stress += -1 * torch.einsum("ik, ikl->l", dedx, rdxdr[element])
+                        _rdxdr = value['rdxdr'][element]
+                        _Stress += -1 * torch.einsum("ik, ikl->l", dedx, _rdxdr)
             
-            if self.stress_coefficient and (TestFeatures[i]['group'] in self.stress_group):
-                _stress.append(np.ravel(_Stress))
-            _force.append(np.ravel(_Force.numpy()))
+            energy.append(db2[item]["energy"]/len(db2[item]["elements"]))
+            force.append(np.ravel(db2[item]["force"]))
+            
             _energy.append(_Energy.item()/n_atoms)
-        
+            _force.append(np.ravel(_Force.numpy()))
+
+            if self.stress_coefficient and (db2[item]['group'] in self.stress_group):
+                _stress.append(np.ravel(_Stress))
+                stress.append(np.array(db2[item]['stress']))
+
+        db.close()
+        db2.close()
+
         energy = np.array(energy)
         _energy = np.array(_energy)
         force = np.array([x for i in force for x in i])
@@ -425,81 +417,32 @@ class NeuralNetwork():
             print("\n")
         else:
             S_mae, S_mse, S_r2 = None, None, None
-
         
         return (E_mae, E_mse, E_r2, F_mae, F_mse, F_r2, S_mae, S_mse, S_r2)
 
 
-    def preprocess(self, descriptors, features):
-        """ Preprocess the descriptors and features to a convenient format
-        for training Neural Network model. """
-        self.no_of_descriptors = len(descriptors[0]['x'][0]) 
-        self.no_of_structures = len(descriptors)
-
-        if self.stress_coefficient and (self.stress_group is None):
-            sg = []
-            for i in range(len(features)):
-                if features[i]['group'] not in sg:
-                    sg.append(features[i]['group'])
-            self.stress_group = sg
-
-        # Generate and plot descriptor range.
-        if self.drange is None:
-            self.drange = self.get_descriptors_range(descriptors)
-            #self.plot_hist(descriptors, figname=self.path+"histogram.png", figsize=(12, 24))
-
-        # Transform descriptors into normalized descriptors
-        descriptors = self.normalize(descriptors, self.drange, self.unit)
-        
-        # Convert to Torch
-        x = [{} for _ in range(len(descriptors['x']))]
-        if self.force_coefficient:
-            dxdr = [{} for _ in range(len(descriptors['dxdr']))]
+    def preprocess(self, TrainData):
+        """ Preprocess TrainData to a convenient format for Neural Network training. """
+        if os.path.exists(self.path+"drange.npy"):
+            self.drange = np.load(self.path+"drange.npy", allow_pickle=True)[0]
         else:
-            dxdr = [None]*len(x)
-        if self.stress_coefficient:
-            rdxdr = [{} for _ in range(len(descriptors['rdxdr']))]
-        else:
-            rdxdr = [None]*len(x)
-        
-        energy, force, stress = [], [], []
-        for i in range(self.no_of_structures):
-            for element in self.elements:
-                x[i][element] = torch.DoubleTensor(descriptors['x'][i][element]).to(self.device)
-                if self.force_coefficient:
-                    dxdr[i][element] = torch.DoubleTensor(descriptors['dxdr'][i][element]).to(self.device)
-                if self.stress_coefficient and features[i]['group'] in self.stress_group:
-                    rdxdr[i][element] = torch.DoubleTensor(descriptors['rdxdr'][i][element]).to(self.device)
-            
-            # Parse energy, forces, and stress
-            energy.append(features[i]['energy'])
-            force.append(torch.DoubleTensor(features[i]['force']).to(self.device))
-            if self.stress_coefficient and features[i]['group'] in self.stress_group:
-                s = features[i]['stress']
-                stress.append((torch.DoubleTensor(s)).to(self.device))
-            else:
-                stress.append(None)
-        energy = torch.DoubleTensor(energy).to(self.device)
-        
-        del(descriptors)
-        gc.collect() # Flush memory
+            self.drange = self.get_descriptors_range(TrainData)
+        #self.plot_hist(descriptors, figname=self.path+"histogram.png", figsize=(12, 24))
 
-        # Emphazising the importance of lower Energy mode.
-        softmax = self._SOFTMAX(energy, x, beta=self.softmax_beta)
-        
-        # Compile x, dxdr, energy, force, and softmax into PyTorch DataLoader.
-        self.data = data.DataLoader(Dataset(x, dxdr, rdxdr, energy, force, stress, softmax),
+        self.normalize(TrainData, self.drange, self.unit)
+
+        self.get_stress_group(TrainData)
+
+        self.softmax = self._SOFTMAX(TrainData, beta=self.softmax_beta)
+
+        self.data = data.DataLoader(Dataset(self.path+TrainData, self.softmax,
+                                            self.device, self.memory),
                                     batch_size=self.batch_size,
                                     shuffle=self.shuffle,
-                                    collate_fn=self.collate_fn)
+                                    collate_fn=self.collate_fn,)
 
-        del(x)
-        del(dxdr)
-        del(energy)
-        del(force)
-        del(softmax)
-        gc.collect() # Flush memory
-
+        gc.collect()
+       
 
     def calculate_loss(self, models, batch):
         """ Calculate the total loss and MAE for energy and forces
@@ -510,12 +453,12 @@ class NeuralNetwork():
         all_atoms = 0
         s_count = 0
         
-        for x, dxdr, rdxdr, energy, force, stress, sf in batch:
+        for x, dxdr, rdxdr, energy, force, stress, sf, group in batch:
             n_atoms = sum(len(value) for value in x.values())
             all_atoms += n_atoms
             _Energy = 0  # Predicted total energy for a structure
             _force = torch.zeros([n_atoms, 3], dtype=torch.float64, device=self.device)
-            if stress is not None:
+            if self.stress_coefficient and (group in self.stress_group):
                 _stress = torch.zeros([6], dtype=torch.float64, device=self.device)
             
             dedx, sdedx = {}, {}
@@ -530,7 +473,7 @@ class NeuralNetwork():
                         _force += -1 * torch.einsum("ik, ijkl -> jl", 
                                                 dedx[element], dxdr[element]) # [natoms, 3]
 
-                    if stress is not None:
+                    if self.stress_coefficient and (group in self.stress_group):
                         if self.force_coefficient is None:
                             dedx[element] = torch.autograd.grad(_energy, _x, create_graph=True)[0]
                         _stress += -1 * torch.einsum("ik, ikl->l", dedx[element], rdxdr[element]) # [6]
@@ -542,7 +485,7 @@ class NeuralNetwork():
                 force_loss += sf.item()*self.force_coefficient * ((_force - force) ** 2).sum()
                 force_mae  += sf.item()*F.l1_loss(_force, force) * n_atoms
 
-            if stress is not None:
+            if self.stress_coefficient and (group in self.stress_group):
                 stress_loss += sf.item()*self.stress_coefficient * ((_stress - stress) ** 2).sum()
                 stress_mae += sf.item()*F.l1_loss(_stress, stress) * 6
                 s_count += 6
@@ -623,22 +566,49 @@ class NeuralNetwork():
             The predicted stress
         """
         no_of_atoms = len(descriptor['elements'])
+        no_of_descriptors = descriptor['x'].shape[1]
         energy, force, stress = 0., np.zeros([no_of_atoms, 3]), np.zeros([6])
         
-        d = self.normalize([descriptor], self.drange, unit=self.unit)
-        x = d['x'][0]
+        # Normalizing
+        d = {'x': {}, 'dxdr': {}, 'rdxdr': {}}
+        for element in self.elements:
+            _drange = self.drange[element]
+            scale = (1 - 0) / (_drange[:, 1] - _drange[:, 0])
+
+            i_size = list(descriptor['elements']).count(element)
+            j_size = descriptor['x'].shape[0]
+            d['x'][element] = torch.zeros([i_size, no_of_descriptors])
+            d['dxdr'][element] = torch.zeros([i_size, j_size, no_of_descriptors, 3])
+            d['rdxdr'][element] = torch.zeros([i_size, no_of_descriptors, 6])
+
+            e = np.where(np.array(descriptor['elements'])==element)[0]
+
+            if e.size > 0:
+                des = 0 + np.einsum('j,ij->ij', scale, (descriptor['x'][e[0]:e[-1]+1] - np.expand_dims(_drange[:, 0], 0)))
+                desp = np.einsum('k,ijkl->ijkl', scale, descriptor['dxdr'][e[0]:e[-1]+1])
+                dess = np.einsum('j,ijk->ijk', scale, descriptor['rdxdr'][e[0]:e[-1]+1])
+                
+                d['x'][element] += torch.from_numpy(des)
+                if self.unit == 'eV':
+                    d['dxdr'][element] += torch.from_numpy(desp)
+                    d['rdxdr'][element] += torch.from_numpy(dess)
+                else:
+                    d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
+                    d['rdxdr'][element] += torch.from_numpy(0.529177 * dess)
+
+        x = d['x']
         if bforce:
-            dxdr = d['dxdr'][0]
+            dxdr = d['dxdr']
         if bstress:
-            rdxdr = d['rdxdr'][0]
+            rdxdr = d['rdxdr']
         
         for element, model in self.models.items():
-            if len(x[element]) > 0:
-                _x = torch.DoubleTensor(x[element]).requires_grad_()
+            if element in x.keys():
+                _x = x[element].requires_grad_()
                 if bforce:
-                    _dxdr = torch.DoubleTensor(dxdr[element])
+                    _dxdr = dxdr[element]
                 if bstress:
-                    _rdxdr = torch.DoubleTensor(rdxdr[element])
+                    _rdxdr = rdxdr[element]
                 _e = model(_x).sum()
                 energy += _e
                 
@@ -703,16 +673,16 @@ class NeuralNetwork():
         msg = f"The system, {self.elements}, are not consistent with "\
                     +"the loaded system, {checkpoint['elements']}."
 
-        if len(self.elements) != len(checkpoint['elements']):
-            raise ValueError(msg)
-        
-        for i in range(len(self.elements)):
-            if self.elements[i] != checkpoint['elements'][i]:
-                raise ValueError(msg)
-
         self.models = checkpoint['models']
 
         if method:
+            if len(self.elements) != len(checkpoint['elements']):
+                raise ValueError(msg)
+            
+            for i in range(len(self.elements)):
+                if self.elements[i] != checkpoint['elements'][i]:
+                    raise ValueError(msg)
+
             # Set-up optimizer for optimizing NN weights.
             self.regressor = Regressor(method, args)
             self.optimizer = self.regressor.regress(models=self.models)
@@ -748,14 +718,14 @@ class NeuralNetwork():
         return checkpoint['des_info']
     
     
-    def get_descriptors_range(self, descriptors):
+    def get_descriptors_range(self, data):
         """ Calculate the range (min and max values) of the descriptors 
         corresponding to all of the crystal structures.
         
         Parameters
         ----------
-        descriptors: dict of dicts
-            Atom-centered descriptors.
+        data: dict
+            data contains atom-centered descriptors.
             
         Returns
         -------
@@ -763,10 +733,12 @@ class NeuralNetwork():
             The ranges of the descriptors for each chemical specie.
         """
         _DRANGE = {}
-        no_of_structures = len(descriptors)
+        db = shelve.open(self.path+data)
+        no_of_structures = len(list(db.keys()))
+
         for i in range(no_of_structures):
-            for j, descriptor in enumerate(descriptors[i]['x']):
-                element = descriptors[i]['elements'][j]
+            for j, descriptor in enumerate(db[str(i)]['x']):
+                element = db[str(i)]['elements'][j]
                 if element not in _DRANGE.keys():
                     _DRANGE[element] = np.asarray([np.asarray([__, __]) \
                                       for __ in descriptor])
@@ -777,11 +749,12 @@ class NeuralNetwork():
                             _DRANGE[element][j][0] = des
                         elif des > _DRANGE[element][j][1]:
                             _DRANGE[element][j][1] = des
-        
+        db.close()
+
         return _DRANGE
+
     
-    
-    def normalize(self, descriptors, drange, unit, norm=[0., 1.]):
+    def normalize(self, data, drange, unit, norm=[0., 1.]):
         """ Normalizing the descriptors to the range of [0., 1.] based on the
         min and max value of the entire descriptors.
 
@@ -791,8 +764,8 @@ class NeuralNetwork():
         
         Parameters
         ----------
-        descriptors: dict
-            The atom-centered descriptors.
+        data: str
+            The directory path to the database
         drange:
             The range of the descriptors for each element species.
         unit: str
@@ -805,100 +778,76 @@ class NeuralNetwork():
         dict
             The normalized descriptors.
         """
-        d = {}
-        d['no_of_structures'] = len(descriptors)
-        d['no_of_descriptors'] = len(descriptors[0]['x'][0])
-        
-        d['x'] = {}
-        if 'dxdr' in descriptors[0]:
-            d['dxdr'] = {}
-        if 'rdxdr' in descriptors[0]:
-            d['rdxdr'] = {}
-        
-        # Normalize each structure.
-        for i in range(d['no_of_structures']):
-            d['x'][i] = {}
-            if 'dxdr' in descriptors[0]:
-                d['dxdr'][i] = {}
-            if 'rdxdr' in descriptors[0]:
-                d['rdxdr'][i] = {}
-            
-            no_of_center_atom = {}
-            count = {}
-            
-            for element in self.elements:
-                no_of_center_atom[element] = 0
-                no_of_neighbors = 0
-                count[element] = 0
-                
-            for e in descriptors[i]['elements']:
-                no_of_center_atom[e] += 1
-                no_of_neighbors += 1
-                
-            for element in self.elements:
-                i_size = no_of_center_atom[element]
-                j_size = no_of_neighbors
-                d['x'][i][element] = np.zeros([i_size, d['no_of_descriptors']])
-                #if 'dxdr' in descriptors[0]:
-                if descriptors[i]['dxdr'] is not None:
-                    d['dxdr'][i][element] = np.zeros([i_size, j_size, d['no_of_descriptors'], 3])
-                #else:
-                #    d['dxdr'][i][element] = None
-                if 'rdxdr' in descriptors[i] and descriptors[i]['rdxdr'] is not None:
-                    d['rdxdr'][i][element] = np.zeros([i_size, d['no_of_descriptors'], 6])
-                #else:
-                #    d['rdxdr'][i][element] = None
-            
-            for m in range(len(descriptors[i]['x'])):
-                _des = descriptors[i]['x'][m]
-                element = descriptors[i]['elements'][m]
-                _drange = drange[element]
-                scale = (norm[1] - norm[0]) / (_drange[:, 1] - _drange[:, 0])
-                des = norm[0] + scale * (_des - _drange[:, 0])
-                d['x'][i][element][count[element]] = des
-                
-                #if 'dxdr' in descriptors[i].keys():
-                if descriptors[i]['dxdr'] is not None:
-                    if unit == 'eV':
-                        desp = np.einsum('j, ijk->ijk', scale, descriptors[i]['dxdr'][m])
-                    elif unit == 'Ha':
-                        desp = 0.529177 * np.einsum('j, ijk->ijk', scale, descriptors[i]['dxdr'][m])
-                    d['dxdr'][i][element][count[element]] = desp
-                
-                #if descriptors[i]['rdxdr'] is not None:
-                if 'rdxdr' in descriptors[i] and descriptors[i]['rdxdr'] is not None:
+        db1 = shelve.open(self.path+data)
+        self.no_of_structures = len(list(db1.keys()))
+        self.no_of_descriptors = db1['0']['x'].shape[1]
+        doit = True if not os.path.exists(self.path+data+'_norm.bat') else False
 
-                    dess = np.einsum('k, kl->kl', scale, descriptors[i]['rdxdr'][m])
-                    if unit == 'eV':
-                        pass
-                    elif unit == 'Ha':
-                        dess *= 0.529177
-                    d['rdxdr'][i][element][count[element]] = dess
-                
-                count[element] += 1
+        if doit:
+            db2 = shelve.open(self.path+data+'_norm')
 
-        return d
+            for i in range(self.no_of_structures):
+                d = {'x': {}, 'dxdr': {}, 'rdxdr': {}}
+                descriptor = db1[str(i)]
+
+                for element in self.elements:
+                    _drange = drange[element]
+                    scale = (norm[1] - norm[0]) / (_drange[:, 1] - _drange[:, 0])
+                    
+                    i_size = list(descriptor['elements']).count(element)
+                    j_size = descriptor['x'].shape[0]
+                    d['x'][element] = torch.zeros([i_size, self.no_of_descriptors], dtype=torch.float64)
+                    d['dxdr'][element] = torch.zeros([i_size, j_size, self.no_of_descriptors, 3], dtype=torch.float64)
+                    d['rdxdr'][element] = torch.zeros([i_size, self.no_of_descriptors, 6], dtype=torch.float64)
+
+                    e = np.where(np.array(descriptor['elements'])==element)[0]
+                    
+                    if e.size > 0:
+                        des = norm[0] + np.einsum('j,ij->ij', scale, (descriptor['x'][e[0]:e[-1]+1] - np.expand_dims(_drange[:, 0], 0)))
+                        desp = np.einsum('k,ijkl->ijkl', scale, descriptor['dxdr'][e[0]:e[-1]+1])
+                        dess = np.einsum('j,ijk->ijk', scale, descriptor['rdxdr'][e[0]:e[-1]+1])
+
+                        d['x'][element] += torch.from_numpy(des)
+                        if unit == 'eV':
+                            d['dxdr'][element] += torch.from_numpy(desp)
+                            d['rdxdr'][element] += torch.from_numpy(dess)
+                        else:
+                            d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
+                            d['rdxdr'][element] += torch.from_numpy(0.529177 * dess)
+                
+                db2[str(i)] = d
+                
+        db1.close()
+        db2.close()
 
 
-    def _SOFTMAX(self, energy, x, beta=-1):
+    def get_stress_group(self, data):
+        """ Get every kind of stress groups if None is defined by the user. """
+        if self.stress_coefficient and (self.stress_group is None):
+            db = shelve.open(self.path+data)
+            sg = []
+            for i in range(self.no_of_structures):
+                if db[str(i)]['group'] not in sg:
+                    sg.append(db[str(i)]['group'])
+            self.stress_group = sg
+
+
+    def _SOFTMAX(self, data, beta=-1):
         """ Assign the weight to each sample based on the softmax function. """
+        db = shelve.open(self.path+data)
 
         # Length of smax is equal to the number of samples.
-        smax = np.ones(len(energy))
+        smax = torch.ones(len(db.keys()))
 
         if beta is not None:
-            smax = np.zeros(len(energy))
-            no_of_atoms = []
-            for i in range(len(x)):
-                natoms = 0
-                for key in x[i].keys():
-                    natoms += len(x[i][key])
-                no_of_atoms.append(natoms)
+            epa = []
+            for i in range(self.no_of_structures):
+                _epa = db[str(i)]['energy'][0]/len(db[str(i)]['elements'])
+                epa.append(_epa)
+            epa = torch.DoubleTensor(epa)
 
-            epa = np.asarray(energy) / np.asarray(no_of_atoms)
-
-            smax += np.exp(beta*epa) / sum(np.exp(beta*epa))
-            smax *= len(energy)
+            smax = torch.exp(beta*epa) / sum(torch.exp(beta*epa))
+            smax *= len(smax)    # what's this for?
 
         return smax
 
@@ -965,7 +914,6 @@ class NeuralNetwork():
                     plt.setp(ax.get_xticklabels(), visible=False)
             print("\n")
         plt.subplots_adjust(hspace=.0)
-        #plt.tight_layout()
         plt.savefig(figname)
         plt.close()
 
@@ -981,27 +929,87 @@ class Dataset(data.Dataset):
     Tutorial:
     https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
     """
-    def __init__(self, x, dxdr, rdxdr, energy, force, stress, softmax):
-        self.x = x
-        self.dxdr = dxdr
-        self.energy = energy
-        self.force = force
+    def __init__(self, data, softmax, device, memory):
         self.softmax = softmax
-        self.rdxdr = rdxdr
-        self.stress = stress
+        self.device = device
+        self.memory = memory
+        
+        db1 = shelve.open(data)
+        self.db2 = shelve.open(data+'_norm')
+        self.length = len(list(db1.keys()))
 
+        if memory == 'in':
+            self.x, self.dxdr, self.rdxdr = [], [], []
+            self.energy, self.force, self.stress, self.group = [], [], [], []
+
+            for i in range(self.length):
+                data1 = db1[str(i)]
+                data2 = self.db2[str(i)]
+                self.energy.append(float(data1['energy']))
+                self.force.append(torch.DoubleTensor(data1['force']).to(self.device))
+
+                if data1['stress'] is not None:
+                    self.stress.append(torch.from_numpy(data1['stress']).to(self.device))
+                else:
+                    self.stress.append(None)
+                self.group.append(data1['group'])
+                
+                x, dx, rdx = {}, {}, {}
+                for k in data2['x'].keys():
+                    x[k] = data2['x'][k].to(self.device)
+                    dx[k] = data2['dxdr'][k].to(self.device)
+                    rdx[k] = data2['rdxdr'][k].to(self.device)
+
+                self.x.append(x)
+                self.dxdr.append(dx)
+                self.rdxdr.append(rdx)
+            self.energy = torch.DoubleTensor(self.energy).to(self.device)
+
+        else:
+            self.x, self.dxdr, self.rdxdr = None, None, None
+            self.energy, self.force, self.stress, self.group = [], [], [], []
+
+            for i in range(len(list(db1.keys()))):
+                data1 = db1[str(i)]
+                self.energy.append(float(data1['energy']))
+                self.force.append(torch.DoubleTensor(data1['force']).to(self.device))
+                self.stress.append(torch.DoubleTensor(data1['stress']).to(self.device))
+                self.group.append(data1['group'])
+            self.energy = torch.DoubleTensor(self.energy).to(self.device)
+
+        db1.close()
+        
 
     def __len__(self):
-        return len(self.x)
+        return self.length
 
 
     def __getitem__(self, index):
-        x = self.x[index]
-        dxdr = self.dxdr[index]
-        rdxdr = self.rdxdr[index]
         energy = self.energy[index]
         force = self.force[index]
+        if self.stress[index] is None:
+            stress = None
+        else:
+            stress = self.stress[index]
         sf = self.softmax[index]
-        stress = self.stress[index]
+        group = self.group[index]
+        
+        if self.memory == 'in':
+            x = self.x[index]
+            dxdr = self.dxdr[index]
+            rdxdr = self.rdxdr[index]
 
-        return x, dxdr, rdxdr, energy, force, stress, sf
+        else:
+            data = self.db2[str(index)]
+            x, dxdr, rdxdr = data['x'], data['dxdr'], data['rdxdr']
+            if self.device == 'cuda':
+                for k in x.keys():
+                    x[k] = x[k].to(self.device)
+                    dxdr[k] = dxdr[k].to(self.device)
+                    rdxdr[k] = rdxdr[k].to(self.device)
+
+        return x, dxdr, rdxdr, energy, force, stress, sf, group
+
+
+    def close(self,):
+        self.db2.close()

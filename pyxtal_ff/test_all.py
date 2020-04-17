@@ -29,18 +29,27 @@ cu = FaceCenteredCubic('Cu', surfaces, layers, latticeconstant=lc, vacuum=10)
 rcut = 3.0
 eps = 1e-8
 
+#TrainData = resource_filename("pyxtal_ff", "datasets/Si/UCSD/test.json")
 TrainData = resource_filename("pyxtal_ff", "datasets/Si/PyXtal/Si4.json")
 parameters = {'lmax': 2}
 system = ['Si']
 descriptor = {'type': 'Bispectrum',
               'parameters': parameters,
-              'Rc': 3.6,
-              'force': True,
-              'stress': False,
-              'compress': False,
+              'Rc': 3.0,
+              #'force': True,
+              #'stress': False,
+              #'compress': False,
               'N_train': 10,
               }
 
+descriptor_comp = {'type': 'Bispectrum',
+              'parameters': parameters,
+              'Rc': 3.0,
+              #'force': True,
+              #'stress': False,
+              #'compress': True,
+              'N_train': 10,
+              }
 
 class TestSymmetryfunction(unittest.TestCase):
     from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
@@ -74,11 +83,11 @@ class TestSymmetryfunction(unittest.TestCase):
     def test_dGdR_vs_numerical(self):
         array1 = (self.g2['x'] - self.g0['x']).flatten()/eps
         array2 = self.g0['dxdr'][:, 0, :, 0].flatten()
-        if not np.allclose(array1, array2):
-            print('\n Numerical dGdR')
-            print((self.g2['x'] - self.g0['x'])/eps)
-            print('\n precompute')
-            print(self.g0['dxdr'][:, 0, :, 0])
+        #if not np.allclose(array1, array2):
+        #    print('\n Numerical dGdR')
+        #    print((self.g2['x'] - self.g0['x'])/eps)
+        #    print('\n precompute')
+        #    print(self.g0['dxdr'][:, 0, :, 0])
         self.assertTrue(np.allclose(array1, array2))
 
 class TestBispectrum(unittest.TestCase):
@@ -110,6 +119,7 @@ class TestBispectrum(unittest.TestCase):
         #    print(array2)
         self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
 
+
 class TestRegression(unittest.TestCase):
 
     model = {'system' : system,
@@ -120,7 +130,6 @@ class TestRegression(unittest.TestCase):
              'path': 'unittest/'
             }
     ff = PyXtal_FF(descriptors=descriptor, model=model)
-    ff.run(mode='train', TrainData=TrainData)
 
     @classmethod
     def tearDownClass(cls):
@@ -134,16 +143,37 @@ class TestRegression(unittest.TestCase):
     def test_2_NN_ADAM(self):
         self.ff.algorithm = 'NN'
         self.ff._model['optimizer']= {'method': 'ADAM'}
-        (train_stat, _) = self.ff.run(mode='train', TrainData=TrainData)
+        self.ff._MODEL(self.ff._model)
+        train_stat = self.ff.model.train('Train_db', self.ff.optimizer)
 
     def test_3_lr(self):
         self.ff.algorithm = 'PR'
         self.ff._model['order'] = 1
-        (train_stat, _) = self.ff.run(mode='train', TrainData=TrainData)
+        self.ff._MODEL(self.ff._model)
+        train_stat = self.ff.model.train('Train_db', None)
 
     def test_4_qr(self):
         self.ff.algorithm = 'PR'
         self.ff._model['order'] = 2
+        self.ff._MODEL(self.ff._model)
+        train_stat = self.ff.model.train('Train_db', None)
+
+class TestRegressionComp(unittest.TestCase):
+
+    model = {'system' : system,
+             'stress_coefficient': None,
+             'force_coefficient': 0.03,
+             'path': 'unittest_comp/',
+             'algorithm': 'PR',
+            }
+    ff = PyXtal_FF(descriptors=descriptor_comp, model=model)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree('unittest_comp')
+        
+    def test_lr_comp(self):
+        self.ff._model['order'] = 1
         (train_stat, _) = self.ff.run(mode='train', TrainData=TrainData)
 
 if __name__ == '__main__':

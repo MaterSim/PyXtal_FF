@@ -2,7 +2,7 @@ from pyxtal_ff import PyXtal_FF
 import numpy as np
 np.set_printoptions(formatter={'float': '{: 8.4f}'.format})
 from ase import units
-from pyxtal_ff.utilities import compute_descriptor, compress_descriptors
+from pyxtal_ff.utilities import compute_descriptor
 from ase.calculators.calculator import Calculator, all_changes#, PropertyNotImplementedError
 from ase.optimize import BFGS
 from pyxtal_ff.calculator.mushybox import mushybox
@@ -98,6 +98,13 @@ if  __name__ == "__main__":
     print(si.get_potential_energy())
     print(si.get_forces())
     print(si.get_stress())
+
+    box = mushybox(si)
+    dyn = BFGS(box)
+    dyn.run(fmax=0.01)
+    print('equlirum cell para: ', si.get_cell()[0][0])
+    print('equlirum energy: ', si.get_potential_energy())
+
     Cijs, names, C = elastic_tensor(si, calc)
     for name, Cij in zip(names, Cijs):
         print("{:s}: {:8.2f}(GPa)".format(name, Cij))

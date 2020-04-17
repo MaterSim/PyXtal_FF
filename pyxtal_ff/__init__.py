@@ -1,10 +1,10 @@
 import os
 import torch
 from pyxtal_ff.version import __version__
-from pyxtal_ff.utilities import convert_to_descriptor
+from pyxtal_ff.utilities import Database
 from pyxtal_ff.models.polynomialregression import PR
 from pyxtal_ff.models.neuralnetwork import NeuralNetwork
-#from pyxtal_ff.models.gaussianprocess import GaussianProcess
+from pyxtal_ff.models.gaussianprocess import GaussianProcess
 
 
 class PyXtal_FF():
@@ -24,10 +24,6 @@ class PyXtal_FF():
                 + SOAP
             - Rc: float
                 The radial cutoff of the descriptors.
-            - force: bool
-                If True, the derivative of the descriptors will be calculated.
-            - stress: bool
-                If True, the stress descriptors will be calculated.
             - N_train: int
                 The number of crystal structures in training data set 
                 to be converted into descriptors.
@@ -39,8 +35,6 @@ class PyXtal_FF():
             - ncpu: int
                 The number of cpu core to use for converting crystal structures 
                 into descriptors.
-            - compress: bool
-                DXDR will be saved in the compressed version.
             - parameters: dict
                 Example,
                 + BehlerParrinello
@@ -102,6 +96,9 @@ class PyXtal_FF():
             - path: str (*NN, *PR, *GPR)
                 The user defined path to store the NN results.
                 path has to be ended with '/'.
+            - memory: str (*NN)
+                There are two options: 'in' or 'out'. 'in' will use load all
+                descriptors to memory as 'out' will call from disk as needed.
             - order: int (*PR)
                 Order is used to determined the polynomial order. 
                 For order = 1, linear is employed, and quadratic is employed 
@@ -129,9 +126,8 @@ class PyXtal_FF():
             self.print_logo()
         
         # Checking the keys in descriptors
-        descriptors_keywords = ['type', 'Rc', 'force', 'stress', 'N_train', 
-                                'N_test', 'random_sample', 'ncpu', 'parameters',
-                                'compress']
+        descriptors_keywords = ['type', 'Rc', 'N_train', 'N_test', 
+                                'random_sample', 'ncpu', 'parameters']
         if descriptors is not None:
             for key in descriptors.keys():
                 if key not in descriptors_keywords:
@@ -143,20 +139,16 @@ class PyXtal_FF():
         self._descriptors = {'system': model['system'],
                              'type': 'Bispectrum',
                              'Rc': 5.0,
-                             'force': True,
-                             'stress': True,
                              'N': None,
                              'N_train': None,
                              'N_test': None,
                              'random_sample': False,
                              'ncpu': 1,
-                             'compress': False,
                              }
         
         # Update the default based on user-defined descriptors
         if descriptors is not None:
             self._descriptors.update(descriptors)
-        
             _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False}
             if 'parameters' in descriptors:
                 _parameters.update(descriptors['parameters'])
@@ -180,7 +172,7 @@ class PyXtal_FF():
                     'random_seed', 'force_coefficient', 'unit', 'softmax_beta', 
                     'logging', 'restart', 'optimizer', 'path', 'order', 'd_max', 
                     'epoch', 'device', 'alpha', 'batch_size', 'noise', 'kernel',
-                    'norm', 'stress_coefficient', 'stress_group']
+                    'norm', 'stress_coefficient', 'stress_group', 'memory']
         for key in model.keys():
             if key not in keywords:
                 msg = f"Don't recognize {key} in model. "+\
@@ -205,15 +197,6 @@ class PyXtal_FF():
             raise NotImplementedError(msg)
         
         self._model = model
-
-        # Assertion for x and dxdr compression.	
-        if self._descriptors['compress']:
-            assert self.algorithm == 'PR',\
-            f"The compress must be 'False' to employ {self.algorithm} algorithm."	
-
-            if 'order' in model.keys():	
-                assert model['order'] == 1,\
-                f"The compress must be 'False' to employ quadratic regression."
 
     
     def run(self, mode='train', TrainData=None, TestData=None, mliap=None):
@@ -240,41 +223,53 @@ class PyXtal_FF():
                 The machine learning interatomic potential.
         """
         if mode == 'train':
+            assert TrainData is not None, "TrainData can't be None for train mode."
+
             # Instantiate model
-            self._MODEL(self._model, self._descriptors['type'])
+            self._MODEL(self._model)
 
             # Calculate descriptors.
             self._descriptors.update({'N': self._descriptors['N_train']})
-            self.TrainFeatures, self.TrainDescriptors = convert_to_descriptor(
-                                                        TrainData,
-                                                        self.path+'Train_',
-                                                        self._descriptors)
+            if not os.path.exists(self.path+'Train_db.dat'):
+                trainDB = Database(name=self.path+'Train_db')
+                trainDB.store(TrainData, self._descriptors, True)
+            else:
+                trainDB = Database(name=self.path+'Train_db')
+                trainDB.store(TrainData, self._descriptors, False)
+            trainDB.close()
 
             if TestData is not None:
                 EvaluateTest = True
                 self._descriptors.update({'N': self._descriptors['N_test']}) 
-                self.TestFeatures, self.TestDescriptors = convert_to_descriptor(
-                                                          TestData,
-                                                          self.path+'Test_',
-                                                          self._descriptors)
+                if not os.path.exists(self.path+'Test_db.dat'):
+                    testDB = Database(name=self.path+'Test_db')
+                    testDB.store(TestData, self._descriptors, True)
+                else:
+                    testDB = Database(name=self.path+'Test_db')
+                    testDB.store(TestData, self._descriptors, False)
+                testDB.close()
+
             else:
                 EvaluateTest = False
             
             print("==================================== Training ====================================\n")
-            self.model.train(self.TrainDescriptors, self.TrainFeatures, 
-                             optimizer=self.optimizer)
+
+            self.model.train('Train_db', optimizer=self.optimizer)
             self.model.save_checkpoint(des_info=self._descriptors)
+            
             print("==================================================================================\n")
             
             print(f"============================= Evaluating Training Set ============================\n")
-            train_stat = self.model.evaluate(self.TrainDescriptors, self.TrainFeatures,
-                                             figname='Train.png')
+
+            train_stat = self.model.evaluate('Train_db', figname='Train.png')
+            
             print("==================================================================================\n")
 
             if EvaluateTest:
                 print("============================= Evaluating Testing Set =============================\n")
-                test_stat =  self.model.evaluate(self.TestDescriptors, self.TestFeatures,
-                                                 figname='Test.png')
+
+                test_stat =  self.model.evaluate('Test_db', figname='Test.png')
+                
                 print("==================================================================================\n")
             else:
                 test_stat = None
@@ -284,13 +279,11 @@ class PyXtal_FF():
         elif mode == 'predict':
             self._model['algorithm'] = torch.load(mliap)['algorithm']
             self.algorithm = self._model['algorithm']
-            self._MODEL(self._model, self._descriptors['type'])
+            self._MODEL(self._model)
             self._descriptors = self.model.load_checkpoint(filename=mliap)
-            self._descriptors['force'] = True
-            self._descriptors['stress'] = True
 
     
-    def _MODEL(self, model, descriptors_type):
+    def _MODEL(self, model):
         """ Machine learning model is created here. """
                     
         if self.algorithm == 'NN':
@@ -310,6 +303,7 @@ class PyXtal_FF():
                       'logging': None,
                       'restart': None,
                       'path': self.path,
+                      'memory': 'in',
                       'optimizer': {},
                       }
             _model.update(model)
@@ -354,7 +348,8 @@ class PyXtal_FF():
                                        unit=_model['unit'],
                                        logging=_model['logging'],
                                        restart=_model['restart'],
-                                       path=_model['path'])
+                                       path=_model['path'],
+                                       memory=_model['memory'])
             self.optimizer = _model['optimizer']
                 
         elif self.algorithm == 'PR':
@@ -422,7 +417,7 @@ class PyXtal_FF():
         """ Print the descriptors information. """
 
         print('Descriptor parameters:')
-        keys = ['type', 'Rc', 'force', 'stress']
+        keys = ['type', 'Rc']
         for key in keys:
             print('{:12s}: {:}'.format(key, _descriptors[key]))
 

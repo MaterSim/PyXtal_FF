@@ -4,6 +4,7 @@ import gc
 import sys, os
 import time
 import json
+import shelve
 import numpy as np
 from scipy.linalg import lstsq
 from torch import save, load
@@ -69,48 +70,44 @@ class PR():
         self.unit = 'eV'
 
 
-    def train(self, TrainDescriptors, TrainFeatures, optimizer):
+    def train(self, TrainData, optimizer):
         """ Fitting Linear Regression model. """
+        db = shelve.open(self.path+TrainData)
+        self.no_of_structures = len(list(db.keys()))
 
-        # Check if the descriptors are compressed.
-        self.compress = TrainDescriptors[0]["compressed"]
-        
         # d_max is the total number of descriptors used.
         if self.d_max is None:
-            self.d_max = len(TrainDescriptors[0]['x'][0])
+            self.d_max = db['0']['x'].shape[1]
         else:
             # d_max has to be less or equal than total descriptors.
-            assert self.d_max <= len(TrainDescriptors[0]['x'][0]),\
+            assert self.d_max <= len(db['0']['x'].shape[1]),\
                     "d_max is larger than total descriptors."
 
         if self.stress_coefficient and (self.stress_group is None):
             sg = []
-
-            for i in range(len(TrainFeatures)):
-                if TrainFeatures[i]['group'] not in sg:
-                    sg.append(TrainFeatures[i]['group'])
+            for i in range(self.no_of_structures):
+                if db[str(i)]['group'] not in sg:
+                    sg.append(db[str(i)]['group'])
             self.stress_group = sg
+
+        db.close()
         
         print(f"Order              : {self.order}")
         if self.order == 1:
             print(f"No of parameters   : {self.d_max+1}")
         else:
             print(f"No of parameters   : {(self.d_max+1)*(self.d_max+2)//2}")
-        print(f"No of structures   : {len(TrainDescriptors)}")
+        print(f"No of structures   : {self.no_of_structures}")
         print(f"Force_coefficient  : {self.force_coefficient}")
         print(f"Stress_coefficient : {self.stress_coefficient}")
         print(f"alpha              : {self.alpha}")
         print(f"norm               : {self.norm}\n")
 
         t0 = time.time()
-        y, w = self.parse_features(TrainFeatures, TrainDescriptors)
+        y, w = self.parse_features(TrainData)
 
-        if self.compress:
-            X = self.parse_compressed_descriptors(TrainDescriptors, 
-                fc=self.force_coefficient, sc=self.stress_coefficient)
-        else:
-            X = self.parse_descriptors(TrainDescriptors,
-                fc=self.force_coefficient, sc=self.stress_coefficient)
+        X = self.parse_descriptors(TrainData,
+            fc=self.force_coefficient, sc=self.stress_coefficient)
         
         self.coef_ = self.LinearRegression(X, y, w, self.alpha, self.norm)
         
@@ -118,37 +115,32 @@ class PR():
         print("The training time: {:.2f} s".format(t1-t0))
         
     
-    def evaluate(self, descriptors, features, figname):
+    def evaluate(self, data, figname):
         """ Evaluating the train or test data set. """
-
+        db = shelve.open(self.path+data)
+        
         energy, force, stress = [], [], [] # true
         _energy, _force, _stress = [], [], [] # predicted
  
-        # If-else for consistent separations in printing.
-        #if figname[:-4] == 'Train':
-        #    print(f"============================= Evaluating {figname[:-4]}ing Set ============================\n")
-        #else:
-        #    print("============================= Evaluating Testing Set =============================\n")
-
-        for i in range(len(descriptors)):
-            no_of_atoms = len(features[i]['force'])
-            Energy, Force, Stress = self.calculate_properties(descriptors[i], 
+        for i in range(len(list(db.keys()))):
+            no_of_atoms = len(db[str(i)]['force'])
+            Energy, Force, Stress = self.calculate_properties(db[str(i)], 
                                     self.force_coefficient, self.stress_coefficient)
             
             # Store energy into list
-            true_energy = features[i]['energy'] / no_of_atoms
+            true_energy = db[str(i)]['energy'] / no_of_atoms
             energy.append(true_energy)
             _energy.append(Energy)
 
             if self.force_coefficient:
-                true_force = np.ravel(features[i]['force'])
+                true_force = np.ravel(db[str(i)]['force'])
                 Force = np.ravel(Force)
                 for m in range(len(true_force)):
                     force.append(true_force[m])
                     _force.append(Force[m])
 
-            if self.stress_coefficient and (features[i]['group'] in self.stress_group):
-                true_stress = np.array(features[i]['stress'])#.flat[[0,3,5,3,1,4,5,4,2]]
+            if self.stress_coefficient and (db[str(i)]['group'] in self.stress_group):
+                true_stress = np.array(db[str(i)]['stress'])#.flat[[0,3,5,3,1,4,5,4,2]]
                 Stress = np.ravel(Stress)
                 for m in range(len(true_stress)):
                     stress.append(true_stress[m])
@@ -338,12 +330,7 @@ class PR():
         no_of_atoms = len(descriptor['elements'])
         energy, force, stress = 0., np.zeros([no_of_atoms, 3]), np.zeros([6])
         
-        self.compress = descriptor["compressed"]
-        
-        if self.compress:
-            X = self.parse_compressed_descriptors([descriptor], fc=bforce, sc=bstress, train=False)
-        else:
-            X = self.parse_descriptors([descriptor], fc=bforce, sc=bstress, train=False)
+        X = self.parse_descriptors({'0': descriptor}, fc=bforce, sc=bstress, train=False)
         
         _y = np.dot(X, self.coef_) # Calculate properties
 
@@ -383,70 +370,7 @@ class PR():
         np.savetxt(self.path+filename, combine, header='Predicted True Diff', fmt='%.7e')
 
 
-    def parse_compressed_descriptors(self, descriptors, fc=True, sc=False, train=True):
-        """ Parse compressed descriptors, its gradient and stress to 2D array.
-        
-        Returns
-        -------
-        X: 2-D array [n+m*3+n*9, d]
-            d is the total number of descriptors, n is the total
-            number of structures, and m is the total number atoms
-            in the entire structures. If force_coefficient is None,
-            X has the shape of [n, d].
-        """
-        if train:
-            no_of_structures = self.no_of_structures
-            no_of_atoms = self.no_of_atoms
-            stress_components = self.stress_components
-        else:
-            no_of_structures = 1 # 1 for train is false
-            no_of_atoms = len(descriptors[0]['elements']) if fc else 0
-            stress_components = 6 if sc else 0
-       
-        if self.d_max is None: #enable calculator works
-            self.d_max = len(descriptors[0]['x'][0])
-
-        columns = (1+self.d_max)*len(self.elements)
-        
-        rows = no_of_structures
-        if fc:
-            rows += no_of_atoms * 3   # x, y, and z
-        if sc:
-            rows += stress_components # xx, yy, zz, xy, xz, yz
-            
-        X = np.zeros([rows, columns])
-
-        bias_weights = np.expand_dims([1.0/len(self.elements)]*len(self.elements), axis=1)
-
-        xcount = 0
-        for i in range(no_of_structures):
-            x = descriptors[i]['x'][:, :self.d_max]
-            
-            _x = np.hstack((bias_weights, x))
-            X[xcount, :] += _x.ravel()
-            xcount += 1
-            
-            if fc:
-                dxdr = -1 * descriptors[i]['dxdr'][:, :, :self.d_max, :]
-                _dxdr = np.zeros([dxdr.shape[0], dxdr.shape[1], 1+dxdr.shape[2], 3])
-                _dxdr[:, :, 1:, :] = dxdr
-                for j in range(dxdr.shape[1]):
-                        for k in range(dxdr.shape[3]):
-                            X[xcount, :] += _dxdr[:, j, :, k].ravel()
-                            xcount += 1
-
-            if sc and (descriptors[i]['rdxdr'] is not None):
-                rdxdr = -1 * descriptors[i]['rdxdr'][:, :self.d_max, :6]
-                _rdxdr = np.zeros([rdxdr.shape[0], rdxdr.shape[1]+1, 6])
-                _rdxdr[:, 1:, :] = rdxdr
-                shp = _rdxdr.shape
-                X[xcount:xcount+6, :] = _rdxdr.reshape([shp[0]*shp[1], shp[2]]).T
-                xcount += 6
-
-        return X
-
-
-    def parse_descriptors(self, descriptors, fc=True, sc=False, train=True):
+    def parse_descriptors(self, data, fc=True, sc=False, train=True):
         """ Parse descriptors and its gradient to 2-D array. 
         
         Returns
@@ -458,12 +382,14 @@ class PR():
             X has the shape of [n, d].
         """
         if train:
+            db = shelve.open(self.path+data)
             no_of_structures = self.no_of_structures
             no_of_atoms = self.no_of_atoms
             stress_components = self.stress_components
         else:
+            db = data
             no_of_structures = 1 # 1 for train is false
-            no_of_atoms = len(descriptors[0]['elements']) if fc else 0
+            no_of_atoms = len(data['0']['elements']) if fc else 0
             stress_components = 6 if sc else 0
         
         # Determine the total number of descriptors based on SNAP or qSNAP.
@@ -487,17 +413,18 @@ class PR():
         # Fill in X.
         xcount = 0
         for i in range(no_of_structures):
+            data = db[str(i)]
             if self.quadratic:
-                _x = descriptors[i]['x'][:, :self.d_max]
+                _x = data['x'][:, :self.d_max]
                 x = np.zeros((len(_x), d_max))
-                x[:, :self.d_max] += descriptors[i]['x'][:, :self.d_max]
+                x[:, :self.d_max] += data['x'][:, :self.d_max]
                 if fc:
-                    _dxdr = descriptors[i]['dxdr'][:, :, :self.d_max, :]
+                    _dxdr = data['dxdr'][:, :, :self.d_max, :]
                     dxdr = np.zeros([len(_x), len(_x), d_max, 3])
                     dxdr[:, :, :self.d_max, :] += _dxdr
 
-                if sc and (descriptors[i]['rdxdr'] is not None):
-                    _rdxdr = descriptors[i]['rdxdr'][:, :self.d_max, :]
+                if sc and (data['group'] in self.stress_group):
+                    _rdxdr = data['rdxdr'][:, :self.d_max, :]
                     rdxdr = np.zeros([len(_x), d_max, 6])
                     rdxdr[:, :self.d_max, :] += _rdxdr
                 
@@ -505,7 +432,7 @@ class PR():
                 x_square = 0.5 * _x ** 2
                 if fc:
                     dxdr_square = np.einsum('ijkl,ik->ijkl', _dxdr, _x)
-                if sc and (descriptors[i]['rdxdr'] is not None):
+                if sc and (data['group'] in self.stress_group):
                     rdxdr_square = np.einsum('ijk,ij->ijk', _rdxdr, _x)
                 
                 dcount = self.d_max
@@ -515,7 +442,7 @@ class PR():
                     if fc:
                         dxdr_d1_d2 = np.einsum('ijl,ik->ijkl', _dxdr[:, :, d1, :], _x[:, d1+1:]) + \
                                      np.einsum('ijkl,i->ijkl', _dxdr[:, :, d1+1:, :], _x[:, d1])
-                    if sc and (descriptors[i]['rdxdr'] is not None):
+                    if sc and (data['group'] in self.stress_group):
                         rdxdr_d1_d2 = np.einsum('ik,ij->ijk', _rdxdr[:, d1, :], _x[:, d1+1:]) + \
                                       np.einsum('ijk,i->ijk', _rdxdr[:, d1+1:, :], _x[:, d1])
                     
@@ -523,7 +450,7 @@ class PR():
                     x[:, dcount] += x_square[:, d1]
                     if fc:
                         dxdr[:, :, dcount, :] += dxdr_square[:, :, d1, :]
-                    if sc and (descriptors[i]['rdxdr'] is not None):
+                    if sc and (data['rdxdr'] is not None):
                         rdxdr[:, dcount, :] += rdxdr_square[:, d1, :]
 
                     dcount += 1
@@ -531,25 +458,25 @@ class PR():
                     x[:, dcount:dcount+len(x_d1_d2[0])] += x_d1_d2
                     if fc:
                         dxdr[:, :, dcount:dcount+len(x_d1_d2[0]), :] += dxdr_d1_d2
-                    if sc and (descriptors[i]['rdxdr'] is not None):
+                    if sc and (data['rdxdr'] is not None):
                         rdxdr[:, dcount:dcount+len(x_d1_d2[0]), :] += rdxdr_d1_d2
                     dcount += len(x_d1_d2[0])
                 
             else:
-                x = descriptors[i]['x'][:, :d_max]
+                x = data['x'][:, :d_max]
                 if fc:
-                    dxdr = descriptors[i]['dxdr'][:, :, :d_max, :]
-                if sc and (descriptors[i]['rdxdr'] is not None):
-                    rdxdr = descriptors[i]['rdxdr'][:, :d_max, :]
+                    dxdr = data['dxdr'][:, :, :d_max, :]
+                if sc and (data['group'] in self.stress_group):
+                    rdxdr = data['rdxdr'][:, :d_max, :]
             
-            elements = descriptors[i]['elements']
+            elements = data['elements']
             
             # Arranging x and dxdr for energy and forces.
             bias_weights = 1.0/len(self.elements)
             
             sna = np.zeros([len(self.elements), 1+d_max])
             snad = np.zeros([len(self.elements), len(x), 1+d_max, 3])
-            if sc and (descriptors[i]['rdxdr'] is not None):
+            if sc and (data['group'] in self.stress_group):
                 snav = np.zeros([len(self.elements), 1+d_max, 6])
 
             _sna, _snad, _snav, _count = {}, {}, {}, {}
@@ -565,13 +492,13 @@ class PR():
                     _sna[element] = 1 * x[e]
                     if fc:
                         _snad[element] = -1 * dxdr[e]
-                    if sc and (descriptors[i]['rdxdr'] is not None):
+                    if sc and (data['group'] in self.stress_group):
                         _snav[element] = -1 * rdxdr[e]  # [d, 6]
                 else:
                     _sna[element] += x[e]
                     if fc:
                         _snad[element] -= dxdr[e]
-                    if sc and (descriptors[i]['rdxdr'] is not None):
+                    if sc and (data['group'] in self.stress_group):
                         _snav[element] -= rdxdr[e]
                 _count[element] += 1
 
@@ -581,7 +508,7 @@ class PR():
                     sna[e, :] += np.hstack(([bias_weights], _sna[element]))
                     if fc:
                         snad[e, :, 1:, :] += _snad[element]
-                    if sc and (descriptors[i]['rdxdr'] is not None):
+                    if sc and (data['group'] in self.stress_group):
                         snav[e, 1:, :] += _snav[element]#.reshape([len(sna[0])-1, 6])
 
             # X for energy
@@ -596,15 +523,18 @@ class PR():
                         xcount += 1
             
             # X for stress.
-            if sc and (descriptors[i]['rdxdr'] is not None):
+            if sc and (data['group'] in self.stress_group):
                 shp = snav.shape
                 X[xcount:xcount+6, :] = snav.reshape([shp[0]*shp[1], shp[2]]).T
                 xcount += 6
         
+        if train:
+            db.close()
+
         return X
 
 
-    def parse_features(self, features, descriptors):
+    def parse_features(self, data):
         """ Parse features (energy, forces, and stress) into 1-D array.
         
         Returns
@@ -620,23 +550,24 @@ class PR():
             w contains the relative importance between energy, forces, 
             and stress.
         """
-        self.no_of_structures = len(features)
+        db = shelve.open(self.path+data)
         self.no_of_atoms = 0
         self.stress_components = 0
 
-        y = None #store the features (energy+forces+stress)
-        w = None #weight of each sample
+        y = None # store the features (energy+forces+stress)
+        w = None # weight of each sample
         
-        for i in range(len(features)):
-            energy = np.array([features[i]['energy']/len(features[i]['force'])])
+        for i in range(self.no_of_structures):
+            data = db[str(i)]
+            energy = np.array([data['energy']/len(data['elements'])])
             w_energy = np.array([1.])
 
             if self.force_coefficient:
-                force = np.array(features[i]['force']).ravel()
+                force = np.array(data['force']).ravel()
                 w_force = np.array([self.force_coefficient]*len(force))
 
-                if self.stress_coefficient and (features[i]['group'] in self.stress_group):     # energy + forces + stress
-                    stress = np.array(features[i]['stress'])#.flat[[0,3,5,3,1,4,5,4,2]]
+                if self.stress_coefficient and (data['group'] in self.stress_group):     # energy + forces + stress
+                    stress = np.array(data['stress'])#.flat[[0,3,5,3,1,4,5,4,2]]
                     w_stress = np.array([self.stress_coefficient]*len(stress))
                     self.stress_components += 6
                     
@@ -647,7 +578,6 @@ class PR():
                         y = np.concatenate((y, energy, force, stress))
                         w = np.concatenate((w, w_energy, w_force, w_stress))
                 else:                                                                           # energy + forces
-                    descriptors[i]['rdxdr'] = None
                     if y is None:
                         y = np.concatenate((energy, force))
                         w = np.concatenate((w_energy, w_force))
@@ -656,11 +586,11 @@ class PR():
                         w = np.concatenate((w, w_energy, w_force))
                 
                 # Count the number of atoms for the entire structures.
-                self.no_of_atoms += len(features[i]['force'])
+                self.no_of_atoms += len(data['force'])
 
             else:
-                if self.stress_coefficient and (features[i]['group'] in self.stress_group):    # energy + stress
-                    stress = np.array(features[i]['stress'])#.flat[[0,3,5,3,1,4,5,4,2]]
+                if self.stress_coefficient and (data['group'] in self.stress_group):    # energy + stress
+                    stress = np.array(data['stress'])#.flat[[0,3,5,3,1,4,5,4,2]]
                     w_stress = np.array([self.stress_coefficient]*len(stress))
                     self.stress_components += 6
                     
@@ -672,7 +602,6 @@ class PR():
                         w = np.concatenate((w, w_energy, w_stress))
 
                 else:                                                                           # energy only
-                    descriptors[i]['rdxdr'] = None
                     if y is None:
                         y = energy
                         w = w_energy
@@ -680,6 +609,7 @@ class PR():
                         y = np.concatenate((y, energy))
                         w = np.concatenate((w, w_energy))
         
+        db.close()
         gc.collect()
-        
+
         return y, w
