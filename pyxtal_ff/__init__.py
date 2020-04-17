@@ -4,7 +4,6 @@ from pyxtal_ff.version import __version__
 from pyxtal_ff.utilities import Database
 from pyxtal_ff.models.polynomialregression import PR
 from pyxtal_ff.models.neuralnetwork import NeuralNetwork
-from pyxtal_ff.models.gaussianprocess import GaussianProcess
 
 
 class PyXtal_FF():
@@ -182,7 +181,6 @@ class PyXtal_FF():
         # Create model
         pr_keywords = ['PolynomialRegression', 'PR']
         nn_keywords = ['NeuralNetwork', 'NN']
-        gr_keywords = ['GaussianProcessRegressor', 'GPR']
         if 'algorithm' not in model:
             model['algorithm'] = 'NN'
 
@@ -190,8 +188,6 @@ class PyXtal_FF():
             self.algorithm = 'PR'
         elif model['algorithm'] in nn_keywords:
             self.algorithm = 'NN'
-        elif model['algorithm'] in gr_keywords:
-            self.algorithm = 'GPR'
         else:
             msg = f"{model['algorithm']} is not implemented."
             raise NotImplementedError(msg)
@@ -375,43 +371,6 @@ class PyXtal_FF():
                             norm=_model['norm'],
                             d_max=_model['d_max'])
             self.optimizer = None
-
-        elif self.algorithm == 'GPR':
-            _model = {'force_coefficient': 0.0001,
-                      'stress_coefficient': None,
-                      'stress_group': None,
-                      'path': self.path,
-                      'system': None,
-                      'epoch': 100,
-                      'noise': 1e-10,
-                      'kernel': 'RBF'
-                      }
-            _model.update(model)
-
-            if 'parameters' not in _model['optimizer']:
-                _model['optimizer']['parameters'] = {}
-            if 'derivative' not in _model['optimizer']:
-                _model['optimizer']['derivative'] = True
-            if 'method' not in _model['optimizer']:
-                _model['optimizer']['method'] = 'lbfgs'
-
-            # If LBFGS is used, epoch is 1.
-            if _model['optimizer']['method'] in ['lbfgs', 'LBFGS', 'lbfgsb']:
-                if 'max_iter' in _model['optimizer']['parameters'].items():
-                    if _model['epoch'] > _model['optimizer']['parameters']['max_iter']:
-                        _model['optimizer']['parameters']['max_iter'] = _model['epoch']
-                else:
-                    _model['optimizer']['parameters']['max_iter'] = _model['epoch']
-                _model['epoch'] = 1
-            
-            self.model = GaussianProcess(elements=_model['system'],
-                                         force_coefficient=_model['force_coefficient'],
-                                         stress_coefficient=_model['stress_coefficient'],
-                                         stress_group=_model['stress_group'],
-                                         epoch=_model['epoch'],
-                                         path=_model['path'],)
-            self.optimizer = _model['optimizer']
-
 
     def print_descriptors(self, _descriptors):
         """ Print the descriptors information. """
