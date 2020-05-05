@@ -6,6 +6,8 @@ from ase import Atoms
 import numpy as np
 from pkg_resources import resource_filename
 from pyxtal_ff import PyXtal_FF
+from pyxtal_ff.calculator import PyXtalFFCalculator
+from ase.build import bulk
 
 np.set_printoptions(formatter={'float': '{: 12.4f}'.format})
 
@@ -36,20 +38,47 @@ system = ['Si']
 descriptor = {'type': 'Bispectrum',
               'parameters': parameters,
               'Rc': 3.0,
-              #'force': True,
-              #'stress': False,
-              #'compress': False,
               'N_train': 10,
               }
 
 descriptor_comp = {'type': 'Bispectrum',
               'parameters': parameters,
               'Rc': 3.0,
-              #'force': True,
-              #'stress': False,
-              #'compress': True,
               'N_train': 10,
               }
+
+class TestEAMD(unittest.TestCase):
+    from pyxtal_ff.descriptors.eamd import EAMD
+    symmetry = {'L': 2, 'eta': [0.36], 'Rs': [1.]}
+    struc = get_rotated_struc(cu)
+    rho0 = EAMD(symmetry, rcut, derivative=True).calculate(struc)
+    struc = get_rotated_struc(cu, 10, 'x')
+    rho1 = EAMD(symmetry, rcut, derivative=True).calculate(struc)
+    struc = get_perturbed_struc(cu, eps)
+    rho2 = EAMD(symmetry, rcut, derivative=False).calculate(struc)
+
+    def test_rho_value(self):
+        self.assertAlmostEqual(self.rho0['x'][0,0], 21.07766448405431)
+
+    def test_G_rotation_variance(self):
+        array1 = self.rho0['x'].flatten()
+        array2 = self.rho1['x'].flatten()
+        self.assertTrue(np.allclose(array1, array2))
+
+    def test_dGdR_rotation_variance(self):
+        array1 = np.linalg.norm(self.rho0['dxdr'][0,1,:,:], axis=1)
+        array2 = np.linalg.norm(self.rho1['dxdr'][0,1,:,:], axis=1)
+        self.assertTrue(np.allclose(array1, array2))
+
+    def test_dGdR_vs_numerical(self):
+        array1 = (self.rho2['x'] - self.rho0['x']).flatten()/eps
+        array2 = self.rho0['dxdr'][:, 0, :, 0].flatten()
+        #if not np.allclose(array1, array2):
+        #    print('\n Numerical dGdR')
+        #    print((self.g2['x'] - self.g0['x'])/eps)
+        #    print('\n precompute')
+        #    print(self.g0['dxdr'][:, 0, :, 0])
+        self.assertTrue(np.allclose(array1, array2))
 
 class TestSymmetryfunction(unittest.TestCase):
     from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
@@ -119,6 +148,34 @@ class TestBispectrum(unittest.TestCase):
         #    print(array2)
         self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
 
+class TestSOAP(unittest.TestCase):
+    from pyxtal_ff.descriptors.SOAP import SOAP
+    struc = get_rotated_struc(cu)
+    p0 = SOAP(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc, backend='ase')
+    struc = get_rotated_struc(cu, 20, 'x')
+    p1 = SOAP(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc, backend='ase')
+    struc = get_perturbed_struc(cu, eps)
+    p2 = SOAP(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc, backend='ase')
+
+    def test_SOAP_rotation_variance(self):
+        array1 = self.p0['x'].flatten()
+        array2 = self.p1['x'].flatten()
+        self.assertTrue(np.allclose(array1, array2))
+
+    def test_dpdr_rotation_variance(self):
+        array1 = np.linalg.norm(self.p0['dxdr'][0,1,:,:], axis=1)
+        array2 = np.linalg.norm(self.p1['dxdr'][0,1,:,:], axis=1)
+        self.assertTrue(np.allclose(array1, array2))
+
+    def test_dpdr_vs_numerical(self):
+        array1 = (self.p2['x'] - self.p0['x'])/eps
+        array2 = self.p0['dxdr'][:, 0, :, 0]
+        if not np.allclose(array1, array2, atol=1e-6):
+            print('\n Numerical dPdr')
+            print(array1)
+            print('\n precompute')
+            print(array2)
+        self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
 
 class TestRegression(unittest.TestCase):
 
@@ -130,6 +187,7 @@ class TestRegression(unittest.TestCase):
              'path': 'unittest/'
             }
     ff = PyXtal_FF(descriptors=descriptor, model=model)
+    struc = bulk('Si', 'diamond', a=5.0, cubic=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -145,18 +203,34 @@ class TestRegression(unittest.TestCase):
         self.ff._model['optimizer']= {'method': 'ADAM'}
         self.ff._MODEL(self.ff._model)
         train_stat = self.ff.model.train('Train_db', self.ff.optimizer)
+        self.ff.model.save_checkpoint(des_info=self.ff._descriptors)
+
 
     def test_3_lr(self):
         self.ff.algorithm = 'PR'
         self.ff._model['order'] = 1
         self.ff._MODEL(self.ff._model)
         train_stat = self.ff.model.train('Train_db', None)
+        self.ff.model.save_checkpoint(des_info=self.ff._descriptors)
 
     def test_4_qr(self):
         self.ff.algorithm = 'PR'
         self.ff._model['order'] = 2
         self.ff._MODEL(self.ff._model)
         train_stat = self.ff.model.train('Train_db', None)
+
+    def test_5_NN_calculator(self):
+        calc = PyXtalFFCalculator(mliap='unittest/12-12-checkpoint.pth', logo=False)
+        self.struc.set_calculator(calc)
+        self.struc.get_potential_energy()
+        self.struc.get_stress()
+
+    def test_6_LR_calculator(self):
+        calc = PyXtalFFCalculator(mliap='unittest/PolyReg-checkpoint.pth', logo=False)
+        self.struc.set_calculator(calc)
+        self.struc.get_potential_energy()
+        self.struc.get_stress()
+
 
 class TestRegressionComp(unittest.TestCase):
 

@@ -20,6 +20,8 @@ class BehlerParrinello:
         The symmetry functions will be calculated within this radius.
     derivative: bool
         If True, calculate the derivatives of symmetry functions.
+    stress: bool
+        If True, calculate the virial stress contribution of EAMD.
     """
     def __init__(self, symmetry_parameters, Rc=6.5, derivative=True, stress=False):
         self._type = 'BehlerParrinello'
@@ -79,7 +81,7 @@ class BehlerParrinello:
         Parameters
         ----------
         crystal: object
-            Pymatgen Structure object.
+            ASE Structure object.
         system: list
             A list of the crystal structures system. 
             All elements in the list have to be integer. For example, the
@@ -91,15 +93,17 @@ class BehlerParrinello:
         all_G: dict
             The user-defined symmetry functions that represent the crystal.
             
-            Currently, there are 2 types of symmetry functions implemented. 
+            Currently, there are 3 types of symmetry functions implemented. 
             Here are the order of the descriptors are printed out based on
             their symmetry parameters:
                 - G2: ["element", "Rs", "eta"]
                 - G4: ["pair_elements", "eta", "lambda", "zeta"]
+                - G5: ["pair_elements", "eta", "lambda", "zeta"]
         """
         self.crystal = crystal
         atomic_numbers = np.array(crystal.get_atomic_numbers())
-        
+        vol = crystal.get_volume()
+
         if system is None:
             type_set1 = create_type_set(atomic_numbers, 1)   # l
             type_set2 = create_type_set(atomic_numbers, 2)   # l
@@ -214,7 +218,7 @@ class BehlerParrinello:
         if self.derivative:
             self.all_G['dxdr'] = np.asarray(self.all_G['dxdr'])
             if self.stress:
-                self.all_G['rdxdr'] = -np.asarray(self.all_G['rdxdr'])
+                self.all_G['rdxdr'] = -np.asarray(self.all_G['rdxdr'])/vol
             else:
                 self.all_G['rdxdr'] = None
         return self.all_G
@@ -224,7 +228,7 @@ class BehlerParrinello:
 
 
 def calculate_G2(Dij, IDs, atomic_numbers, type_set, Rc, parameters):
-    """Calculate G2 symmetry function for a given atom i.
+    """Calculate G2 symmetry function for a center atom i.
     
     G2 function describes the radial feature of atoms in a crystal structure
     given a cutoff radius. 

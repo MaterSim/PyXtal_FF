@@ -3,7 +3,7 @@ import numpy as np
 import os.path
 import numba
 
-print('load the precomputed values from ', os.path.join(os.path.dirname(__file__), 'Wigner_coefficients.npy'))
+#print('load the precomputed values from ', os.path.join(os.path.dirname(__file__), 'Wigner_coefficients.npy'))
 _Wigner_coefficients = np.load(os.path.join(os.path.dirname(__file__), 'Wigner_coefficients.npy'))
 
 @numba.njit(numba.i8(numba.i8, numba.i8, numba.i8),

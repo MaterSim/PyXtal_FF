@@ -148,7 +148,10 @@ class PyXtal_FF():
         # Update the default based on user-defined descriptors
         if descriptors is not None:
             self._descriptors.update(descriptors)
-            _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False}
+            if 'type' in descriptors and descriptors['type'] == 'EAMD':
+                _parameters = {'L': 3, 'eta': [0.1], 'Rs': [1.]}
+            else:
+                _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False}
             if 'parameters' in descriptors:
                 _parameters.update(descriptors['parameters'])
                 self._descriptors['parameters'] = _parameters
@@ -372,6 +375,7 @@ class PyXtal_FF():
                             d_max=_model['d_max'])
             self.optimizer = None
 
+
     def print_descriptors(self, _descriptors):
         """ Print the descriptors information. """
 
@@ -384,6 +388,8 @@ class PyXtal_FF():
             key_params = ['lmax', 'normalize_U']
         elif _descriptors['type'] == 'SOAP':
             key_params = ['nmax', 'lmax']
+        elif _descriptors['type'] == 'EAMD':
+            key_params = ['L', 'eta', 'Rs']
         else:
             key_params = []
 

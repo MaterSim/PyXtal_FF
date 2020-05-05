@@ -140,9 +140,9 @@ def tetragonal(u):
                 [[uxx,   0,    uyy,  uzz,      0,      0],
                  [uyy,   0,    uxx,  uzz,      0,      0],
                  [0,     uzz,  0,    uxx+uyy,  0,      0],
-                 [0,     0,    0,    0,        0,      2*uxy],
+                 [0,     0,    0,    0,        2*uyz,  0],
                  [0,     0,    0,    0,        2*uxz,  0],
-                 [0,     0,    0,    0,        2*uyz,  0]])
+                 [0,     0,    0,    0,        0,  2*uxy]])
 
 
 def orthorombic(u):
@@ -308,8 +308,6 @@ def get_tensor_matrix(Cij, cryst):
     elif lattyp == 5: #trigonal
         raise NotImplementedError
     elif lattyp == 4: #tetragonal
-        raise NotImplementedError
-    elif lattyp == 3: #orthorhombic
         matrix[0,0] = matrix[1,1] = Cij[0]
         matrix[2,2] = Cij[1]
         matrix[0,1] = matrix[1,0] = matrix[0,2] = matrix[2,0] = Cij[2]
@@ -350,8 +348,8 @@ def get_cij_order(cryst):
                 'C_44', 'C_55', 'C_66', 'C_16', 'C_26', 'C_36', 'C_45'),
             3: ('C_11', 'C_22', 'C_33', 'C_12', 'C_13', 'C_23', 'C_44',
                 'C_55', 'C_66'),
-            4: ('C_11', 'C_33', 'C_12', 'C_13', 'C_44', 'C_14'),
-            5: ('C_11', 'C_33', 'C_12', 'C_13', 'C_44', 'C_14'),
+            4: ('C_11', 'C_33', 'C_12', 'C_13', 'C_44', 'C_66'), #error in the original code
+            5: ('C_11', 'C_33', 'C_12', 'C_13', 'C_44', 'C_14'), #C_66=1/2(C11-C22)
             6: ('C_11', 'C_33', 'C_12', 'C_13', 'C_44'),
             7: ('C_11', 'C_12', 'C_44'),
             }
@@ -588,16 +586,16 @@ def get_elastic_tensor(cryst, systems):
         ul.append(get_strain(g, refcell=cryst))
         # Remove the ambient pressure from the stress tensor
         sl.append(g.get_stress()-array([p, p, p, 0, 0, 0]))
-    # print(symm, ul)
+        #print(g.get_stress()/units.GPa, get_strain(g, refcell=cryst))
     eqm = array([symm(u) for u in ul])
-    # print(eqm)
     # print(eqm[0].shape, eqm.shape)
     eqm = reshape(eqm, (eqm.shape[0]*eqm.shape[1], eqm.shape[2]))
-    # print(eqm)
+    #print(eqm)
     slm = reshape(array(sl), (-1,))
     # print(eqm.shape, slm.shape)
-    # print(slm)
+    #print(slm)
     Bij = lstsq(eqm, slm)
+    #print(Bij)
     # print(Bij[0] / units.GPa)
     # Calculate elastic constants from Birch coeff.
     # TODO: Check the sign of the pressure array in the B <=> C relation

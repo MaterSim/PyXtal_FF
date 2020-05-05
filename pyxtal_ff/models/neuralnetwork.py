@@ -19,7 +19,7 @@ import matplotlib.ticker as mticker
 plt.style.use("ggplot")
 
 from pyxtal_ff.models.optimizers.regressor import Regressor
-
+eV2GPa = 160.21766
 
 class NeuralNetwork():
     """ Atom-centered Neural Network model. The inputs are atom-centered 
@@ -215,8 +215,7 @@ class NeuralNetwork():
         print(f"No of parameters  : {self.total_parameters}")
         print(f"Optimizer         : {optimizer['method']}")
         print(f"Force_coefficient : {self.force_coefficient}")
-        if self.stress_coefficient:
-            print(f"Stress_coefficient : {self.stress_coefficient}\n")
+        print(f"Stress_coefficient : {self.stress_coefficient}\n")
 
         # Run Neural Network Potential Training
         t0 = time.time()
@@ -269,7 +268,6 @@ class NeuralNetwork():
     def evaluate(self, data, figname):
         """ Evaluating the train or test data set based on trained Neural Network model. 
         Evaluate will only be performed in cpu mode. """
-
         self.normalize(data, self.drange, self.unit)
 
         # Switch models device to cpu if training is done in cuda.
@@ -286,15 +284,23 @@ class NeuralNetwork():
         # Predicting the data set
         _energy, _force, _stress = [], [], [] # Predicted energy and forces
         energy, force, stress = [], [] ,[]
+        formulas = []
         for item, value in db.items():
+            data2 = db2[item]
+
             dedx = None
             n_atoms = sum(len(value) for value in value['x'].values())
             _Energy = 0.
             _Force = torch.zeros([n_atoms, 3], dtype=torch.float64)
-            if self.stress_coefficient and (db2[item]['group'] in self.stress_group):
+            if self.stress_coefficient and (data2['group'] in self.stress_group):
                 _Stress = torch.zeros([6], dtype=torch.float64)
 
+            formula = ""
             for element, model in models.items():
+                formula += element
+                formula += str(len(value['x'][element]))
+                formula += " "
+
                 if value['x'][element].nelement() > 0:
                     _x = value['x'][element].requires_grad_()
                     _e = model(_x).sum()
@@ -303,35 +309,46 @@ class NeuralNetwork():
                         dedx = torch.autograd.grad(_e, _x)[0]
                         _dxdr = value['dxdr'][element]
                         _Force += -1 * torch.einsum("ik, ijkl->jl", dedx, _dxdr)
-                    if self.stress_coefficient and (db2[item]['group'] in self.stress_group):
+                    if self.stress_coefficient and (data2['group'] in self.stress_group):
                         if self.force_coefficient is None:
                             dedx = torch.autograd.grad(_e, _x)[0]
                         _rdxdr = value['rdxdr'][element]
                         _Stress += -1 * torch.einsum("ik, ikl->l", dedx, _rdxdr)
             
-            energy.append(db2[item]["energy"]/len(db2[item]["elements"]))
-            force.append(np.ravel(db2[item]["force"]))
+            formulas.append(formula)
+            energy.append(data2["energy"]/len(data2["elements"]))
+            force.append(np.ravel(data2["force"]))
             
             _energy.append(_Energy.item()/n_atoms)
             _force.append(np.ravel(_Force.numpy()))
 
-            if self.stress_coefficient and (db2[item]['group'] in self.stress_group):
-                _stress.append(np.ravel(_Stress))
-                stress.append(np.array(db2[item]['stress']))
+            if self.stress_coefficient and (data2['group'] in self.stress_group):
+                _stress.append(np.ravel(_Stress*eV2GPa)) #transform to GPa
+                stress.append(np.array(data2['stress']))
+
+                # print outliers for debug
+                a = np.ravel(_Stress*eV2GPa)
+                b = np.array(data2['stress'])
+                #if self.mean_absolute_error(a[2:], b[2:]) > 1.5:
+                #    print('{:12s} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}'.format(formula, a[0], a[1], a[2], a[3], a[4], a[5]))
+                #    print('{:12s} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}'.format('DFT:',  b[0], b[1], b[2], b[3], b[4], b[5]))
+
 
         db.close()
         db2.close()
 
         energy = np.array(energy)
         _energy = np.array(_energy)
-        force = np.array([x for i in force for x in i])
-        _force = np.array([x for i in _force for x in i])
+        if self.force_coefficient:
+            force = np.array([x for i in force for x in i])
+            _force = np.array([x for i in _force for x in i])
         if self.stress_coefficient:
             stress = np.ravel(stress)
             _stress = np.ravel(_stress)
         
         # Dump the true and predicted values into text file.
         self.dump_evaluate(_energy, energy, filename=figname[:-4]+'Energy.txt')
+        self.dump_formulas(formulas, filename=figname[:-4]+'formulas.txt')
         if self.force_coefficient:
             self.dump_evaluate(_force, force, filename=figname[:-4]+'Force.txt')
         if self.stress_coefficient:
@@ -400,16 +417,13 @@ class NeuralNetwork():
             print("    Stress RMSE    {:8.6f}".format(S_mse))
 
             # Plotting the stress results.
-            length = 'A'
-            if self.unit == 'Ha':
-                length == 'Bohr'
-            stress_str = 'Stress: r2({:.4f}), MAE({:.3f} {}/{})'. \
-                        format(S_r2, S_mae, self.unit, length)
+            stress_str = 'Stress: r2({:.4f}), MAE({:.3f} GPa)'. \
+                        format(S_r2, S_mae)
             plt.title(stress_str)
             plt.scatter(stress, _stress, s=5, label='Stress')
             plt.legend(loc=2)
-            plt.xlabel('True ({}/{}^3)'.format(self.unit, length))
-            plt.ylabel('Prediction ({}/{}^3)'.format(self.unit, length))
+            plt.xlabel('True (GPa)')
+            plt.ylabel('Prediction (GPa)')
             plt.tight_layout()
             plt.savefig(self.path+'Stress_'+figname)
             plt.close()
@@ -417,7 +431,7 @@ class NeuralNetwork():
             print("\n")
         else:
             S_mae, S_mse, S_r2 = None, None, None
-        
+
         return (E_mae, E_mse, E_r2, F_mae, F_mse, F_r2, S_mae, S_mse, S_r2)
 
 
@@ -436,7 +450,9 @@ class NeuralNetwork():
         self.softmax = self._SOFTMAX(TrainData, beta=self.softmax_beta)
 
         self.data = data.DataLoader(Dataset(self.path+TrainData, self.softmax,
-                                            self.device, self.memory),
+                                            self.device, self.memory, 
+                                            self.force_coefficient, 
+                                            self.stress_coefficient),
                                     batch_size=self.batch_size,
                                     shuffle=self.shuffle,
                                     collate_fn=self.collate_fn,)
@@ -486,8 +502,11 @@ class NeuralNetwork():
                 force_mae  += sf.item()*F.l1_loss(_force, force) * n_atoms
 
             if self.stress_coefficient and (group in self.stress_group):
+                _stress *= eV2GPa
+
                 stress_loss += sf.item()*self.stress_coefficient * ((_stress - stress) ** 2).sum()
                 stress_mae += sf.item()*F.l1_loss(_stress, stress) * 6
+                
                 s_count += 6
 
         energy_loss = energy_loss / (2. * len(batch))
@@ -510,14 +529,17 @@ class NeuralNetwork():
                 loss = energy_loss
 
         # Add regularization to the total loss.
+        reg = 0.
         if self.alpha: 
-            reg = 0.
             for element, model in models.items():
                 for name, params in model.named_parameters():
                     if 'weight' in name:
                         reg += self.alpha * params.pow(2).sum()
             loss += reg
-        
+
+        #print("stress_count: {:4d} energy_loss: {:.6f} force_loss: {:.6f} stress_loss: {:.6f} reg: {:.6f}".format(\
+                #    int(s_count/6), energy_loss, force_loss, stress_loss, reg))
+
         return loss, energy_mae, force_mae, stress_mae
 
 
@@ -538,6 +560,12 @@ class NeuralNetwork():
         true_variance = sum((true-t_bar) ** 2)
         return 1 - square_error / true_variance
 
+
+    def dump_formulas(self, formulas, filename):
+        """ Dump the evaluate results to text files. """
+        with open(self.path+filename, 'w') as f:
+            for formula in formulas:
+                f.write(formula+'\n')
 
     def dump_evaluate(self, predicted, true, filename):
         """ Dump the evaluate results to text files. """
@@ -589,12 +617,12 @@ class NeuralNetwork():
                 dess = np.einsum('j,ijk->ijk', scale, descriptor['rdxdr'][e[0]:e[-1]+1])
                 
                 d['x'][element] += torch.from_numpy(des)
-                if self.unit == 'eV':
-                    d['dxdr'][element] += torch.from_numpy(desp)
-                    d['rdxdr'][element] += torch.from_numpy(dess)
+                if self.unit == 'eV':  
+                    d['dxdr'][element] += torch.from_numpy(desp) #/A
+                    d['rdxdr'][element] += torch.from_numpy(dess) #/A^3
                 else:
                     d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
-                    d['rdxdr'][element] += torch.from_numpy(0.529177 * dess)
+                    d['rdxdr'][element] += torch.from_numpy(0.529177**3*desp)
 
         x = d['x']
         if bforce:
@@ -621,7 +649,7 @@ class NeuralNetwork():
                         dedx = torch.autograd.grad(_e, _x)[0]
                     stress += -torch.einsum("ik, ikl->l", dedx, _rdxdr).numpy()
 
-        return energy/no_of_atoms, force, stress
+        return energy/no_of_atoms, force, stress*eV2GPa
 
 
     def save_checkpoint(self, des_info, filename=None):
@@ -737,8 +765,9 @@ class NeuralNetwork():
         no_of_structures = len(list(db.keys()))
 
         for i in range(no_of_structures):
-            for j, descriptor in enumerate(db[str(i)]['x']):
-                element = db[str(i)]['elements'][j]
+            dic = db[str(i)]
+            for j, descriptor in enumerate(dic['x']):
+                element = dic['elements'][j]
                 if element not in _DRANGE.keys():
                     _DRANGE[element] = np.asarray([np.asarray([__, __]) \
                                       for __ in descriptor])
@@ -781,8 +810,8 @@ class NeuralNetwork():
         db1 = shelve.open(self.path+data)
         self.no_of_structures = len(list(db1.keys()))
         self.no_of_descriptors = db1['0']['x'].shape[1]
-        doit = True if not os.path.exists(self.path+data+'_norm.bat') else False
-
+        doit = True if not os.path.exists(self.path+data+'_norm.dat') else False
+        
         if doit:
             db2 = shelve.open(self.path+data+'_norm')
 
@@ -817,8 +846,8 @@ class NeuralNetwork():
                 
                 db2[str(i)] = d
                 
-        db1.close()
-        db2.close()
+            db1.close()
+            db2.close()
 
 
     def get_stress_group(self, data):
@@ -929,10 +958,11 @@ class Dataset(data.Dataset):
     Tutorial:
     https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
     """
-    def __init__(self, data, softmax, device, memory):
+    def __init__(self, data, softmax, device, memory, fc, sc):
         self.softmax = softmax
         self.device = device
         self.memory = memory
+        self.fc, self.sc = fc, sc
         
         db1 = shelve.open(data)
         self.db2 = shelve.open(data+'_norm')
@@ -946,23 +976,34 @@ class Dataset(data.Dataset):
                 data1 = db1[str(i)]
                 data2 = self.db2[str(i)]
                 self.energy.append(float(data1['energy']))
-                self.force.append(torch.DoubleTensor(data1['force']).to(self.device))
+                self.group.append(data1['group'])
 
-                if data1['stress'] is not None:
+                if self.fc:
+                    self.force.append(torch.DoubleTensor(data1['force']).to(self.device))
+                else:
+                    self.force.append(None)
+
+                if self.sc and data1['stress'] is not None:
                     self.stress.append(torch.from_numpy(data1['stress']).to(self.device))
                 else:
                     self.stress.append(None)
-                self.group.append(data1['group'])
                 
                 x, dx, rdx = {}, {}, {}
                 for k in data2['x'].keys():
                     x[k] = data2['x'][k].to(self.device)
-                    dx[k] = data2['dxdr'][k].to(self.device)
-                    rdx[k] = data2['rdxdr'][k].to(self.device)
+                    dx[k] = data2['dxdr'][k].to(self.device) if self.fc else None
+                    rdx[k] = data2['rdxdr'][k].to(self.device) if (self.sc and data1['stress'] is not None) else None
 
                 self.x.append(x)
-                self.dxdr.append(dx)
-                self.rdxdr.append(rdx)
+                if self.fc:
+                    self.dxdr.append(dx)
+                else:
+                    self.dxdr.append(None)
+                if self.sc and data1['stress'] is not None:
+                    self.rdxdr.append(rdx)
+                else:
+                    self.rdxdr.append(None)
+
             self.energy = torch.DoubleTensor(self.energy).to(self.device)
 
         else:
@@ -972,9 +1013,18 @@ class Dataset(data.Dataset):
             for i in range(len(list(db1.keys()))):
                 data1 = db1[str(i)]
                 self.energy.append(float(data1['energy']))
-                self.force.append(torch.DoubleTensor(data1['force']).to(self.device))
-                self.stress.append(torch.DoubleTensor(data1['stress']).to(self.device))
                 self.group.append(data1['group'])
+                
+                if self.fc:
+                    self.force.append(torch.DoubleTensor(data1['force']).to(self.device))
+                else:
+                    self.force.append(None)
+
+                if stress and data1['stress'] is not None:
+                    self.stress.append(torch.DoubleTensor(data1['stress']).to(self.device))
+                else:
+                    self.stress.append(None)
+
             self.energy = torch.DoubleTensor(self.energy).to(self.device)
 
         db1.close()
@@ -987,10 +1037,8 @@ class Dataset(data.Dataset):
     def __getitem__(self, index):
         energy = self.energy[index]
         force = self.force[index]
-        if self.stress[index] is None:
-            stress = None
-        else:
-            stress = self.stress[index]
+        stress = self.stress[index]
+        
         sf = self.softmax[index]
         group = self.group[index]
         

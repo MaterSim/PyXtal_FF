@@ -121,8 +121,11 @@ class Database():#MutableSequence):
             with Pool(_cpu) as p:
                 func = partial(self.compute, function)
                 for i, d in enumerate(p.imap_unordered(func, data)):
-                    self.append(d)
-                    self.length += 1
+                    try:
+                        self.append(d)
+                        self.length += 1
+                    except:
+                        pass
                     print('\r{:4d} out of {:4d}'.format(i+1, len(data)), flush=True, end='')
                 p.close()
                 p.join()
@@ -154,6 +157,13 @@ class Database():#MutableSequence):
                      function['Rc'],
                      derivative=True,
                      stress=True).calculate(data['structure'])
+
+        elif function['type'] == 'EAMD':
+            from pyxtal_ff.descriptors.eamd import EAMD
+            d = EAMD(function['parameters'],
+                     function['Rc'],
+                     True, True).calculate(data['structure'])
+
         else:
             msg = f"{function['type']} is not implemented"
             raise NotImplementedError(msg)
@@ -195,6 +205,11 @@ def compute_descriptor(function, structure):
                  function['Rc'],
                  derivative=True,
                  stress=True).calculate(structure)
+    elif function['type'] == 'EAMD':
+            from pyxtal_ff.descriptors.eamd import EAMD
+            d = EAMD(function['parameters'],
+                     function['Rc'],
+                     True, True).calculate(structure)
     else:
         msg = f"{function['type']} is not implemented"
         raise NotImplementedError(msg)
@@ -244,13 +259,37 @@ def parse_json(path, N=None, Random=False):
             else:
                 energy = d[key]['energy']
             force = d[key]['forces']
-            group = d['group']
-            if 'virial_stress' in d[key]:
-                s = [-1*s*v/1602.1766208 for s in d[key]['virial_stress']]
-                stress = [s[0], s[1], s[2], s[3], s[5], s[4]]
-            elif 'stress' in d[key]:
-                s = [-1*s*v/1602.1766208 for s in d[key]['stress']]
-                stress = [s[0], s[1], s[2], s[3], s[5], s[4]]
+            try:
+                if d['tags'][0] == 'Strain':
+                    group = 'Elastic'
+                else:
+                    group = 'NoElastic'
+            except:
+                if d['group'] == 'Elastic':
+                    group = 'Elastic'
+                else:
+                    group = 'NoElastic'
+            #group = d['group']
+            # vasp default output: XX YY ZZ XY YZ ZX
+            # pyxtal_ff/lammps use: XX YY ZZ XY XZ YZ
+            # Here we assume the sequence is lammps
+            if d['group'] == 'Elastic' and 'Mo 3x3x3 cell' in d['description']: #this is very likely a wrong dataset
+                stress = None
+                group = 'NoElastic'
+            elif 'virial_stress' in d[key]: #kB to GPa
+                s = [-1*s/10 for s in d[key]['virial_stress']] 
+
+                if d['group'] == 'Ni3Mo': #to fix the issue
+                    stress = [s[0], s[1], s[2], s[3], s[4], s[5]]
+                else:
+                    stress = [s[0], s[1], s[2], s[3], s[5], s[4]]
+
+            elif 'stress' in d[key]: #kB to GPa
+                s = [-1*s/10 for s in d[key]['stress']]
+                if d['group'] == 'Ni3Mo': #to fix the issue
+                    stress = [s[0], s[1], s[2], s[3], s[4], s[5]]
+                else:
+                    stress = [s[0], s[1], s[2], s[3], s[5], s[4]]
             else:
                 stress = None
             

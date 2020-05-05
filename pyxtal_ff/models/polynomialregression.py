@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.ticker as mticker
 plt.style.use("ggplot")
-
+eV2GPa = 160.21766
 
 class PR():
     """ Atom-centered Polynomial Regression (PR) model. PR utilizes
@@ -218,16 +218,13 @@ class PR():
             print("    Stress RMSE    {:8.6f}".format(S_mse))
 
             # Plotting the stress results.
-            length = 'A'
-            if self.unit == 'Ha':
-                length == 'Bohr'
-            stress_str = 'Stress: r2({:.4f}), MAE({:.3f} {}/{})'. \
-                        format(S_r2, S_mae, self.unit, length)
+            stress_str = 'Stress: r2({:.4f}), MAE({:.3f} GPa)'. \
+                        format(S_r2, S_mae)
             plt.title(stress_str)
             plt.scatter(stress, _stress, s=5, label='Stress')
             plt.legend(loc=2)
-            plt.xlabel('True ({}/{}^3)'.format(self.unit, length))
-            plt.ylabel('Prediction ({}/{}^3)'.format(self.unit, length))
+            plt.xlabel('True (GPa)')
+            plt.ylabel('Prediction (GPa)')
             plt.tight_layout()
             plt.savefig(self.path+'Stress_'+figname)
             plt.close()
@@ -340,7 +337,7 @@ class PR():
             force += np.reshape(_y[1:(no_of_atoms*3+1)], (no_of_atoms, 3))
 
         if bstress: # get stress
-            stress += _y[-6:]
+            stress += _y[-6:]*eV2GPa # in GPa
         
         return energy, force, stress
 
@@ -395,11 +392,10 @@ class PR():
         # Determine the total number of descriptors based on SNAP or qSNAP.
         # Note: d_max != self.d_max
         if self.d_max is None: #enable calculator works
-            self.d_max = len(descriptors[0]['x'][0])
+            self.d_max = len(db['0']['x'][0])
 
         if self.quadratic:
             d_max = (self.d_max**2+3*self.d_max)//2 # (d^2 + 3*d) / 2
-
         else:
             d_max = self.d_max
 
@@ -414,6 +410,14 @@ class PR():
         xcount = 0
         for i in range(no_of_structures):
             data = db[str(i)]
+            if train:
+                try:
+                    _group = True if data['group'] in self.stress_group else False
+                except:
+                    _group = False
+            else:
+                _group = True
+           
             if self.quadratic:
                 _x = data['x'][:, :self.d_max]
                 x = np.zeros((len(_x), d_max))
@@ -422,8 +426,9 @@ class PR():
                     _dxdr = data['dxdr'][:, :, :self.d_max, :]
                     dxdr = np.zeros([len(_x), len(_x), d_max, 3])
                     dxdr[:, :, :self.d_max, :] += _dxdr
-
-                if sc and (data['group'] in self.stress_group):
+                
+                #if train:
+                if sc and _group: #(data['group'] in self.stress_group):
                     _rdxdr = data['rdxdr'][:, :self.d_max, :]
                     rdxdr = np.zeros([len(_x), d_max, 6])
                     rdxdr[:, :self.d_max, :] += _rdxdr
@@ -432,7 +437,7 @@ class PR():
                 x_square = 0.5 * _x ** 2
                 if fc:
                     dxdr_square = np.einsum('ijkl,ik->ijkl', _dxdr, _x)
-                if sc and (data['group'] in self.stress_group):
+                if sc and _group:
                     rdxdr_square = np.einsum('ijk,ij->ijk', _rdxdr, _x)
                 
                 dcount = self.d_max
@@ -442,7 +447,7 @@ class PR():
                     if fc:
                         dxdr_d1_d2 = np.einsum('ijl,ik->ijkl', _dxdr[:, :, d1, :], _x[:, d1+1:]) + \
                                      np.einsum('ijkl,i->ijkl', _dxdr[:, :, d1+1:, :], _x[:, d1])
-                    if sc and (data['group'] in self.stress_group):
+                    if sc and _group:
                         rdxdr_d1_d2 = np.einsum('ik,ij->ijk', _rdxdr[:, d1, :], _x[:, d1+1:]) + \
                                       np.einsum('ijk,i->ijk', _rdxdr[:, d1+1:, :], _x[:, d1])
                     
@@ -450,7 +455,7 @@ class PR():
                     x[:, dcount] += x_square[:, d1]
                     if fc:
                         dxdr[:, :, dcount, :] += dxdr_square[:, :, d1, :]
-                    if sc and (data['rdxdr'] is not None):
+                    if sc and _group:
                         rdxdr[:, dcount, :] += rdxdr_square[:, d1, :]
 
                     dcount += 1
@@ -458,7 +463,7 @@ class PR():
                     x[:, dcount:dcount+len(x_d1_d2[0])] += x_d1_d2
                     if fc:
                         dxdr[:, :, dcount:dcount+len(x_d1_d2[0]), :] += dxdr_d1_d2
-                    if sc and (data['rdxdr'] is not None):
+                    if sc and _group:
                         rdxdr[:, dcount:dcount+len(x_d1_d2[0]), :] += rdxdr_d1_d2
                     dcount += len(x_d1_d2[0])
                 
@@ -466,7 +471,7 @@ class PR():
                 x = data['x'][:, :d_max]
                 if fc:
                     dxdr = data['dxdr'][:, :, :d_max, :]
-                if sc and (data['group'] in self.stress_group):
+                if sc and _group:
                     rdxdr = data['rdxdr'][:, :d_max, :]
             
             elements = data['elements']
@@ -476,9 +481,9 @@ class PR():
             
             sna = np.zeros([len(self.elements), 1+d_max])
             snad = np.zeros([len(self.elements), len(x), 1+d_max, 3])
-            if sc and (data['group'] in self.stress_group):
+            if sc and _group:
                 snav = np.zeros([len(self.elements), 1+d_max, 6])
-
+            
             _sna, _snad, _snav, _count = {}, {}, {}, {}
             for element in self.elements:
                 _sna[element] = None
@@ -492,13 +497,13 @@ class PR():
                     _sna[element] = 1 * x[e]
                     if fc:
                         _snad[element] = -1 * dxdr[e]
-                    if sc and (data['group'] in self.stress_group):
+                    if sc and _group:
                         _snav[element] = -1 * rdxdr[e]  # [d, 6]
                 else:
                     _sna[element] += x[e]
                     if fc:
                         _snad[element] -= dxdr[e]
-                    if sc and (data['group'] in self.stress_group):
+                    if sc and _group: 
                         _snav[element] -= rdxdr[e]
                 _count[element] += 1
 
@@ -508,9 +513,9 @@ class PR():
                     sna[e, :] += np.hstack(([bias_weights], _sna[element]))
                     if fc:
                         snad[e, :, 1:, :] += _snad[element]
-                    if sc and (data['group'] in self.stress_group):
-                        snav[e, 1:, :] += _snav[element]#.reshape([len(sna[0])-1, 6])
-
+                    if sc and _group:
+                        snav[e, 1:, :] += _snav[element]
+                    
             # X for energy
             X[xcount, :] += sna.ravel()
             xcount += 1
@@ -523,7 +528,7 @@ class PR():
                         xcount += 1
             
             # X for stress.
-            if sc and (data['group'] in self.stress_group):
+            if sc and _group: 
                 shp = snav.shape
                 X[xcount:xcount+6, :] = snav.reshape([shp[0]*shp[1], shp[2]]).T
                 xcount += 6

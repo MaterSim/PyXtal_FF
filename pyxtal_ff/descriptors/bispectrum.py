@@ -6,7 +6,6 @@ from optparse import OptionParser
 from copy import deepcopy
 from pyxtal_ff.descriptors.angular_momentum import Wigner_D, factorial, deltacg, Wigner_D_wDerivative
 from numba import prange
-from pymatgen.io.ase import AseAtomsAdaptor
 
 class SO4_Bispectrum:
     '''
@@ -118,7 +117,7 @@ class SO4_Bispectrum:
         '''
         self._atoms = atoms
         self._backend = backend
-
+        vol = atoms.get_volume()
         self.build_neighbor_list()
         self.initialize_arrays()
 
@@ -132,7 +131,7 @@ class SO4_Bispectrum:
             x = {'x':self._blist.real, 'dxdr':self._dblist.real, 'elements':list(atoms.symbols)}
 
             if self.stress is True:
-                x['rdxdr'] = self._bstress.real
+                x['rdxdr'] = self._bstress.real/vol
             else:
                 x['rdxdr'] = None
 
@@ -140,7 +139,7 @@ class SO4_Bispectrum:
             x = {'x':self._blist.real, 'dxdr': None, 'elements':list(atoms.symbols)}
             
             if self.stress is True:
-                x['rdxdr'] = self._bstress.real
+                x['rdxdr'] = self._bstress.real/vol
             else:
                 x['rdxdr'] = None
 
@@ -203,6 +202,7 @@ class SO4_Bispectrum:
 
 
         elif self._backend == 'pymatgen':
+            from pymatgen.io.ase import AseAtomsAdaptor
             struc = AseAtomsAdaptor.get_structure(self._atoms)
             neighbors = struc.get_all_neighbors(self._rcut, include_index=True)
 
