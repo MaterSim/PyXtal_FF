@@ -1,5 +1,9 @@
 [![Build Status](https://travis-ci.org/qzhu2017/PyXtal_FF.svg?branch=master)](https://travis-ci.org/qzhu2017/PyXtal_FF)
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3839987.svg)](https://doi.org/10.5281/zenodo.3839987)
+
+
+
 
          ______       _    _          _         _______ _______ 
         (_____ \     \ \  / /        | |       (_______|_______)
