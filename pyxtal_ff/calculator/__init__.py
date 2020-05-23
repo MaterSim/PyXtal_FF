@@ -30,8 +30,8 @@ class PyXtalFFCalculator(Calculator):
 
         energy, forces, stress = self.ff.model.calculate_properties(desp, bforce=True, bstress=True)
 
-        self.results['energy'] = energy
-        self.results['free_energy'] = energy
+        self.results['energy'] = energy*len(atoms)
+        self.results['free_energy'] = energy*len(atoms)
         self.results['forces'] = forces
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
@@ -73,14 +73,14 @@ def elastic_properties(C):
     return Kv, Gv, Ev, vv, Kr, Gr, Er, vr, Kh, Gh, Eh, vh
 
 
-def optimize(atoms, box=False, fmax=0.01):
+def optimize(atoms, box=False, fmax=0.01, steps=1000):
     if box:
         box = mushybox(atoms)
         dyn = BFGS(box)
     else:
         dyn = BFGS(atoms)
 
-    dyn.run(fmax=fmax)
+    dyn.run(fmax=fmax, steps=steps)
     return atoms
 
 if  __name__ == "__main__":
