@@ -118,18 +118,26 @@ class Database():#MutableSequence):
                 print('\r{:4d} out of {:4d}'.format(i+1, len(lists)), flush=True, end='')
 
         else:
+            failed_ids = []
             with Pool(_cpu) as p:
                 func = partial(self.compute, function)
                 for i, d in enumerate(p.imap_unordered(func, data)):
                     try:
                         self.append(d)
                         self.length += 1
-                    except:
-                        pass
+                    except: # track the failed structure ids
+                        failed_ids.append(i)
+                        #pass
                     print('\r{:4d} out of {:4d}'.format(i+1, len(data)), flush=True, end='')
                 p.close()
                 p.join()
-            
+
+            # compute the missing structures in parallel calcs
+            for id in failed_ids: 
+                d = self.compute(function, data[id])
+                self.append(d)
+                self.length += 1
+
         print(f"\nSaving descriptor-feature data to {self.name}.dat\n")
 
   
@@ -456,9 +464,9 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
                 structure = Atoms(symbols=symbol_array,
                                   positions=coor,
                                   cell=lat, pbc=True)
-                Features.append({'structure': structure,
-                                 'energy': energy, 'force': force,
-                                 'stress': None, 'group': 'random'})
+                data.append({'structure': structure,
+                             'energy': energy, 'force': force,
+                             'stress': None, 'group': 'random'})
                 count += line_number - 1
             count += 1
             if count >= len(lines) or len(data) == N:
