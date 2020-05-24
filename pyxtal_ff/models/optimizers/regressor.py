@@ -33,7 +33,7 @@ class Regressor:
                        'weight_decay': 0,
                        'nesterov': False}
         
-        elif self.method in ['ADAM', 'adam']:
+        elif self.method in ['Adam', 'ADAM', 'adam']:
             from torch.optim import Adam as optimizer
             _kwargs = {'lr': 0.001,
                        'betas': (0.9, 0.999), 

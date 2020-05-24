@@ -210,12 +210,13 @@ class NeuralNetwork():
             self.load_checkpoint(filename=self.restart, 
                                  method=optimizer['method'], args=optimizer['parameters'])
                 
-        print(f"No of structures  : {self.no_of_structures}")
-        print(f"No of descriptors : {self.no_of_descriptors}")
-        print(f"No of parameters  : {self.total_parameters}")
-        print(f"Optimizer         : {optimizer['method']}")
-        print(f"Force_coefficient : {self.force_coefficient}")
-        print(f"Stress_coefficient : {self.stress_coefficient}\n")
+        print(f"No of structures   : {self.no_of_structures}")
+        print(f"No of descriptors  : {self.no_of_descriptors}")
+        print(f"No of parameters   : {self.total_parameters}")
+        print(f"Optimizer          : {optimizer['method']}")
+        print(f"Force_coefficient  : {self.force_coefficient}")
+        print(f"Stress_coefficient : {self.stress_coefficient}")
+        print(f"Batch_size         : {self.batch_size}\n")
 
         # Run Neural Network Potential Training
         t0 = time.time()
@@ -1020,7 +1021,7 @@ class Dataset(data.Dataset):
                 else:
                     self.force.append(None)
 
-                if stress and data1['stress'] is not None:
+                if self.sc and data1['stress'] is not None:
                     self.stress.append(torch.DoubleTensor(data1['stress']).to(self.device))
                 else:
                     self.stress.append(None)

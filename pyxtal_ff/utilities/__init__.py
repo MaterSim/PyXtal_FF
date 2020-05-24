@@ -101,16 +101,17 @@ class Database():#MutableSequence):
         _cpu = deepcopy(function['ncpu'])
         _random = deepcopy(function['random_sample'])
         
-        if _cpu == 1:
-            N1 = len(data)
-            if _N is not None and _N < N1:
-                if _random:
-                    lists = sample(range(N1), _N)
-                else:
-                    lists = range(_N)
+        N1 = len(data)
+        if _N is not None and _N < N1:
+            if _random:
+                lists = sample(range(N1), _N)
             else:
-                lists = range(N1)
+                lists = range(_N)
+        else:
+            lists = range(N1)
+
             
+        if _cpu == 1:
             for i, index in enumerate(lists):
                 d = self.compute(function, data[index])
                 self.append(d)
@@ -118,23 +119,25 @@ class Database():#MutableSequence):
                 print('\r{:4d} out of {:4d}'.format(i+1, len(lists)), flush=True, end='')
 
         else:
+            # we do it for the reduced lists _data
+            _data = [data[item] for item in lists]
             failed_ids = []
             with Pool(_cpu) as p:
                 func = partial(self.compute, function)
-                for i, d in enumerate(p.imap_unordered(func, data)):
+                for i, d in enumerate(p.imap_unordered(func, _data)):
                     try:
                         self.append(d)
                         self.length += 1
                     except: # track the failed structure ids
                         failed_ids.append(i)
                         #pass
-                    print('\r{:4d} out of {:4d}'.format(i+1, len(data)), flush=True, end='')
+                    print('\r{:4d} out of {:4d}'.format(i+1, len(_data)), flush=True, end='')
                 p.close()
                 p.join()
 
             # compute the missing structures in parallel calcs
             for id in failed_ids: 
-                d = self.compute(function, data[id])
+                d = self.compute(function, _data[id])
                 self.append(d)
                 self.length += 1
 
