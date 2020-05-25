@@ -1,5 +1,3 @@
-# FF Training for Si set
-
 ## data source:
 https://github.com/MDIL-SNU/SIMPLE-NN
 
