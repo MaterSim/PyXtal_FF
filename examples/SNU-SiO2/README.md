@@ -3,34 +3,14 @@
 ## data source:
 https://github.com/MDIL-SNU/SIMPLE-NN
 
-One can download by using the following command.
-```
-$ wget https://raw.githubusercontent.com/MDIL-SNU/SIMPLE-NN/master/examples/SiO2/ab_initio_output/OUTCAR_comp
-```
+## Summary of results 
+- Descriptors computation time was not included
+- NN training is performed on a CPU
 
-## Bispectrum
-The data source contains 10000 structures, which may require a significant amount of CPU and memory. For a quick run, we use only 250 structutes.
-Below is an example with `lmax=3`, corresponding to 30 descriptors.
-
-To invoke the training, just execute 
-
-`$ python bispectrum.py > bispectrum.log &` 
-
-
-```
-============================= Evaluating Training Set ============================
-
-The results for energy: 
-    Energy R2     0.970248
-    Energy MAE    0.003551
-    Energy RMSE   0.004429
-The energy figure is exported to: Si-O-Bispectrum/Energy_Train.png
-
-
-The results for force: 
-    Force R2      0.967794
-    Force MAE     0.252029
-    Force RMSE    0.322588
-The force figure is exported to: Si-O-Bispectrum/Force_Train.png
-```
+|Scripts| No. structures| No. epochs | Energy MAE | Force MAE | CPU time|  
+|-------|:-------------:|:----------:|:----------:|:---------:|:-------:|
+|       |               |            | (meV/atom) | (meV/A)   |   (hr)  |  
+|`so4-quick.py` | 250   | 500        |   4.88     |  275.4    | 0.23   |
+|`so4-full.py`  |2000   | 5000       ||||
+|`so4-mini.py`  |10000  | 50000      ||||
 
