@@ -1,11 +1,15 @@
 # a slight modification based on table S5 from https://arxiv.org/pdf/1906.08888.pdf
-# $ wget https://raw.githubusercontent.com/materialsvirtuallab/mlearn/master/data/Si/test.json
-# $ wget https://raw.githubusercontent.com/materialsvirtuallab/mlearn/master/data/Si/training.json
-
 from pyxtal_ff import PyXtal_FF
+import os
 
 TrainData = "training.json"
 TestData  = "test.json"
+
+url = 'https://raw.githubusercontent.com/materialsvirtuallab/mlearn/master/data/Si/'
+if not os.path.exists(TrainData):
+    print('Downloading the training and test data')
+    os.system('wget ' + url + ' ' + TrainData)
+    os.system('wget ' + url + ' ' + TestData)
 
 symmetry = {'G2': {'eta': [0.035709, 0.071418, 0.178545,
                            0.35709, 0.71418, 1.78545],
@@ -16,20 +20,20 @@ symmetry = {'G2': {'eta': [0.035709, 0.071418, 0.178545,
            }
 
 descriptor = {'type': 'BehlerParrinello',
-            'parameters': symmetry,
-            'Rc': 5.2,
-            'force': True,
-            'stress': True,
-           }
+              'parameters': symmetry,
+              'Rc': 5.2,
+              'ncpu': 4,
+             }
 
 model = {'system': ['Si'],
          'hiddenlayers': [16, 16],
-         'restart': 'Si-BehlerParrinello/16-16-checkpoint.pth',
+         'path': 'Si-BP/',
+         #'restart': 'Si-BP/16-16-checkpoint.pth',
          'optimizer': {'method': 'lbfgs'},
          'force_coefficient': 3e-2,
          'stress_coefficient': 1e-5,
-         'alpha': 0,
-         'epoch': 500,
+         'alpha': 1e-6,
+         'epoch': 1000,
         }
 
 ff = PyXtal_FF(descriptors=descriptor, model=model)
