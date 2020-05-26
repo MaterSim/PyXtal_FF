@@ -68,50 +68,12 @@ The following tables show the results after each 1000 epochs with an NN of [16, 
 
 ## Properties calculation
 After the training is done, one can also check the accuracy of the model based on the properties such as equilibrium lattice constant, elastic properties and phoonon dispersion.
-```
-$ python test_properties.py -f Si-Bispectrum/16-16-checkpoint.pth 
-equlirum cell para:  5.472847701313846
-equlirum energy:  tensor(-5.4198, grad_fn=<DivBackward0>)
-equlirum stress [  0.0671   0.0671   0.0671   0.0000  -0.0000   0.0000]
-This is a Cubic system
-2 deformations were generated
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.418636        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.419483        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.419794        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.419569        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.418811        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.419660        0.0464
-BFGS:    1 14:53:39       -5.419686        0.0314
-BFGS:    2 14:53:40       -5.419708        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:40       -5.419586        0.0580
-BFGS:    1 14:53:40       -5.419626        0.0392
-BFGS:    2 14:53:40       -5.419660        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:40       -5.419494        0.0696
-BFGS:    1 14:53:40       -5.419552        0.0471
-BFGS:    2 14:53:40       -5.419601        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:40       -5.419386        0.0812
-BFGS:    1 14:53:41       -5.419465        0.0549
-BFGS:    2 14:53:41       -5.419531        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:41       -5.419261        0.0928
-BFGS:    1 14:53:41       -5.419364        0.0627
-BFGS:    2 14:53:41       -5.419451        0.0000
-C_11:   167.24(GPa)
-C_12:   108.21(GPa)
-C_44:    53.64(GPa)
-Bulk modulus, Shear modulus, Young's modulus, Poisson's ratio
-127.88503896159091 43.987841313073176 118.38960570000751 0.3457082930871417
-127.88503896159094 40.421822436537326 109.70678365395833 0.3570242141630191
-127.88503896159092 42.20483187480525 114.04819467698292 0.3513662536250804
-displacement 1 / 1
-The detected space group is Fd-3m with a tolerance of 1.00e-05
-```
+
+|          | Exp   | DFT   | bp-NN |eamd-NN| so4-NN | so3-NN|  
+|:--------:|:-----:|:-----:|:-----:|:-----:|:------:|:-----:|
+| a(A)     | 5.429 |5.469  | 5.448 |       | 5.471  | 5.462 |
+|C11(GPa)  | 167   |156    | 141   |  | 159    | 154   |
+|C12(GPa)  |  65   | 65    |  88   |  |  90    |  75   |
+|C44(GPa)  |  81   | 76    |  57   |  |  62    |  70   |
+|B-VRH(GPa)|  99   | 95    |  106  |  | 113    |  101  |
+
