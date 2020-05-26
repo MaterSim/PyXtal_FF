@@ -1,13 +1,15 @@
 from pyxtal_ff import PyXtal_FF
-from pyxtal_ff.calculator import PyXtalFFCalculator, optimize, elastic_properties, elastic_tensor
+from pyxtal_ff.calculator import PyXtalFFCalculator, optimize, elastic_properties
+from pyxtal_ff.calculator.elasticity import fit_elastic_constants
 from pyxtal_ff.calculator.phonon import Phonon
 from ase import units
 import numpy as np
+from ase.optimize import BFGS
+from ase.build import bulk
+from optparse import OptionParser
 
 if  __name__ == "__main__":
 
-    from optparse import OptionParser
-    from ase.build import bulk
 
     parser = OptionParser()
     parser.add_option("-f", "--file", dest="file",
@@ -29,10 +31,9 @@ if  __name__ == "__main__":
     print('equlirum energy: ', si.get_potential_energy())
     print('equlirum stress', -si.get_stress()/units.GPa)
 
-    # Elastic properties
-    Cijs, names, C = elastic_tensor(si, calc)
-    for name, Cij in zip(names, Cijs):
-        print("{:s}: {:8.2f}(GPa)".format(name, Cij))
+    #Elastic Properties
+    C, C_err = fit_elastic_constants(si, symmetry='cubic', optimizer=BFGS)
+    C /= units.GPa
 
     print("Bulk modulus, Shear modulus, Young's modulus, Poisson's ratio")
     k1, g1, e1, v1, k2, g2, e2, v2, k3, g3, e3, v3 = elastic_properties(C)
