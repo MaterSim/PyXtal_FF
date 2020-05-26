@@ -10,108 +10,64 @@ Therefore, we choose to repeat training the following models for each 1000 epoch
 The following tables show the results after each 1000 epochs with an NN of [16, 16] hidden layers.
 
 - There are 214 structures for training and 25 structures for testing
-- For each structure, the total energy, atomic forces andd stress tensors are trained together with the coefficients of [1. 3e-2, 1e-5]
+- For each structure, the total energy, atomic forces andd stress tensors are trained together with the coefficients of [1. 2e-2, 2e-3]
 - The regularization factor is 1e-6.
 - Descriptors computation time was not included
 - NN training is performed on a CPU
 
 ### 0-1000
 
-|Scripts| No. des.      | No. epochs | Energy MAE | Force MAE | Stress MAE |  CPU time|  
-|:-----:|:-------------:|:----------:|:----------:|:---------:|:----------:|:--------:|
-|       |               |            | (meV/atom) | (meV/A)   | (GPa)      |   (hr)  |
-|`bp-NN.py`  | 14       | 1000       |   7.81/5.97|106.2/115.0| 0.79/0.72  |   0.31  |
-|`eamd-NN.py`| 21       | 1000       |   6.79/5.27| 90.5/98.2 | 0.48/0.59  |. |
-|`so4-NN.py` | 30       | 1000       |   6.79/5.27| 90.5/98.2 | 0.48/0.59  |  0.47   |
-|`so3-NN.py` | 30       | 1000       |   7.32/6.08| 81.9/92.9 | 0.56/0.68. |  0.38   |
+|Scripts| No. des. |No. epochs|Energy MAE | Force MAE |Stress MAE|CPU time|  
+|:-----:|:--------:|:--------:|:--------: |:---------:|:--------:|:------:|
+|       |          |          |(meV/atom) | (meV/A)   | (GPa)    |  (hr)  |
+|`bp-NN.py`  | 14  | 1000     |10.40/12.06|116.9/129.4| 0.44/0.45|  0.30  |
+|`eamd-NN.py`| 21  | 1000     | 7.19/6.10 | 96.7/106.9| 0.31/0.37|  0.31  |
+|`so4-NN.py` | 30  | 1000     | 5.20/4.44 | 91.4/100.5| 0.26/0.38|  0.34  |
+|`so3-NN.py` | 30  | 1000     | 5.80/5.91 | 84.3/97.0 | 0.26/0.33|  0.38  |
 
 ### 1000-2000
 
-|Scripts| No. des.      | No. epochs | Energy MAE | Force MAE | Stress MAE |  CPU time|  
-|:-----:|:-------------:|:----------:|:----------:|:---------:|:----------:|:--------:|
-|       |               |            | (meV/atom) | (meV/A)   | (GPa)      |   (hr)  |
-|`bp-NN.py`  | 14       | 1000       |   7.31/6.12| 98.1/108.7| 0.81/0.70  |   0.32  |
-|`eamd-NN.py`| 21       | 1000       |   6.79/5.27| 90.5/98.2 | 0.48/0.59  |.|
-|`so4-NN.py` | 30       | 1000       |   6.13/4.87| 82.6/90.4 | 0.50/0.59  |  0.34   |
-|`so3-NN.py` | 30       | 1000       |   5.97/5.08| 74.3/84.8 | 0.47/0.56  |  0.37   |
+|Scripts| No. des. |No. epochs|Energy MAE| Force MAE |Stress MAE|CPU time|  
+|:-----:|:--------:|:--------:|:--------:|:---------:|:--------:|:------:|
+|       |          |          |(meV/atom)| (meV/A)   | (GPa)    |  (hr)  |
+|`bp-NN.py`  | 14  | 1000     |8.96/11.21|111.2/124.4| 0.39/0.42|  0.27  |
+|`eamd-NN.py`| 21  | 1000     | 6.58/4.87| 86.4/94.4 | 0.31/0.36|  0.31  |
+|`so4-NN.py` | 30  | 1000     | 4.55/3.69| 83.7/93.8 | 0.25/0.32|  0.33  |
+|`so3-NN.py` | 30  | 1000     | 4.39/4.00| 76.4/87.0 | 0.24/0.32|  0.34  |
 
 ### 2000-3000
 
-|Scripts| No. des.      | No. epochs | Energy MAE | Force MAE | Stress MAE |  CPU time|  
-|:-----:|:-------------:|:----------:|:----------:|:---------:|:----------:|:--------:|
-|       |               |            | (meV/atom) | (meV/A)   | (GPa)      |   (hr)  |
-|`bp-NN.py`  | 14       |  533       |   7.15/6.67| 97.0/106.3| 0.79/0.66  |   0.15  |
-|`eamd-NN.py`| 21       | 1000       |   6.79/5.27| 90.5/98.2 | 0.48/0.59  |.|
-|`so4-NN.py` | 30       | 1000       |   5.60/4.77| 78.6/87.2 | 0.51/0.60  |  0.33   |
-|`so3-NN.py` | 30       | 1000       |   5.51/4.64| 71.9/82.0 | 0.52/0.59  |  0.41   |
+|Scripts| No. des. |No. epochs|Energy MAE| Force MAE |Stress MAE|CPU time|  
+|:-----:|:--------:|:--------:|:--------:|:---------:|:--------:|:------:|
+|       |          |          |(meV/atom)| (meV/A)   | (GPa)    |  (hr)  |
+|`bp-NN.py`  | 14  | 1000     |7.89/10.13|107.2/101.3| 0.38/0.40|  0.26  |
+|`eamd-NN.py`| 21  | 1000     | 6.41/5.47| 85.0/92.0 | 0.30/0.35|  0.29  |
+|`so4-NN.py` | 30  | 1000     | 4.43/3.88| 80.8/90.8 | 0.24/0.31|  0.36  |
+|`so3-NN.py` | 30  | 1000     | 4.16/3.75| 73.4/84.1 | 0.24/0.32|  0.36  |
 
 ### 3000-4000
 
-|Scripts| No. des.      | No. epochs | Energy MAE | Force MAE | Stress MAE |  CPU time|  
-|:-----:|:-------------:|:----------:|:----------:|:---------:|:----------:|:--------:|
-|       |               |            | (meV/atom) | (meV/A)   | (GPa)      |   (hr)  |
-|`bp-NN.py`  | 14       |  0         |   7.15/6.67| 97.0/106.3| 0.79/0.66  |   0     |
-|`eamd-NN.py`| 21       | 1000       |   6.79/5.27| 90.5/98.2 | 0.48/0.59  |.|
-|`so4-NN.py` | 30       | 1000       |   5.24/4.48| 77.1/86.5 | 0.51/0.59  |  0.33   |
-|`so3-NN.py` | 30       | 1000       |   4.97/4.20| 69.7/80.1 | 0.52/0.60  |  0.36   |
+|Scripts| No. des. |No. epochs|Energy MAE| Force MAE |Stress MAE|CPU time|  
+|:-----:|:--------:|:--------:|:--------:|:---------:|:--------:|:------:|
+|       |          |          |(meV/atom)| (meV/A)   | (GPa)    |  (hr)  |
+|`bp-NN.py`  | 14  | 1000     | 7.60/9.25|105.5/120.0| 0.36/0.40|  0.26  |
+|`eamd-NN.py`| 21  | 1000     | 6.16/4.81| 83.4/90.8 | 0.29/0.34|  0.33  |
+|`so4-NN.py` | 30  | 1000     | 4.07/3.83| 78.7/89.4 | 0.24/0.30|  0.33  |
+|`so3-NN.py` | 30  | 1000     | 4.08/3.95| 72.1/82.6 | 0.24/0.32|  0.33  |
 
-### 4000-5000
-
-|Scripts| No. des.      | No. epochs | Energy MAE | Force MAE | Stress MAE |  CPU time|  
-|:-----:|:-------------:|:----------:|:----------:|:---------:|:----------:|:--------:|
-|       |               |            | (meV/atom) | (meV/A)   | (GPa)      |   (hr)  |
-|`bp-NN.py`  | 14       |  0         |   7.15/6.67| 97.0/106.3| 0.79/0.66  |   0     |
-|`eamd-NN.py`| 21       | 1000       |   6.79/5.27| 90.5/98.2 | 0.48/0.59  |.|
-|`so4-NN.py` | 30       | 1000       |   5.23/4.50| 75.6/86.1 | 0.49/0.56  |  0.33   |
-|`so3-NN.py` | 30       | 195        |   4.83/4.19| 69.7/80.2 | 0.50/0.59  |  0.08   |
-
+Further training will lead to very minor change. Therefore we terminate the training here.
 
 ## Properties calculation
 After the training is done, one can also check the accuracy of the model based on the properties such as equilibrium lattice constant, elastic properties and phoonon dispersion.
-```
-$ python test_properties.py -f Si-Bispectrum/16-16-checkpoint.pth 
-equlirum cell para:  5.472847701313846
-equlirum energy:  tensor(-5.4198, grad_fn=<DivBackward0>)
-equlirum stress [  0.0671   0.0671   0.0671   0.0000  -0.0000   0.0000]
-This is a Cubic system
-2 deformations were generated
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.418636        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.419483        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.419794        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.419569        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.418811        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:39       -5.419660        0.0464
-BFGS:    1 14:53:39       -5.419686        0.0314
-BFGS:    2 14:53:40       -5.419708        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:40       -5.419586        0.0580
-BFGS:    1 14:53:40       -5.419626        0.0392
-BFGS:    2 14:53:40       -5.419660        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:40       -5.419494        0.0696
-BFGS:    1 14:53:40       -5.419552        0.0471
-BFGS:    2 14:53:40       -5.419601        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:40       -5.419386        0.0812
-BFGS:    1 14:53:41       -5.419465        0.0549
-BFGS:    2 14:53:41       -5.419531        0.0000
-      Step     Time          Energy         fmax
-BFGS:    0 14:53:41       -5.419261        0.0928
-BFGS:    1 14:53:41       -5.419364        0.0627
-BFGS:    2 14:53:41       -5.419451        0.0000
-C_11:   167.24(GPa)
-C_12:   108.21(GPa)
-C_44:    53.64(GPa)
-Bulk modulus, Shear modulus, Young's modulus, Poisson's ratio
-127.88503896159091 43.987841313073176 118.38960570000751 0.3457082930871417
-127.88503896159094 40.421822436537326 109.70678365395833 0.3570242141630191
-127.88503896159092 42.20483187480525 114.04819467698292 0.3513662536250804
-displacement 1 / 1
-The detected space group is Fd-3m with a tolerance of 1.00e-05
-```
+The command is
+`python test_properties.py -f Si-BP/16-16-checkpoint.pth`
+
+
+|          | Exp   | DFT   | bp-NN |eamd-NN| so4-NN | so3-NN|  
+|:--------:|:-----:|:-----:|:-----:|:-----:|:------:|:-----:|
+| a(A)     | 5.429 |5.469  | 5.473 | 5.467 | 5.466  | 5.469 |
+|C11(GPa)  | 167   | 156   | 129   | 129   | 145    | 149   |
+|C12(GPa)  |  65   | 65    |  71   | 67    |  55    |  56   |
+|C44(GPa)  |  81   | 76    |  59   | 65    |  68    |  69   |
+|B-VRH(GPa)|  99   | 95    |  91   | 88    |  85    |  87   |
+
