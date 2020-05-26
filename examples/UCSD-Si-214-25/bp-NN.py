@@ -8,8 +8,8 @@ TestData  = "test.json"
 url = 'https://raw.githubusercontent.com/materialsvirtuallab/mlearn/master/data/Si/'
 if not os.path.exists(TrainData):
     print('Downloading the training and test data')
-    os.system('wget ' + url + ' ' + TrainData)
-    os.system('wget ' + url + ' ' + TestData)
+    os.system('wget ' + url + TrainData)
+    os.system('wget ' + url + TestData)
 
 symmetry = {'G2': {'eta': [0.035709, 0.071418, 0.178545,
                            0.35709, 0.71418, 1.78545],
@@ -21,17 +21,17 @@ symmetry = {'G2': {'eta': [0.035709, 0.071418, 0.178545,
 
 descriptor = {'type': 'BehlerParrinello',
               'parameters': symmetry,
-              'Rc': 5.2,
+              'Rc': 5.0,
               'ncpu': 4,
              }
 
 model = {'system': ['Si'],
          'hiddenlayers': [16, 16],
          'path': 'Si-BP/',
-         #'restart': 'Si-BP/16-16-checkpoint.pth',
+         'restart': 'Si-BP/16-16-checkpoint.pth',
          'optimizer': {'method': 'lbfgs'},
-         'force_coefficient': 3e-2,
-         'stress_coefficient': 1e-5,
+         'force_coefficient': 2e-2,
+         'stress_coefficient': 2e-3,
          'alpha': 1e-6,
          'epoch': 1000,
         }

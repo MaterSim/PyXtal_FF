@@ -113,8 +113,7 @@ class EAMD:
             if self.derivative:
                 self.d['dxdr'][i] = d['dxdr']
             if self.stress:
-                self.d['rdxdr'][i] -= d['rdxdr']
-                self.d['rdxdr'] /= vol # /A^3
+                self.d['rdxdr'][i] = -d['rdxdr']/vol
             
             self.d['elements'].append(element)
 
@@ -219,12 +218,13 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
     if stress:
         rdxdr = np.zeros([m, d1*d2*d3, 3, 3])
     for l in range(L+1):
+        Rc2l = Rc**(2*l)
         L_fac = math.factorial(l)
-        x[count:count+d1*d2] = L_fac * np.einsum('ijk->jk', term[:l_index[l]] ** 2).ravel() 
+        x[count:count+d1*d2] = L_fac * np.einsum('ijk->jk', term[:l_index[l]] ** 2).ravel()/Rc2l
         if derivative:
-            dxdr[:, count:count+d1*d2, :] = 2 * L_fac * np.einsum('ijkl->ljk', dterm[:l_index[l]])
+            dxdr[:, count:count+d1*d2, :] = 2 * L_fac * np.einsum('ijkl->ljk', dterm[:l_index[l]])/Rc2l
         if stress:
-            rdxdr[:, count:count+d1*d2, :, :] = 2 * L_fac * np.einsum('ijklm->ljkm', sterm[:l_index[l]])
+            rdxdr[:, count:count+d1*d2, :, :] = 2 * L_fac * np.einsum('ijklm->ljkm', sterm[:l_index[l]])/Rc2l
 
         count += d1*d2
 
@@ -387,46 +387,26 @@ def CosinePrime(Rij, Rc):
     
     return result
 
-
 if __name__ == '__main__':
     import time
-    from ase.io import read
-    from ase.spacegroup import crystal
-    from ase.cluster.cubic import FaceCenteredCubic
+    from ase.build import bulk
     np.set_printoptions(formatter={'float': '{: 0.4f}'.format})
 
-    Rc = 3.0
-    #parameters = {'L': 2, 'eta': [0.1, 0.05], 'Rs': [1, 2.]}
-    parameters1 = {'L': 2, 'eta': [0.36], 'Rs': [1.]}
+    Rc = 4.5
+    parameters1 = {'L': 2, 'eta': [0.036, 0.071], 'Rs': [0]}
 
-    # Test crystal #1
-    #crystal = read('SiO2.vasp')
-    
-    # Test crystal #2
-    surfaces = [(1, 0, 0), (1, 1, 0), (1, 1, 1)]
-    layers = [2, 2, 2]
-    lc = 3.61000
-    crystal = FaceCenteredCubic('Cu', surfaces, layers, latticeconstant=lc, vacuum=10)
-    
-    eamd = EAMD(parameters1, Rc=Rc, derivative=True, stress=True)
-    t0 = time.time()
-    d = eamd.calculate(crystal)
-    t1 = time.time()
-
-    print("The time of calculation: ", t1-t0, "s")
-    print(d['x'][0,0])
-    
     # Test for stress
-    #for a in [4.2, 5.0]:
-    #    si = crystal('Si', [(0,0,0)], spacegroup=227, cellpar=[a, a, a, 90, 90, 90])
-    #    cell = si.get_cell()
-    #    cell[0,1] += 0.2
-    #    si.set_cell(cell)
-    #    print(si.get_cell())
+    for a in [5.0]: #, 5.4, 5.8]:
+        si = bulk('Si', 'diamond', a=a, cubic=True)
+        cell = si.get_cell()
+        cell[0,1] += 0.1
+        si.set_cell(cell)
+        print(si.get_cell())
 
-    #    bp = EAMD(parameters, Rc=Rc, derivative=True, stress=True)
-    #    des = bp.calculate(si, system=[14])
-    #    
-    #    print("G:", des['x'][0])
-    #    print("rGPrime", des['rdxdr'].shape)
-    #    print(np.einsum('ijklm->klm', des['rdxdr']))
+        bp = EAMD(parameters1, Rc=Rc, derivative=True, stress=True)
+        des = bp.calculate(si)
+        
+        print("G:", des['x'][0])
+        print("GPrime")
+        print(des['dxdr'][1,0,1,:])
+        print(np.einsum('ijklm->klm', des['rdxdr']))

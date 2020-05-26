@@ -959,21 +959,21 @@ def select_rows(data, row_pattern):
     
 
 if __name__ == '__main__':
+    import time
     from ase.build import bulk
     np.set_printoptions(formatter={'float': '{: 0.4f}'.format})
-    from ase.spacegroup import crystal
+
+                #'G4': {'Rs': [0], 'lambda': [1, -1], 'zeta': [1,], 'eta': [0.036, 0.071]},
+                #'G5': {'Rs': [0], 'lambda': [1, -1], 'zeta': [1,], 'eta': [0.036, 0.071]},
     # Set up symmetry parameters
     Rc = 5.5
     symmetry = {'G2': {'eta': [0.036, 0.071,], 'Rs': [0]},
-                'G4': {'Rs': [0], 'lambda': [1, -1], 'zeta': [1,], 'eta': [0.036, 0.071]},
-                'G5': {'Rs': [0], 'lambda': [1, -1], 'zeta': [1,], 'eta': [0.036, 0.071]},
                }
     
-    for a in [4.2, 5.0]:
-        si = crystal('Si', [(0,0,0)], spacegroup=227, cellpar=[a, a, a, 90, 90, 90])
+    for a in [5.0]: #, 5.4, 5.8]:
+        si = bulk('Si', 'diamond', a=a, cubic=True)
         cell = si.get_cell()
-        cell[0,1] += 0.2
-        #cell[0,2] += 0.3
+        #cell[0,1] += 0.2
         si.set_cell(cell)
         print(si.get_cell())
 
@@ -981,8 +981,5 @@ if __name__ == '__main__':
         des = bp.calculate(si, system=[14])
         
         print("G:", des['x'][0])
-        #print("GPrime")
-        #print(des['dxdr'][0, 0, :, :])
         print("rGPrime", des['rdxdr'].shape)
-        #print(np.einsum('ijklm->jklm', des['rdxdr'])[:,:1,:,:])
         print(np.einsum('ijklm->klm', des['rdxdr']))

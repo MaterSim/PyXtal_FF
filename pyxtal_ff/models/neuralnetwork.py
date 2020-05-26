@@ -213,6 +213,7 @@ class NeuralNetwork():
         print(f"No of structures   : {self.no_of_structures}")
         print(f"No of descriptors  : {self.no_of_descriptors}")
         print(f"No of parameters   : {self.total_parameters}")
+        print(f"No of epochs       : {self.epoch}")
         print(f"Optimizer          : {optimizer['method']}")
         print(f"Force_coefficient  : {self.force_coefficient}")
         print(f"Stress_coefficient : {self.stress_coefficient}")
@@ -538,8 +539,8 @@ class NeuralNetwork():
                         reg += self.alpha * params.pow(2).sum()
             loss += reg
 
-        #print("stress_count: {:4d} energy_loss: {:.6f} force_loss: {:.6f} stress_loss: {:.6f} reg: {:.6f}".format(\
-                #    int(s_count/6), energy_loss, force_loss, stress_loss, reg))
+        print("eng_loss: {:10.6f}     force_loss: {:10.6f}   stress_loss: {:10.6f}  regularization: {:10.6f}".format(\
+                    energy_loss, force_loss, stress_loss, reg))
 
         return loss, energy_mae, force_mae, stress_mae
 

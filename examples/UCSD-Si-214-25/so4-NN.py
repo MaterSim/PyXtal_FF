@@ -8,10 +8,10 @@ TestData  = "test.json"
 url = 'https://raw.githubusercontent.com/materialsvirtuallab/mlearn/master/data/Si/'
 if not os.path.exists(TrainData):
     print('Downloading the training and test data')
-    os.system('wget ' + url + ' ' + TrainData)
-    os.system('wget ' + url + ' ' + TestData)
+    os.system('wget ' + url + TrainData)
+    os.system('wget ' + url + TestData)
 
-descriptor = {'Rc': 4.9,
+descriptor = {'Rc': 5.0,
               'parameters': {'lmax': 3},
               'ncpu': 4,
              }
@@ -19,10 +19,10 @@ descriptor = {'Rc': 4.9,
 model = {'system' : ['Si'],
          'hiddenlayers': [16, 16],
          'path': 'Si-so4/',
-         #'restart': 'Si-so4/16-16-checkpoint.pth',
+         'restart': 'Si-so4/16-16-checkpoint.pth',
          'optimizer': {'method': 'lbfgs'},
-         'force_coefficient': 3e-2,
-         'stress_coefficient': 1e-5,
+         'force_coefficient': 2e-2,
+         'stress_coefficient': 2e-3,
          'alpha': 1e-6,
          'epoch': 1000,
          }
