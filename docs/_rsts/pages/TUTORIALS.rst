@@ -147,7 +147,6 @@ Setting the linear regression models
 - ``order``: linear regression (1) or quadratic fit (2)
 
 
-
 Invoking the simulation
 -----------------------
 Finally, one just need to load the defined data, descriptors and NN model to PyXtal_FF and execute the ``run`` function.

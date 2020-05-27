@@ -60,10 +60,8 @@ class EAMD:
         -------
         d: dict
             The user-defined EAMD that represent the crystal.
-            d = {'x': np.array with shape of [N, d],
-                 'dxdr': np.array with shape of [N, m, d, 3],
-                 'rdxdr': np.array with shape of [N, m, d, 3, 3],
-                 'elements': list of elements}
+            d = {'x': [N, d], 'dxdr': [N, m, d, 3], 'rdxdr': [N, m, d, 3, 3],
+            'elements': list of elements}
         """
 
         self.crystal = crystal
