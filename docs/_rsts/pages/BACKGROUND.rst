@@ -1,29 +1,26 @@
 Background and Theory
 =========================
-PyXtal_FF involves two important components: ``crystal descriptors`` and ``force field training``. At the current stage, PyXtal_FF have four types of crystal descriptors: 
+The recent emergence of machine learning techniques have greatly influenced methods used in solving problems in material science. In particular, constructing a potential energy surface (PES) of a given system is a remarkable task. Traditionally, the PES could only be calculated to sufficient accuracy through quantum mechanical simulations based on density functional theory (DFT). Even when utilizing supercomputing resources DFT methods still are not feasible for use in many important materials science. On the other hand, a force field or interatomic potential method offers an avenue to much faster computations, with a sacrifice in accuracy. A potential is fit to DFT and/or experimental data by optimizing the potential parameters to the data which can then be used to compute the potential energy of a system.
 
-- ``Behler-Parrinello``
-- ``embedded atom density`` 
-- ``SO(4) bispectrum coefficient``
-- ``SO(3) power-spectrum coefficient``
-  
-For the force field training, the code consists of artificial neural network and generalized linear regressions.
+Recently, machine learning based interatomic potentials (MLIAP) have been used to achieve greater accuracies issue while still maintaining costs orders of magnitude less than DFT methods. MLIAPs have proven not only to yield nearly quantum mechanic accuracy, but also allows the investigation of materials properties at larger time and size scales with molecular dynamics (MD) simulations. MLIAPs are most often fit using linear regression, neural network regression, and Gaussian process regression.
 
-For all of the regression techniques, the force field training involves fitting of energy, force, and optionally stress tensors. 
+PyXtalFF involves two important components: descriptors and force field training. We focus on four types of descriptors, Behler-Parrinello Symmetry Functions, Embedded Atom Descriptors, SO(4) Bispectrum Components and Smooth SO(3) power spectrum. For the force field training.
 
-The energy can be written in the sum of atomic energies, in which is a functional (:math:`\mathscr{F}`) of the descriptor (:math:`\boldsymbol{X}_i`):
+For all of the regression techniques, the force field training involves fitting of energy, force, and stress simultaneously, although PyXtal_FF allows the fitting of force or stress to be optional. The energy can be written in the sum of atomic energies, in which is a functional (:math:`\mathscr{F}`) of the descriptor (:math:`\boldsymbol{X}_i`):
 
 .. math::
 
    E_\textrm{total} = \sum_{i=1}^{N} E_i = \sum_{i=1}^{N} \mathscr{F}_i(\boldsymbol{X}_i)
 
-where the functional represents regression techniques such as neural network or generalized linear regressions. In both models, the analytic derivatives can be derived by applying the chain rule to obtain the force at each atomic coordinate, :math:\boldsymbol{r}_m:
+Specifically, the functional represents regression techniques such as neural network or generalized linear regressions.
+
+Since neural network and generalized linear regressions have well-defined functional forms, analytic derivatives can be derived by applying the chain rule to obtain the force at each atomic coordinate, :math:\boldsymbol{r}_m:
 
 .. math::
    
    \boldsymbol{F}_m=-\sum_{i=1}^{N}\frac{\partial \mathscr{F}_i(\boldsymbol{X}_{i})}{\partial \boldsymbol{X}_{i}} \cdot \frac{\partial\boldsymbol{X}_{i}}{\partial \boldsymbol{r}_m}
 
-Finally, the stress tensor is acquired through the virial stress relation:
+Force is an important property to accurately describe the local atomic environment especially in geometry optimization and MD simulation. Finally, the stress tensor is acquired through the virial stress relation:
    
 .. math::
 
@@ -31,7 +28,7 @@ Finally, the stress tensor is acquired through the virial stress relation:
  
 Atomic Descriptors
 ------------------
-In an atomic structure, the Cartesian coordinates poorly describe the structural environment. While the energy of a crystal structure remains unchanged, the coordinates change as translational or rotational operation is applied to the structure [1]_. Thus, physically meaningful descriptor must withhold the energy change as the alterations are performed to the structural environment. Currenly, the most popular choices of descriptors are to develop a set of real-value arrays to represent the local environment for each centered atom. To ensure the descriptor mapping from the atomic positions smoothly approaching zero beyond the :math:`R_c`, a cutoff function (:math:`f_c`) is included to every decriptor mapping scheme:
+Descriptor---a representation of a crystal structure---plays an essential role in constructing MLFF. Due to periodic boundary conditions, Cartesian coordinates poorly describe the structural environment. While the energy of a crystal structure remains unchanged, the Cartesian coordinates change as translational or rotational operation is applied to the structure [1]_. Thus, physically meaningful descriptor must withhold the energy change as the alterations are performed to the structural environment. In another words, the descriptor needs to be invariant with respect to translation and rotational operations, and the exchanges of any equivalent atom. To ensure the descriptor mapping from the atomic positions smoothly approaching zero beyond the :math:`R_c`, a cutoff function (:math:`f_c`) is included to most decriptor mapping schemes, here the exception is the Smooth SO(3) Power Spectrum:
 
 .. math::
     f_c(r) = \begin{cases}
@@ -43,7 +40,7 @@ In the following, the types of descriptors will be explained in details.
 
 Behler-Parrinello Symmetry Function
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Behler-Parrinello method utilizes a set of symmetry functions [2]_. The symmetry functions map two atomic Cartesian coordinates to a distribution of distances between atom (radial functions) or three atomic Cartesian coordinates to a distribution of bond angles (angular functions). These mappings are invariant with respect to translation, rotation, and permutation of atoms of the system. Therefore, the energy of the system will remain unchanged under these mapping of symmetry functions.
+Behler-Parrinello method---atom-centered descriptors---utilizes a set of symmetry functions [2]_. The symmetry functions map two atomic Cartesian coordinates to a distribution of distances between atom (radial functions) or three atomic Cartesian coordinates to a distribution of bond angles (angular functions). These mappings are invariant with respect to translation, rotation, and permutation of atoms of the system. Therefore, the energy of the system will remain unchanged under these mapping of symmetry functions.
  
 PyXtal_FF supports three types of symmetry functions:
 
@@ -73,28 +70,23 @@ where :math:`Z_j` represents the atomic number of neighbor atom :math:`j`. :math
 
 According to quantum mechanics, :math:`\rho` follows the similar procedure in determining the probability density of the states, i.e. the Born rule.
 
-Furthermore, EAMD can be regarded as the improved Gaussian symmetry functions by implicitly including the radial and angular term based on the . By definition, the computation cost for calculating EAMD is cheaper than angular symmetry functions by avoiding the extra sum of the :math:`k` neighbors. In term of usage, the parameters :math:`\eta` and :math:`\mu` are similar to the strategy used in the Gaussian symmetry functions, and the maximum value for :math:`L` is 3, i.e. up to :math:`f` orbital.
+Furthermore, EAMD can be regarded as the improved Gaussian symmetry functions. EAMD has no classification between the radial and angular term. The angular or three-body term is implicitly incorporated in when :math:`L>0`. By definition, the computation cost for calculating EAMD is cheaper than angular symmetry functions by avoiding the extra sum of the :math:`k` neighbors. In term of usage, the parameters :math:`\eta` and :math:`\mu` are similar to the strategy used in the Gaussian symmetry functions, and the maximum value for :math:`L` is 3, i.e. up to :math:`f` orbital.
 
 SO(4) Bispectrum Components
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Bispectrum coefficient [4]_ [5]_ is another type of atom-centered descriptors based on triple correlation of the four dimensional hyperspherical coefficients. As the first step in deriving bispectrum coefficients, the density of atomic environment can be considered as a sum of :math:`\delta` functions belonging to neighboring atom :math:`j` located in a three-dimensional space:
+The SO(4) bispectrum components are another type of atom-centered descriptor based on triple correlation of the atomic neighbor density function on the 3-sphere. The distribution of atoms in an atomic environment can be represented as a sum of delta functions, this is known as the atomic neighbor density function.
 
 .. math::
-    \rho(\boldsymbol{r}) = \delta(\boldsymbol{r}) + \sum_j^{R_{\textrm{c}}} w_j  f_c(\boldsymbol{r}_{j})  \delta(\boldsymbol{r}-\boldsymbol{r_j})
-
-The neighbor atoms :math:`j` are counted up to :math:`R_c`, and :math:`w_j` is the species-dependent weight factor of atom :math:`j`. The cutoff function is included for the smoothness of the density function. For simplicity, we will only considered the angular contribution expanded in term of spherical harmonics:
-
-.. math::
-    \rho(\boldsymbol{r}) = \sum_{l=0}^{+\infty}\sum_{m=-l}^{+l}c_{lm}Y_{lm}(\boldsymbol{\hat{r}})
+    \rho(\boldsymbol{r}) = \delta(\boldsymbol{r}) + \sum_j \delta(\boldsymbol{r}-\boldsymbol{r_j})
 
 Then this function can mapped to the 3 sphere by mapping the atomic coordinates :math:`(x,y,z)` to the 3-sphere by the following relations:
 
 .. math::
-    \theta = \arccos\left(\frac{z}{r}\right)
+    \theta = arccos\left(\frac{z}{r}\right)
     
 .. math::
-    \phi = \arctan\left(\frac{y}{x}\right)
+    \phi = arctan\left(\frac{y}{x}\right)
     
 .. math::
     \omega = \pi \frac{r}{r_{cut}}
@@ -102,9 +94,9 @@ Then this function can mapped to the 3 sphere by mapping the atomic coordinates 
 Using this mapping, the Atomic Neighbor Density Function is then expanded on the 3-sphere using the Wigner-D matrix elements, the harmonic functions on the 3-sphere.  The resulting expansion coefficients are given by:
 
 .. math::
-    c^l_{m',m} = D^{l}_{m',m}(\boldsymbol{0}) + \sum_j^{R_{\textrm{c}}} f_{\textrm{c}}(r_j)D^{l}_{m',m}(\omega_j;\theta_j,\phi_j)
+    c^l_{m',m} = D^{l}_{m',m}(\boldsymbol{0}) + \sum_j D^{l}_{m',m}(\boldsymbol{r}_j)
     
-The triple correlation of the Atomic Neighbor Density Function on the 3-sphere is then given by a third order product of the expansion coefficients
+The triple correlation of the Atomic Neighbor Density Function on the 3-sphere is then given by a third order product of the expansion coefficients by the Fourier theorem.
 
 .. math::
     B_{l_1,l_2,l} = \sum_{m',m = -l}^{l}c^{l}_{m',m}\sum_{m_1',m_1 = -l_1}^{l_1}c^{l_1}_{m_1',m_1}\times \sum_{m_2',m_2 = -l_2}^{l_2}c^{l_2}_{m_2',m_2}C^{ll_1l_2}_{mm_1m_2}C^{ll_1l_2}_{m'm_1'm_2'},
@@ -112,8 +104,23 @@ The triple correlation of the Atomic Neighbor Density Function on the 3-sphere i
 Where C is a Clebsch-Gordan coefficient.
     
 Smooth SO(3) Power Spectrum
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+Now instead of considering a hyperdimensional space, we can derive a similar descriptor by taking the auto correlation of the atomic neighbor density function through expansions on the 2-sphere and a radial basis on a smoothened atomic neighbor density function,
+
+.. math::
+   \rho ' = \sum_i e^{-\alpha|\bm{r}-\bm{r}_i|^2}
+   
+This function is then expanded on the 2-sphere using Spherical Harmonics and a radial basis :math:`g_n(r)` orthonormalized on the interval :math:`(0, r_\textrm{cut})`.
+
+.. math::
+    c_{nlm} = <g_n Y_{lm}|\rho '> = 4\pi e^{-alpha r_i^2} Y^*_{lm}(\bm{r}_i)\int_0^{r_{\textrm{cut}}}r^2 g_n(r) I_l(2\alpha r r_i) e^{-alpha r^2}dr
+
+Where :math:`I_l` is a modified spherical bessel function of the first kind.  The autocorrelation or power spectrum is obtained through the following sum.
+
+.. math::
+    p_{n_1 n_2 l} = \sum_{m=-l}^{+l}c_{n_1lm} c^*_{n_2 l m}
     
+
 Force Field Training
 --------------------
 
@@ -132,7 +139,7 @@ where M is the total number of structures in the training pool, and :math:`N^{\t
 where :math:`\alpha` is a dimensionless number that controls the degree of regularization.
 
 Generalized Linear Regression
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This regression methodology is a type of polynomial regression. Essentially, the quantum-mechanical energy, forces, and stress can be expanded via Taylor series with atom-centered descriptors as the independent variables:
 
