@@ -108,12 +108,12 @@ Smooth SO(3) Power Spectrum
 Now instead of considering a hyperdimensional space, we can derive a similar descriptor by taking the auto correlation of the atomic neighbor density function through expansions on the 2-sphere and a radial basis on a smoothened atomic neighbor density function [4]_.
 
 .. math::
-   \rho ' = \sum_i e^{-\alpha|\boldsymbol{r}-\boldsymbol{r}_i|^2}
+   \rho ' = \sum_i e^{- \alpha |\boldsymbol{r}-\boldsymbol{r}_i|^2}
    
 This function is then expanded on the 2-sphere using Spherical Harmonics and a radial basis :math:`g_n(r)` orthonormalized on the interval :math:`(0, r_\textrm{cut})`.
 
 .. math::
-    c_{nlm} = \left<g_n Y_{lm}|\rho '\right> = 4\pi e^{-alpha r_i^2} Y^*_{lm}(\boldsymbol{r}_i)\int_0^{r_{\textrm{cut}}}r^2 g_n(r) I_l(2\alpha r r_i) e^{-alpha r^2}dr
+    c_{nlm} = \left<g_n Y_{lm}|\rho '\right> = 4\pi e^{- \alpha r_i^2} Y^*_{lm}(\boldsymbol{r}_i)\int_0^{r_{\textrm{cut}}}r^2 g_n(r) I_l(2\alpha r r_i) e^{-\alpha r^2}dr
 
 Where :math:`I_l` is a modified spherical bessel function of the first kind.  The autocorrelation or power spectrum is obtained through the following sum.
 
