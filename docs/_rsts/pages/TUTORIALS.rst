@@ -15,7 +15,7 @@ Define the source of data
     
 Choosing the desrcriptor
 ------------------------
-Two types of descriptors are available (see `Atomic Descriptors <_background.html#atomic-descriptors>`_). 
+Four types of descriptors are available (see `Atomic Descriptors <_background.html#atomic-descriptors>`_). 
 Each of them needs some additional parameters to be defined as follows.
 
 - ``BehlerParrinello`` 
@@ -30,21 +30,43 @@ Each of them needs some additional parameters to be defined as follows.
                        'eta': [0.000357, 0.028569, 0.089277]}
                  }
 
+    descriptor = {'type': 'BehlerParrinello',
+                  'parameters': parameters,
+                  'Rc': 5.0,
+                 }
+
+- ``EAMD``
+
+.. code-block:: Python
+
+    parameters = {'L': 2, 'eta': [0.36],
+                  'Rs': [0.  , 0.75, 1.5 , 2.25, 3.  , 3.75, 4.5]}
+    
+    descriptor = {'type': 'EAMD',
+                  'parameters': parameters,
+                  'Rc': 5.0,
+                  }
+    
+
 - ``Bispectrum``
 
 .. code-block:: Python
 
-    parameters = {'lmax': 3, 'opt': 'polynomial', 'rfac': 1.0}
+    descriptor = {'Rc': 5.0,
+                  'parameters': {'lmax': 3},
+                 }
 
 
-Last, these parameters should be passed to the ``function``.
+- ``SOAP``
 
 .. code-block:: Python
 
-    function = {'type': 'BehlerParrinello',
-                'derivative': False,
-                'parameters': parameters,
-               }
+    descriptor = {'type': 'SOAP',
+                  'Rc': 5.0,
+                  'parameters': {'lmax': 4, 'nmax': 3},
+                  'ncpu': 4,
+                 }
+
 
 .. _defOptim:
 
@@ -67,56 +89,7 @@ Currently, the ``method`` options are
 
 The ``derivative`` key is optional boolean, which is True by default.
 If False, the chosen method will calculate the numerical approximation of the jacobian, which is useful check if the jacobian from the NN code is correct. However, we advise that one should not set this option as False for the production runs. If ``SGD`` or ``ADAM`` is chosen, ``derivative`` has to be True.
-
-To comply with Scipy optimizer, the parameters keys such as ``maxiter``, ``gtol``, and ``ftol`` are defined in ``option`` dictionary.
-
-The following list describes the default for several optimizers.
-
-L-BFGS-B
-~~~~~~~~
-.. code-block:: Python
-
-    optimizer = {'method': 'L-BFGS-B',
-                 'parameters': {'tol': 1e-10,
-                                'options': {'maxiter': 1000,
-                                            'gtol': 1e-8,
-                                            'disp': False,
-                                            }
-                                }
-                }
-
-ADAM
-~~~~
-.. code-block:: Python
-    
-    optimizer = {'method': 'ADAM',
-                 'parameters': {'tol': 1e-10,
-                                'options': {'maxiter': 50000},
-                                'lr_init': 0.001,
-                                'beta1': 0.9,
-                                'beta2': 0.999,
-                                'epsilon': 10E-8,
-                                't': 0,
-                               }
-                }
-                       
-SGD
-~~~
-.. code-block:: Python
-
-    optimizer = {'method': 'SGD',
-                 'derivative': True,
-                 'parameters': {'tol': 1e-10,
-                                'options': {'maxiter': 2000},
-                                'lr_init': 0.001,
-                                'lr_method': 'constant',
-                                'power_t': 0.5,
-                                'momentum': 0.9,
-                                'nesterovs_momentum': True,
-                               }
-                }
-
-Note: ``SGD`` and ``ADAM`` parameters are consistent with scikit-learn [2]_.
+Usually, one only needs to specify the ``method``.
 If no optimizer is defined, ``L-BFGS-B`` with a maximum iteration of 100 will be used.
 
 Setting the NN parameters
@@ -127,12 +100,12 @@ Setting the NN parameters
              'hiddenlayers': [30, 30],
              'activation': ['tanh', 'tanh', 'linear'], 
              'batch_size': None,
+             'epoch': 1000,
              'force_coefficient': 0.05,
              'alpha': 1e-5,
-             'logging': logging,
-             'runner': 'numpy',
-             'restart': None, #'O-Si-BehlerParrinello/30-30-parameters.json'
-             'optimizer': optimizer,
+             'path': 'SiO2-BehlerParrinello/',
+             'restart': None, #'SiO2-BehlerParrinello/30-30-checkpoint.pth',
+             'optimizer': {'method': 'lbfgs'},
              }
 
 - ``system``: a list of elements involved in the training, *list*, e.g., ['Si', 'O'] 
@@ -140,10 +113,11 @@ Setting the NN parameters
 - ``activation``: activation functions used in each layer, *list or dict*, default: ['tanh', 'tanh', 'linear'],
 - ``batch_size``: the number of samples (structures) used for each iteration of NN; *int*, default: all structures,
 - ``force_coefficient``: parameter to scale the force contribution relative to the energy in the loss function; *float*, default: 0.03,
+- ``stress_coefficient``: balance parameter to scale the stress contribution relative to the energy. *float*, default: None,
 - ``alpha``: L2 penalty (regularization term) parameter; *float*, default: 1e-5,
-- ``runner``: backend to train the NN; *string*, default: ``numpy`` (other options include ``cupy`` and ``pytorch``).
 - ``restart``: dcontinuing Neural Network training from where it was left off. *string*, default: None.
-- ``optimizer``: optimizers used in NN training. The default is ``L-BFGS-B optimizer`` with 100 iterations.
+- ``optimizer``: optimizers used in NN training. 
+- ``epoch``: A measure of the number of times all of the training vectors are used once to update the weights. *int*, default: 100.
 
 Note that a lot of them have the default parameters. So the simplest case to define the model is to just define the ``system`` key:
 
@@ -158,6 +132,21 @@ Also, you can just pick the values from a previous run by defining the ``restart
     model = {'restart': 'Si-O-BehlerParrinello/30-30-parameters.json'}
 
 
+Setting the linear regression models
+------------------------------------
+.. code-block:: Python
+
+    model = {'algorithm': 'PR',
+             'system' : ['Si'],
+             'force_coefficient': 1e-4,
+             'order': 1,
+             'alpha': 0,
+            }
+
+- ``alpha``: L2 penalty (regularization term) parameter; *float*, default: 1e-5,
+- ``order``: linear regression (1) or quadratic fit (2)
+
+
 
 Invoking the simulation
 -----------------------
@@ -165,9 +154,8 @@ Finally, one just need to load the defined data, descriptors and NN model to PyX
 
 .. code-block:: Python
 
-    trainer = PyXtal_FF(TrainData=TrainData, TestData=TestData,
-                 descriptors=descriptor, model=model)
-    trainer.run()
+    ff = PyXtal_FF(descriptors=descriptor, model=model)
+    ff.run(TrainData=TrainData, TestData=TestData,)
 
 .. [1] https://docs.scipy.org/doc/scipy-0.13.0/reference/generated/scipy.optimize.minimize.html
 .. [2] https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html

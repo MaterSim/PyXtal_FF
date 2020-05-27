@@ -12,7 +12,8 @@ Submodules
 .. toctree::
 
     pyxtal_ff.descriptors.behlerparrinello
+    pyxtal_ff.descriptors.eamd
     pyxtal_ff.descriptors.bispectrum
-    pyxtal_ff.descriptors.angular_momentum
+    pyxtal_ff.descriptors.SOAP
 
 

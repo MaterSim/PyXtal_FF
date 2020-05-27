@@ -12,7 +12,5 @@ Submodules
 .. toctree::
 
     pyxtal_ff.models.neuralnetwork
-    pyxtal_ff.models.cneuralnetwork
-    pyxtal_ff.models.gneuralnetwork
-    pyxtal_ff.models.optimize
+    pyxtal_ff.models.polynomialregression
 

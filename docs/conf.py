@@ -16,17 +16,16 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../'))
 
-
 # -- Project information -----------------------------------------------------
 
 project = 'PyXtal_FF'
-copyright = '2019, Qiang Zhu, Howard Yanxon, David Zagaceta, Dean Sayre'
-author = 'Qiang Zhu, Howard Yanxon, David Zagaceta, Dean Sayre'
+copyright = '2019, Qiang Zhu, Howard Yanxon, David Zagaceta'
+author = 'Qiang Zhu, Howard Yanxon, David Zagaceta'
 
 # The short X.Y version
-version = 'v0.1'
+version = '0.1.0'
 # The full version, including alpha/beta/rc tags
-release = 'November 2019'
+release = 'June 2020'
 
 
 # -- General configuration ---------------------------------------------------
@@ -42,7 +41,11 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
+    'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
+    'sphinx.ext.githubpages',
+    'sphinx.ext.napoleon',
+    'sphinx.ext.autosectionlabel',
     'sphinx.ext.mathjax',
 ]
 
@@ -71,7 +74,7 @@ language = None
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = None
+pygments_style = 'sphinx'
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -100,7 +103,7 @@ html_static_path = ['_static']
 # default: ``['localtoc.html', 'relations.html', 'sourcelink.html',
 # 'searchbox.html']``.
 #
-# html_sidebars = {}
+html_sidebars = { '**': ['localtoc.html', 'relations.html',  'searchbox.html'] }
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
@@ -143,7 +146,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'ff-project', 'FF-project Documentation',
+    (master_doc, 'pyxtal_ff', 'PyXtal_FFt Documentation',
      [author], 1)
 ]
 

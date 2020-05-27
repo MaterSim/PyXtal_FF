@@ -2,7 +2,7 @@ PyXtal_FF
 ======================================
 The aim of PyXtalFF project is to provide an automated computational infrastructure to train the interatomic potentials for inorganic periodic systems from high-end quantum mechanical calculations.
 
-The current version is ``0.0.6`` at `GitHub <https://github.com/qzhu2017/pyxtal_ff>`_. 
+The current version is ``0.0.9`` at `GitHub <https://github.com/qzhu2017/pyxtal_ff>`_. 
 
 Expect updates upon request by `Qiang Zhu\'s group <http://www.physics.unlv.edu/~qzhu/index.html>`_ at University of Nevada Las Vegas.
 
@@ -17,7 +17,6 @@ Expect updates upon request by `Qiang Zhu\'s group <http://www.physics.unlv.edu/
    _rsts/links/_tutorials
    _rsts/links/_examples
    _rsts/links/_command_mode
-   _rsts/links/_workflow
 
 .. Modules
 .. ========================
