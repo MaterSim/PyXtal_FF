@@ -75,7 +75,7 @@ Furthermore, EAMD can be regarded as the improved Gaussian symmetry functions. E
 SO(4) Bispectrum Components
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The SO(4) bispectrum components are another type of atom-centered descriptor based on triple correlation of the atomic neighbor density function on the 3-sphere. The distribution of atoms in an atomic environment can be represented as a sum of delta functions, this is known as the atomic neighbor density function.
+The SO(4) bispectrum components are another type of atom-centered descriptor based on triple correlation of the atomic neighbor density function on the 3-sphere[4,5]_. The distribution of atoms in an atomic environment can be represented as a sum of delta functions, this is known as the atomic neighbor density function.
 
 .. math::
     \rho(\boldsymbol{r}) = \delta(\boldsymbol{r}) + \sum_i \delta(\boldsymbol{r}-\boldsymbol{r_i})
@@ -105,7 +105,7 @@ Where C is a Clebsch-Gordan coefficient.
     
 Smooth SO(3) Power Spectrum
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
-Now instead of considering a hyperdimensional space, we can derive a similar descriptor by taking the auto correlation of the atomic neighbor density function through expansions on the 2-sphere and a radial basis on a smoothened atomic neighbor density function,
+Now instead of considering a hyperdimensional space, we can derive a similar descriptor by taking the auto correlation of the atomic neighbor density function through expansions on the 2-sphere and a radial basis on a smoothened atomic neighbor density function [4]_.
 
 .. math::
    \rho ' = \sum_i e^{-\alpha|\boldsymbol{r}-\boldsymbol{r}_i|^2}
