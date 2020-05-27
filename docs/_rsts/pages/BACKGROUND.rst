@@ -78,7 +78,7 @@ SO(4) Bispectrum Components
 The SO(4) bispectrum components are another type of atom-centered descriptor based on triple correlation of the atomic neighbor density function on the 3-sphere. The distribution of atoms in an atomic environment can be represented as a sum of delta functions, this is known as the atomic neighbor density function.
 
 .. math::
-    \rho(\boldsymbol{r}) = \delta(\boldsymbol{r}) + \sum_j \delta(\boldsymbol{r}-\boldsymbol{r_j})
+    \rho(\boldsymbol{r}) = \delta(\boldsymbol{r}) + \sum_i \delta(\boldsymbol{r}-\boldsymbol{r_i})
 
 Then this function can mapped to the 3 sphere by mapping the atomic coordinates :math:`(x,y,z)` to the 3-sphere by the following relations:
 
@@ -94,12 +94,12 @@ Then this function can mapped to the 3 sphere by mapping the atomic coordinates 
 Using this mapping, the Atomic Neighbor Density Function is then expanded on the 3-sphere using the Wigner-D matrix elements, the harmonic functions on the 3-sphere.  The resulting expansion coefficients are given by:
 
 .. math::
-    c^l_{m',m} = D^{l}_{m',m}(\boldsymbol{0}) + \sum_j D^{l}_{m',m}(\boldsymbol{r}_j)
+    c^j_{m',m} = D^{j}_{m',m}(\boldsymbol{0}) + \sum_i D^{j}_{m',m}(\boldsymbol{r}_i)
     
 The triple correlation of the Atomic Neighbor Density Function on the 3-sphere is then given by a third order product of the expansion coefficients by the Fourier theorem.
 
 .. math::
-    B_{l_1,l_2,l} = \sum_{m',m = -l}^{l}c^{l}_{m',m}\sum_{m_1',m_1 = -l_1}^{l_1}c^{l_1}_{m_1',m_1}\times \sum_{m_2',m_2 = -l_2}^{l_2}c^{l_2}_{m_2',m_2}C^{ll_1l_2}_{mm_1m_2}C^{ll_1l_2}_{m'm_1'm_2'},
+    B_{j_1,j_2,j} = \sum_{m',m = -j}^{j}c^{j}_{m',m}\sum_{m_1',m_1 = -j_1}^{j_1}c^{j_1}_{m_1',m_1}\times \sum_{m_2',m_2 = -j_2}^{j_2}c^{j_2}_{m_2',m_2}C^{jj_1j_2}_{mm_1m_2}C^{jj_1j_2}_{m'm_1'm_2'},
     
 Where C is a Clebsch-Gordan coefficient.
     
