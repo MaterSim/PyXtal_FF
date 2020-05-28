@@ -1,34 +1,25 @@
 Background and Theory
 =========================
-The recent emergence of machine learning techniques have greatly influenced methods used in solving problems in material science. In particular, constructing a potential energy surface (PES) of a given system is a remarkable task. Traditionally, the PES could only be calculated to sufficient accuracy through quantum mechanical simulations based on density functional theory (DFT). Even when utilizing supercomputing resources DFT methods still are not feasible for use in many important materials science. On the other hand, a force field or interatomic potential method offers an avenue to much faster computations, with a sacrifice in accuracy. A potential is fit to DFT and/or experimental data by optimizing the potential parameters to the data which can then be used to compute the potential energy of a system.
 
-Recently, machine learning based interatomic potentials (MLIAP) have been used to achieve greater accuracies issue while still maintaining costs orders of magnitude less than DFT methods. MLIAPs have proven not only to yield nearly quantum mechanic accuracy, but also allows the investigation of materials properties at larger time and size scales with molecular dynamics (MD) simulations. MLIAPs are most often fit using linear regression, neural network regression, and Gaussian process regression.
+Overall Framework
+------------------
 
-PyXtalFF involves two important components: descriptors and force field training. We focus on four types of descriptors, Behler-Parrinello Symmetry Functions, Embedded Atom Descriptors, SO(4) Bispectrum Components and Smooth SO(3) power spectrum. For the force field training.
+PyXtalFF involves two important components: **descriptors** and **force field training**. Four types of descriptors are supported in the code, including, 
 
-For all of the regression techniques, the force field training involves fitting of energy, force, and stress simultaneously, although PyXtal_FF allows the fitting of force or stress to be optional. The energy can be written in the sum of atomic energies, in which is a functional (:math:`\mathscr{F}`) of the descriptor (:math:`\boldsymbol{X}_i`):
+- Behler-Parrinello Symmetry Functions,
+- Embedded Atom Descriptors, 
+- SO(4) Bispectrum Components,
+- Smooth SO(3) power spectrum. 
+  
+For the force field training, the code consists of 
 
-.. math::
+- Artificial neural network,
+- Generalized linear regressions.
 
-   E_\textrm{total} = \sum_{i=1}^{N} E_i = \sum_{i=1}^{N} \mathscr{F}_i(\boldsymbol{X}_i)
 
-Specifically, the functional represents regression techniques such as neural network or generalized linear regressions.
-
-Since neural network and generalized linear regressions have well-defined functional forms, analytic derivatives can be derived by applying the chain rule to obtain the force at each atomic coordinate, :math:\boldsymbol{r}_m:
-
-.. math::
-   
-   \boldsymbol{F}_m=-\sum_{i=1}^{N}\frac{\partial \mathscr{F}_i(\boldsymbol{X}_{i})}{\partial \boldsymbol{X}_{i}} \cdot \frac{\partial\boldsymbol{X}_{i}}{\partial \boldsymbol{r}_m}
-
-Force is an important property to accurately describe the local atomic environment especially in geometry optimization and MD simulation. Finally, the stress tensor is acquired through the virial stress relation:
-   
-.. math::
-
-   \boldsymbol{S}=-\sum_{m=1}^N \boldsymbol{r}_m \otimes \sum_{i=1}^{N} \frac{\partial \mathscr{F}_i(\boldsymbol{X}_{i})}{\partial \boldsymbol{X}_{i}} \cdot \frac{\partial \boldsymbol{X}_{i}}{\partial \boldsymbol{r}_m}
- 
 Atomic Descriptors
 ------------------
-Descriptor---a representation of a crystal structure---plays an essential role in constructing MLFF. Due to periodic boundary conditions, Cartesian coordinates poorly describe the structural environment. While the energy of a crystal structure remains unchanged, the Cartesian coordinates change as translational or rotational operation is applied to the structure [1]_. Thus, physically meaningful descriptor must withhold the energy change as the alterations are performed to the structural environment. In another words, the descriptor needs to be invariant with respect to translation and rotational operations, and the exchanges of any equivalent atom. To ensure the descriptor mapping from the atomic positions smoothly approaching zero beyond the :math:`R_c`, a cutoff function (:math:`f_c`) is included to most decriptor mapping schemes, here the exception is the Smooth SO(3) Power Spectrum:
+In an atomic structure, Cartesian coordinates poorly describe the structural environment. While the energy of a crystal structure remains unchanged, the Cartesian coordinates change as translational or rotational operation is applied to the structure [1]_. Thus, physically meaningful descriptor must withhold the energy change as the alterations are performed to the structural environment. In another words, the descriptor needs to be invariant with respect to translation and rotational operations, and the exchanges of any equivalent atom. To ensure the descriptor mapping from the atomic positions smoothly approaching zero beyond the :math:`R_c`, a cutoff function (:math:`f_c`) is included to most decriptor mapping schemes, here the exception is the Smooth SO(3) Power Spectrum:
 
 .. math::
     f_c(r) = \begin{cases}
@@ -75,7 +66,7 @@ Furthermore, EAMD can be regarded as the improved Gaussian symmetry functions. E
 SO(4) Bispectrum Components
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The SO(4) bispectrum components are another type of atom-centered descriptor based on triple correlation of the atomic neighbor density function on the 3-sphere[4,5]_. The distribution of atoms in an atomic environment can be represented as a sum of delta functions, this is known as the atomic neighbor density function.
+The SO(4) bispectrum components [4]_, [5]_ are another type of atom-centered descriptor based on triple correlation of the atomic neighbor density function on the 3-sphere[4,5]_. The distribution of atoms in an atomic environment can be represented as a sum of delta functions, this is known as the atomic neighbor density function.
 
 .. math::
     \rho(\boldsymbol{r}) = \delta(\boldsymbol{r}) + \sum_i \delta(\boldsymbol{r}-\boldsymbol{r_i})
@@ -104,7 +95,7 @@ The triple correlation of the Atomic Neighbor Density Function on the 3-sphere i
 Where C is a Clebsch-Gordan coefficient.
     
 Smooth SO(3) Power Spectrum
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Now instead of considering a hyperdimensional space, we can derive a similar descriptor by taking the auto correlation of the atomic neighbor density function through expansions on the 2-sphere and a radial basis on a smoothened atomic neighbor density function [4]_.
 
 .. math::
@@ -120,6 +111,29 @@ Where :math:`I_l` is a modified spherical bessel function of the first kind.  Th
 .. math::
     p_{n_1 n_2 l} = \sum_{m=-l}^{+l}c_{n_1lm} c^*_{n_2 l m}
     
+
+Expression of Target Properties
+--------------------------------
+
+For all of the regression techniques, the force field training involves fitting of energy, force, and stress simultaneously, although PyXtal_FF allows the fitting of force or stress to be optional. The energy can be written in the sum of atomic energies, in which is a functional (:math:`\mathscr{F}`) of the descriptor (:math:`\boldsymbol{X}_i`):
+
+.. math::
+
+   E_\textrm{total} = \sum_{i=1}^{N} E_i = \sum_{i=1}^{N} \mathscr{F}_i(\boldsymbol{X}_i)
+
+Since neural network and generalized linear regressions have well-defined functional forms, analytic derivatives can be derived by applying the chain rule to obtain the force at each atomic coordinate, :math:`\boldsymbol{r}_m`:
+
+.. math::
+   
+   \boldsymbol{F}_m=-\sum_{i=1}^{N}\frac{\partial \mathscr{F}_i(\boldsymbol{X}_{i})}{\partial \boldsymbol{X}_{i}} \cdot \frac{\partial\boldsymbol{X}_{i}}{\partial \boldsymbol{r}_m}
+
+Finally, the stress tensor is acquired through the virial stress relation:
+   
+.. math::
+
+   \boldsymbol{S}=-\sum_{m=1}^N \boldsymbol{r}_m \otimes \sum_{i=1}^{N} \frac{\partial \mathscr{F}_i(\boldsymbol{X}_{i})}{\partial \boldsymbol{X}_{i}} \cdot \frac{\partial \boldsymbol{X}_{i}}{\partial \boldsymbol{r}_m}
+ 
+
 
 Force Field Training
 --------------------
