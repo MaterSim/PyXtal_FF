@@ -64,8 +64,6 @@ class NeuralNetwork():
         The parameters used for Softmax Energy Penalty function.
     unit: str
         The unit of energy ('eV' or 'Ha').
-    logging: ?
-        ???
     restart: str
         Continuing Neural Network training from where it was left off.
     path: str
@@ -152,7 +150,6 @@ class NeuralNetwork():
             raise NotImplementedError(msg)
         self.unit = unit
         
-        self.logger = logging
         self.restart = restart
         self.path = path
         self.memory = memory
@@ -439,6 +436,7 @@ class NeuralNetwork():
 
     def preprocess(self, TrainData):
         """ Preprocess TrainData to a convenient format for Neural Network training. """
+
         if os.path.exists(self.path+"drange.npy"):
             self.drange = np.load(self.path+"drange.npy", allow_pickle=True)[0]
         else:

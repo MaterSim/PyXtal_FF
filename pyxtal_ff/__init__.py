@@ -86,8 +86,6 @@ class PyXtal_FF():
                 The unit of energy ('eV' or 'Ha'). 
                 The default unit of energy is 'eV'. If 'Ha' is used,
                 Bohr is the unit length; otherwise, Angstrom is used.
-            - logging: ? (*NN, *PR, and *GPR)
-                ???
             - restart: str (*NN)
                 To continue Neural Network training from where it was left off.
             - optimizer: dict (*NN and *GPR)
@@ -172,7 +170,7 @@ class PyXtal_FF():
         # Checking the keys in model.
         keywords = ['algorithm', 'system', 'hiddenlayers', 'activation', 
                     'random_seed', 'force_coefficient', 'unit', 'softmax_beta', 
-                    'logging', 'restart', 'optimizer', 'path', 'order', 'd_max', 
+                    'restart', 'optimizer', 'path', 'order', 'd_max', 
                     'epoch', 'device', 'alpha', 'batch_size', 'noise', 'kernel',
                     'norm', 'stress_coefficient', 'stress_group', 'memory']
         for key in model.keys():
@@ -231,7 +229,7 @@ class PyXtal_FF():
             self._descriptors.update({'N': self._descriptors['N_train']})
             if not os.path.exists(self.path+'Train_db.dat'):
                 trainDB = Database(name=self.path+'Train_db')
-                trainDB.store(TrainData, self._descriptors, True)
+                trainDB.store(TrainData, self._descriptors, True, self.path+'ase.db')
             else:
                 trainDB = Database(name=self.path+'Train_db')
                 trainDB.store(TrainData, self._descriptors, False)
@@ -242,7 +240,7 @@ class PyXtal_FF():
                 self._descriptors.update({'N': self._descriptors['N_test']}) 
                 if not os.path.exists(self.path+'Test_db.dat'):
                     testDB = Database(name=self.path+'Test_db')
-                    testDB.store(TestData, self._descriptors, True)
+                    testDB.store(TestData, self._descriptors, True, self.path+'ase.db')
                 else:
                     testDB = Database(name=self.path+'Test_db')
                     testDB.store(TestData, self._descriptors, False)
@@ -251,25 +249,25 @@ class PyXtal_FF():
             else:
                 EvaluateTest = False
             
-            print("==================================== Training ====================================\n")
+            print("=========================== Training =============================\n")
 
             self.model.train('Train_db', optimizer=self.optimizer)
             self.model.save_checkpoint(des_info=self._descriptors)
             
-            print("==================================================================================\n")
+            print("==================================================================\n")
             
-            print(f"============================= Evaluating Training Set ============================\n")
+            print(f"==================== Evaluating Training Set ====================\n")
 
             train_stat = self.model.evaluate('Train_db', figname='Train.png')
             
-            print("==================================================================================\n")
+            print("==================================================================\n")
 
             if EvaluateTest:
-                print("============================= Evaluating Testing Set =============================\n")
+                print("================= Evaluating Testing Set =====================\n")
 
                 test_stat =  self.model.evaluate('Test_db', figname='Test.png')
                 
-                print("==================================================================================\n")
+                print("==============================================================\n")
             else:
                 test_stat = None
 
@@ -299,7 +297,6 @@ class PyXtal_FF():
                       'softmax_beta': None,
                       'alpha': None,
                       'unit': 'eV',
-                      'logging': None,
                       'restart': None,
                       'path': self.path,
                       'memory': 'in',
@@ -345,7 +342,6 @@ class PyXtal_FF():
                                        stress_group=_model['stress_group'],
                                        softmax_beta=_model['softmax_beta'],
                                        unit=_model['unit'],
-                                       logging=_model['logging'],
                                        restart=_model['restart'],
                                        path=_model['path'],
                                        memory=_model['memory'])
@@ -357,7 +353,6 @@ class PyXtal_FF():
                       'stress_coefficient': None,
                       'stress_group': None,
                       'order': 1,
-                      'logging': None,
                       'path': self.path,
                       'alpha': None,
                       'norm': 2,
@@ -411,8 +406,8 @@ class PyXtal_FF():
               |_|     \__  /_/  \_\___)_||_|_(_______)_|     |_|      
                      (____/      """)
         print("\n")
-        print('          A Python package for Machine Learning Interatomic Force Field')
-        print('           Developed by Zhu\'s group at University of Nevada Las Vegas')
-        print('      The source code is available at https://github.com/qzhu2017/FF-project')
+        print('        A Python package for Machine Learning Interatomic Force Field')
+        print('         Developed by Zhu\'s group at University of Nevada Las Vegas')
+        print('    The source code is available at https://github.com/qzhu2017/FF-project')
         print("\n")
-        print('================================= version', __version__,'=================================\n')
+        print('=========================== version', __version__,'=============================\n')

@@ -65,7 +65,7 @@ class Database():#MutableSequence):
         self.database.close()
 
 
-    def store(self, structure_file, function, storage):
+    def store(self, structure_file, function, storage, ase_db=None):
         """ Map structures to descriptors and store them, including features, to database.
         If compute is False, print pre-computed descriptors message. """
         if storage:
@@ -86,8 +86,12 @@ class Database():#MutableSequence):
             else:
                 raise NotImplementedError('PyXtal_FF supports only json, vasp-out, and xyz formats')
             print("{:d} structures have been loaded.".format(len(data)))
-
+            
             self.add(function, data)
+
+            if ase_db is not None:
+                convert_to_ase_db(data, ase_db)
+                print("save the structures to {:}.".format(ase_db))
 
         else:
             print(f"Features and precomputed descriptors exist: {self.name}.dat\n")
@@ -318,6 +322,7 @@ def parse_json(path, N=None, Random=False):
         if i == (N-1):
             break
 
+
     return data
 
 
@@ -475,3 +480,12 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
             if count >= len(lines) or len(data) == N:
                 break
     return data
+
+def convert_to_ase_db(data, db_path='test.db'):
+    from ase.db import connect
+    
+    with connect(db_path) as db:
+        for d in data:
+            struc = d['structure']
+            d.pop('structure', None)
+            db.write(struc, data=d)
