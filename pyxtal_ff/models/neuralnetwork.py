@@ -75,7 +75,7 @@ class NeuralNetwork():
     def __init__(self, elements, hiddenlayers, activation, random_seed, 
                  batch_size, epoch, device, alpha, softmax_beta, unit, 
                  force_coefficient, stress_coefficient, stress_group,
-                 logging, restart, path, memory):
+                 restart, path, memory):
         
         self.elements = sorted(elements)
         
