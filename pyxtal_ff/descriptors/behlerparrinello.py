@@ -19,9 +19,9 @@ class BehlerParrinello:
     Rc: float
         The symmetry functions will be calculated within this radius.
     derivative: bool
-        If True, calculate the derivatives of symmetry functions.
+        If True, calculate the derivatives.
     stress: bool
-        If True, calculate the virial stress contribution of EAMD.
+        If True, calculate the virial stress contribution.
     """
     def __init__(self, symmetry_parameters, Rc=6.5, 
                  derivative=True, stress=False, atom_weighted=False):
