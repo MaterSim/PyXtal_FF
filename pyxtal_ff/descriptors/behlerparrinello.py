@@ -23,8 +23,14 @@ class BehlerParrinello:
     stress: bool
         If True, calculate the virial stress contribution of EAMD.
     """
-    def __init__(self, symmetry_parameters, Rc=6.5, derivative=True, stress=False):
-        self._type = 'BehlerParrinello'
+    def __init__(self, symmetry_parameters, Rc=6.5, 
+                 derivative=True, stress=False, atom_weighted=False):
+
+
+        if atom_weighted:
+            self._type = 'AWSF'
+        else:
+            self._type = 'BehlerParrinello'
         
         # Set up the symmetry parameters keywords. If a string are not in the
         # keyword, code will return an error.
@@ -155,13 +161,13 @@ class BehlerParrinello:
 
             if self.G2_parameters is not None:
                 G2i = calculate_G2(Dij, IDs, atomic_numbers, type_set1, 
-                                   self.Rc, self.G2_parameters)
+                                   self.Rc, self.G2_parameters, self._type)
                 Gi = np.append(Gi, G2i)
                 
                 if self.derivative:
                     G2iP, rG2iP = calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers,
                                              type_set1, self.Rc, 
-                                             self.G2_parameters)
+                                             self.G2_parameters, self._type)
                     if GiPrime is None:
                         GiPrime = G2iP
                         if self.stress:
@@ -173,13 +179,13 @@ class BehlerParrinello:
                 
             if self.G4_parameters is not None:
                 G4i = calculate_G4(Rij, IDs, jks, atomic_numbers, type_set2,
-                                   self.Rc, self.G4_parameters)
+                                   self.Rc, self.G4_parameters, self._type)
                 Gi = np.append(Gi, G4i)
                 
                 if self.derivative:
                     G4iP, rG4iP = calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers,
                                              type_set2, self.Rc, 
-                                             self.G4_parameters)
+                                             self.G4_parameters, self._type)
                     if GiPrime is None:
                         GiPrime = G4iP
                         if self.stress:
@@ -191,13 +197,13 @@ class BehlerParrinello:
 
             if self.G5_parameters is not None:
                 G5i = calculate_G5(Rij, IDs, jks, atomic_numbers, type_set2,
-                                   self.Rc, self.G5_parameters)
+                                   self.Rc, self.G5_parameters, self._type)
                 Gi = np.append(Gi, G5i)
 
                 if self.derivative:
                     G5iP, rG5iP = calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers,
                                              type_set2, self.Rc,
-                                             self.G5_parameters)
+                                             self.G5_parameters, self._type)
                     if GiPrime is None:
                         GiPrime = G5iP
                         if self.stress:
@@ -227,7 +233,7 @@ class BehlerParrinello:
 ########################### Symmetry Functions ################################
 
 
-def calculate_G2(Dij, IDs, atomic_numbers, type_set, Rc, parameters):
+def calculate_G2(Dij, IDs, atomic_numbers, type_set, Rc, parameters, Gtype):
     """Calculate G2 symmetry function for a center atom i.
     
     G2 function describes the radial feature of atoms in a crystal structure
@@ -265,16 +271,25 @@ def calculate_G2(Dij, IDs, atomic_numbers, type_set, Rc, parameters):
     results = results.reshape([n1*n2, m])
     
     # Decompose G2 by species
-    G2 = np.zeros([n1*n2*l])
-    j_ids = atomic_numbers[IDs]
-    for id, j_type in enumerate(type_set):
-        ids = select_rows(j_ids, j_type)
-        G2[id::l] = np.sum(results[:, ids], axis=1)
+    if Gtype == 'AWSF':
+        G2 = np.zeros([n1*n2])
+        j_ids = atomic_numbers[IDs]
+        for id, j_type in enumerate(type_set):
+            ids = select_rows(j_ids, j_type)
+            #print(results[:, ids].shape, j_ids.shape, np.einsum('ij,j->i', results[:, ids], j_ids))
+            G2 += np.einsum('ij,j->i', results[:, ids], j_ids)
+
+    else:
+        G2 = np.zeros([n1*n2*l])
+        j_ids = atomic_numbers[IDs]
+        for id, j_type in enumerate(type_set):
+            ids = select_rows(j_ids, j_type)
+            G2[id::l] = np.sum(results[:, ids], axis=1)
 
     return G2
 
 
-def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters):
+def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters, Gtype):
     """Calculate the derivative of G2 symmetry function for atom i.
     
     Parameters
@@ -349,19 +364,30 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters)
     #    rG2ip0[:,ii_ids,:,i,:] = np.einsum('ijk,il->ijkl', G2ip0[:,ii_ids,:,i], Rij[ii_ids]) #[d,m,3], [m,3],->[d,m,3,3]
     
     # Decompose G2 Prime by species
-    j_ids = atomic_numbers[js]
-    G2Prime = np.zeros([N, n1*n2*l, 3]) # This is the final output
-    rG2Prime = np.zeros([N, n1*n2*l, 3, 3]) # This is the final output
-    
-    for id, j_type in enumerate(type_set):
-        ids = select_rows(j_ids, j_type)
-        G2Prime[:, id::l, :] += np.einsum('ijkl->lik', G2ip0[:, ids, :, :])
-        rG2Prime[:, id::l, :, :] += np.einsum('ijklm->likm', rG2ip0[:, ids, :, :, :])
+    if Gtype == 'AWSF':
+        j_ids = atomic_numbers[IDs]
+        G2Prime = np.zeros([N, n1*n2, 3]) # This is the final output
+        rG2Prime = np.zeros([N, n1*n2, 3, 3]) # This is the final output
+ 
+        for id, j_type in enumerate(type_set):
+            ids = select_rows(j_ids, j_type)
+            G2Prime += np.einsum('ijkl, j->lik', G2ip0[:, ids, :, :], j_ids)
+            rG2Prime += np.einsum('ijklm, j->likm', rG2ip0[:, ids, :, :, :], j_ids)
+
+    else:
+        j_ids = atomic_numbers[js]
+        G2Prime = np.zeros([N, n1*n2*l, 3]) # This is the final output
+        rG2Prime = np.zeros([N, n1*n2*l, 3, 3]) # This is the final output
+        
+        for id, j_type in enumerate(type_set):
+            ids = select_rows(j_ids, j_type)
+            G2Prime[:, id::l, :] += np.einsum('ijkl->lik', G2ip0[:, ids, :, :])
+            rG2Prime[:, id::l, :, :] += np.einsum('ijklm->likm', rG2ip0[:, ids, :, :, :])
         
     return G2Prime, rG2Prime
 
 
-def calculate_G4(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters):
+def calculate_G4(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype):
     """Calculate G4 symmetry function for a given atom i.
     
     G4 function also describes the angular feature of atoms in a crystal 
@@ -428,16 +454,26 @@ def calculate_G4(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters):
     results = results.reshape([n1*n2*n3*n4, jk])
 
     # Decompose G4 by species
-    G4 = np.zeros([n1*n2*n3*n4*l])
-    jk_ids = atomic_numbers[IDs[jks]] 
-    for id, jk_type in enumerate(type_set):
-        ids = select_rows(jk_ids, jk_type)
-        G4[id::l] = np.sum(results[:, ids], axis=1)
+    if Gtype == 'AWSF':
+        G4 = np.zeros([n1*n2*n3*n4])
+        jk_ids = atomic_numbers[IDs[jks]]
+ 
+        for id, jk_type in enumerate(type_set):
+            ids = select_rows(jk_ids, jk_type)
+            Z1Z2 = np.prod(jk_ids[ids[0]])
+            G4 += Z1Z2*np.sum(results[:, ids], axis=1)
+
+    else:
+        G4 = np.zeros([n1*n2*n3*n4*l])
+        jk_ids = atomic_numbers[IDs[jks]] 
+        for id, jk_type in enumerate(type_set):
+            ids = select_rows(jk_ids, jk_type)
+            G4[id::l] = np.sum(results[:, ids], axis=1)
         
     return G4
 
 
-def calculate_G5(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters):
+def calculate_G5(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype):
     """Calculate G5 symmetry function for a given atom i.
     
     G5 function also describes the angular feature of atoms in a crystal 
@@ -510,17 +546,26 @@ def calculate_G5(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters):
     results = results.reshape([n1*n2*n3*n4, jk])
 
     # Decompose G5 by species
-    G5 = np.zeros([n1*n2*n3*n4*l])
-    jk_ids = atomic_numbers[IDs[jks]] 
-    for id, jk_type in enumerate(type_set):
-        ids = select_rows(jk_ids, jk_type)
-        G5[id::l] = np.sum(results[:, ids], axis=1)
+    if Gtype == 'AWSF':
+        G5 = np.zeros([n1*n2*n3*n4])
+        jk_ids = atomic_numbers[IDs[jks]]
+        for id, jk_type in enumerate(type_set):
+            ids = select_rows(jk_ids, jk_type)
+            Z1Z2 = np.prod(jk_ids[ids[0]])
+            G5 += Z1Z2*np.sum(results[:, ids], axis=1)
+
+    else:
+        G5 = np.zeros([n1*n2*n3*n4*l])
+        jk_ids = atomic_numbers[IDs[jks]] 
+        for id, jk_type in enumerate(type_set):
+            ids = select_rows(jk_ids, jk_type)
+            G5[id::l] = np.sum(results[:, ids], axis=1)
         
     return G5
 
 
 def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc, 
-                      parameters):
+                      parameters, Gtype):
     """Calculate G4 symmetry function for a given atom i.
     
     G4 function also describes the angular feature of atoms in a crystal 
@@ -631,20 +676,32 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
         rG4ip0[:,mm,:,k,:] += np.einsum('ij,k->ijk', tmp[:,:,k], rik[mm]+Ri)
 
     # Decompose G4 Prime by species
-    G4Prime = np.zeros([N, n1*n2*n3*n4*l, 3])
-    rG4Prime = np.zeros([N, n1*n2*n3*n4*l, 3, 3])
+    if Gtype == 'AWSF':
+        G4Prime = np.zeros([N, n1*n2*n3*n4, 3])
+        rG4Prime = np.zeros([N, n1*n2*n3*n4, 3, 3])
 
-    jk_ids = atomic_numbers[IDs[jks]] 
-    for id, jk_type in enumerate(type_set):
-        ids = select_rows(jk_ids, jk_type)
-        G4Prime[:, id::l, :] += np.einsum('ijkl->lik', G4ip0[:, ids, :, :])
-        rG4Prime[:, id::l, :, :] += np.einsum('ijklm->likm', rG4ip0[:, ids, :, :, :])
+        jk_ids = atomic_numbers[IDs[jks]]
+        for id, jk_type in enumerate(type_set):
+            ids = select_rows(jk_ids, jk_type)
+            Z1Z2 = np.prod(jk_ids[ids[0]])
+            G4Prime += Z1Z2*np.einsum('ijkl->lik', G4ip0[:, ids, :, :])
+            rG4Prime += Z1Z2*np.einsum('ijklm->likm', rG4ip0[:, ids, :, :, :])
+
+    else:
+        G4Prime = np.zeros([N, n1*n2*n3*n4*l, 3])
+        rG4Prime = np.zeros([N, n1*n2*n3*n4*l, 3, 3])
+
+        jk_ids = atomic_numbers[IDs[jks]] 
+        for id, jk_type in enumerate(type_set):
+            ids = select_rows(jk_ids, jk_type)
+            G4Prime[:, id::l, :] += np.einsum('ijkl->lik', G4ip0[:, ids, :, :])
+            rG4Prime[:, id::l, :, :] += np.einsum('ijklm->likm', rG4ip0[:, ids, :, :, :])
 
     return G4Prime, rG4Prime
 
 
 def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc, 
-                      parameters):
+                      parameters, Gtype):
     """Calculate G5 symmetry function for a given atom i.
     
     G5 function also describes the angular feature of atoms in a crystal 
@@ -755,14 +812,26 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
         rG5ip0[:,mm,:,k,:] += np.einsum('ij,k->ijk', tmp[:,:,k], rik[mm]+Ri)
 
     # Decompose G4 Prime by species
-    G5Prime = np.zeros([N, n1*n2*n3*n4*l, 3])
-    rG5Prime = np.zeros([N, n1*n2*n3*n4*l, 3, 3])
+    if Gtype == 'AWSF':
+        G5Prime = np.zeros([N, n1*n2*n3*n4, 3])
+        rG5Prime = np.zeros([N, n1*n2*n3*n4, 3, 3])
 
-    jk_ids = atomic_numbers[IDs[jks]] 
-    for id, jk_type in enumerate(type_set):
-        ids = select_rows(jk_ids, jk_type)
-        G5Prime[:, id::l, :] += np.einsum('ijkl->lik', G5ip0[:, ids, :, :])
-        rG5Prime[:, id::l, :, :] += np.einsum('ijklm->likm', rG5ip0[:, ids, :, :, :])
+        jk_ids = atomic_numbers[IDs[jks]]
+        for id, jk_type in enumerate(type_set):
+            ids = select_rows(jk_ids, jk_type)
+            Z1Z2 = np.prod(jk_ids[ids[0]])
+            G5Prime += Z1Z2*np.einsum('ijkl->lik', G5ip0[:, ids, :, :])
+            rG5Prime += Z1Z2*np.einsum('ijklm->likm', rG5ip0[:, ids, :, :, :])
+
+    else:
+        G5Prime = np.zeros([N, n1*n2*n3*n4*l, 3])
+        rG5Prime = np.zeros([N, n1*n2*n3*n4*l, 3, 3])
+    
+        jk_ids = atomic_numbers[IDs[jks]] 
+        for id, jk_type in enumerate(type_set):
+            ids = select_rows(jk_ids, jk_type)
+            G5Prime[:, id::l, :] += np.einsum('ijkl->lik', G5ip0[:, ids, :, :])
+            rG5Prime[:, id::l, :, :] += np.einsum('ijklm->likm', rG5ip0[:, ids, :, :, :])
 
     return G5Prime, rG5Prime
 
@@ -963,11 +1032,11 @@ if __name__ == '__main__':
     from ase.build import bulk
     np.set_printoptions(formatter={'float': '{: 0.4f}'.format})
 
-                #'G4': {'Rs': [0], 'lambda': [1, -1], 'zeta': [1,], 'eta': [0.036, 0.071]},
-                #'G5': {'Rs': [0], 'lambda': [1, -1], 'zeta': [1,], 'eta': [0.036, 0.071]},
     # Set up symmetry parameters
     Rc = 5.5
     symmetry = {'G2': {'eta': [0.036, 0.071,], 'Rs': [0]},
+                'G4': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071]},
+                'G5': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071]},
                }
     
     for a in [5.0]: #, 5.4, 5.8]:
@@ -977,9 +1046,18 @@ if __name__ == '__main__':
         si.set_cell(cell)
         print(si.get_cell())
 
-        bp = BehlerParrinello(symmetry, Rc=Rc, derivative=True, stress=True)
+        bp = BehlerParrinello(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=False)
         des = bp.calculate(si, system=[14])
         
         print("G:", des['x'][0])
-        print("rGPrime", des['rdxdr'].shape)
-        print(np.einsum('ijklm->klm', des['rdxdr']))
+        print("GPrime", des['dxdr'][0,:,0,:])
+        print("GPrime", des['dxdr'][0,:,2,:])
+        print("GPrime", des['dxdr'][0,:,4,:])
+        #print(np.einsum('ijklm->klm', des['rdxdr']))
+
+        bp = BehlerParrinello(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=True)
+        des = bp.calculate(si, system=[14])
+        print("G:", des['x'][0])
+        print("GPrime", des['dxdr'][0,:,0,:])
+        print("GPrime", des['dxdr'][0,:,2,:])
+        print("GPrime", des['dxdr'][0,:,4,:])

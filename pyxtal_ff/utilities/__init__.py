@@ -151,13 +151,18 @@ class Database():#MutableSequence):
     def compute(self, function, data):
         """ Compute descriptor for one structure to the database. """
 
-        if function['type'] == 'BehlerParrinello':
+        if function['type'] in ['BehlerParrinello', 'SF']:
             from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
             d = BehlerParrinello(function['parameters'],
                                  function['Rc'], 
-                                 True, True).calculate(data['structure'])
+                                 True, True, False).calculate(data['structure'])
+        elif function['type'] == 'AWSF':
+            from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
+            d = BehlerParrinello(function['parameters'],
+                                 function['Rc'], 
+                                 True, True, True).calculate(data['structure'])
         
-        elif function['type'] == 'Bispectrum':
+        elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
             from pyxtal_ff.descriptors.bispectrum import SO4_Bispectrum
             d = SO4_Bispectrum(function['parameters']['lmax'],
                                function['Rc'],
@@ -165,7 +170,7 @@ class Database():#MutableSequence):
                                stress=True,
                                normalize_U=function['parameters']['normalize_U']).calculate(data['structure'])
         
-        elif function['type'] == 'SOAP':
+        elif function['type'] in ['SO3', 'SOAP', 'soap']:
             from pyxtal_ff.descriptors.SOAP import SOAP
             d = SOAP(function['parameters']['nmax'],
                      function['parameters']['lmax'],
@@ -173,7 +178,7 @@ class Database():#MutableSequence):
                      derivative=True,
                      stress=True).calculate(data['structure'])
 
-        elif function['type'] == 'EAMD':
+        elif function['type'] in ['EAMD', 'eamd']:
             from pyxtal_ff.descriptors.eamd import EAMD
             d = EAMD(function['parameters'],
                      function['Rc'],
@@ -382,8 +387,10 @@ def parse_xyz(structure_file, N=1000000):
             forces = np.zeros([number, 3])
             infos = lines[count+1].split('=')
             for i, info in enumerate(infos):
-                if info.find('energy') == 0:
+                if info.find('dft_energy') >= 0 or info.find('DFT_energy') >= 0:
                     energy = float(infos[i+1].split()[0])
+                elif info.find('config_type') == 0:
+                    group = infos[i+1].split()[0]
                 elif info.find('Lattice') == 8:
                     lat = []
                     tmp = infos[i+1].split()
@@ -392,7 +399,6 @@ def parse_xyz(structure_file, N=1000000):
                         if num.replace('.', '', 1).replace('-', '', 1).isdigit():
                             lat.append(float(num))
                     lat = np.array(lat).reshape([3,3])
-                    break
                 elif info.find('virial') > 0:
                     s = []
                     tmp = infos[i+1].split()
@@ -401,27 +407,36 @@ def parse_xyz(structure_file, N=1000000):
                         if num.replace('.', '', 1).replace('-', '', 1).isdigit():
                             s.append(float(num))
                     s = np.array(s).flatten()
-                    stress = np.array([s[0], s[4], s[7], s[1], s[2], s[5]])
+                    stress = np.array([s[0], s[4], s[8], s[1], s[2], s[5]])
+                elif info.find('Properties') >= 0: 
+                    items = infos[i+1].split(':')
+                    counts = 0
+                    for i in range(int(len(items)/3)):
+                        if items[i*3] == 'dft_force' or items[i*3] == 'DFT_force':
+                            count_f = counts
+                        elif items[i*3] == 'pos':
+                            count_p = counts
+                        counts += int(items[i*3+2])
+                    break
 
             for i in range(number):
                 infos = lines[count+2+i].split()
                 symbols.append(infos[0])
-                coords[i, :] = np.array([float(num) for num in infos[5:8]])
-                forces[i, :] = np.array([float(num) for num in infos[-3:]])
+                coords[i, :] = np.array([float(num) for num in infos[count_p:count_p+3]])
+                forces[i, :] = np.array([float(num) for num in infos[count_f:count_f+3]])
 
             structure = Atoms(symbols=symbols,
                               positions=coords,
                               cell=lat, pbc=True)
             data.append({'structure': structure,
                          'energy': energy, 'force': forces,
-                         'stress': stress, 'group': 'random'})
+                         'stress': stress, 'group': group})
 
             count = count + number + 2
             if count >= len(lines) or len(data) == N:
                 break
 
     return data
-
 
 def parse_OUTCAR_comp(structure_file, N=1000000):
     """

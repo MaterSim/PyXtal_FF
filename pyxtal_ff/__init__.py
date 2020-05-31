@@ -19,8 +19,10 @@ class PyXtal_FF():
             - type: str
                 The type of atom-centered descriptors.
                 + BehlerParrinello (Gaussian symmetry)
-                + Bispectrum
-                + SOAP
+                + AWSF (Gaussian symmetry)
+                + EAMD
+                + SO4
+                + SO3
             - Rc: float
                 The radial cutoff of the descriptors.
             - N_train: int
