@@ -18,11 +18,11 @@ class PyXtal_FF():
             The list of the descriptors keys:
             - type: str
                 The type of atom-centered descriptors.
-                + BehlerParrinello (Gaussian symmetry)
-                + AWSF (Gaussian symmetry)
-                + EAMD
-                + SO4
-                + SO3
+                + ACSF (BehlerParrinello Gaussian symmetry)
+                + wACSF (weighted Gaussian symmetry)
+                + EAMD (embeded atom method descriptor)
+                + SO4 (bispectrum)
+                + SO3 (smoothed powerspectrum)
             - Rc: float
                 The radial cutoff of the descriptors.
             - N_train: int
@@ -39,12 +39,14 @@ class PyXtal_FF():
             - parameters: dict
                 Example,
                 + BehlerParrinello
-                  {'G2': {'eta': [1.3, 2.], 'Rs': [.1, .2]},
-                   'G4': {'eta': [.3, .7], 'lambda': [-1, 1], 'zeta': [.8, 2]}}
-                + Bispectrum
-                  {'lmax': 3, opt: 'polynomial', 'rfac': 1.}
-                + SOAP
-                  {'nmax': 1, 'lmax': 3}
+                    {'G2': {'eta': [1.3, 2.], 'Rs': [.1, .2]},
+                    'G4': {'eta': [.3, .7], 'lambda': [-1, 1], 'zeta': [.8, 2]}}
+                + SO4/Bispectrum
+                    {'L': 2, 'eta': [.3, .7], 'Rs': [.1, .2]}}
+                + SO4/Bispectrum
+                    {'lmax': 3}
+                + SO4/SOAP
+                    {'nmax': 1, 'lmax': 3}
 
         model: dict
             Machine learning parameters are defined here.
