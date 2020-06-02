@@ -18,7 +18,7 @@ Choosing the desrcriptor
 Four types of descriptors are available (see `Atomic Descriptors <_background.html#atomic-descriptors>`_). 
 Each of them needs some additional parameters to be defined as follows.
 
-- ``BehlerParrinello`` 
+- ``BehlerParrinello`` (ACSF, wACSF)
 
 .. code-block:: Python
 
@@ -30,10 +30,12 @@ Each of them needs some additional parameters to be defined as follows.
                        'eta': [0.000357, 0.028569, 0.089277]}
                  }
 
-    descriptor = {'type': 'BehlerParrinello',
+    descriptor = {'type': 'ACSF',
                   'parameters': parameters,
                   'Rc': 5.0,
                  }
+
+The ``wACSF`` is also supported. In this case, the number of descriptors will linearly dependent on the number of atoms in the system.
 
 - ``EAMD``
 
@@ -48,23 +50,23 @@ Each of them needs some additional parameters to be defined as follows.
                   }
     
 
-- ``Bispectrum``
+- ``SO4``
 
 .. code-block:: Python
 
-    descriptor = {'Rc': 5.0,
+    descriptor = {'type': 'SO4',
+                  'Rc': 5.0,
                   'parameters': {'lmax': 3},
                  }
 
 
-- ``SOAP``
+- ``SO3``
 
 .. code-block:: Python
 
-    descriptor = {'type': 'SOAP',
+    descriptor = {'type': 'SO3',
                   'Rc': 5.0,
                   'parameters': {'lmax': 4, 'nmax': 3},
-                  'ncpu': 4,
                  }
 
 
@@ -157,4 +159,3 @@ Finally, one just need to load the defined data, descriptors and NN model to PyX
     ff.run(TrainData=TrainData, TestData=TestData,)
 
 .. [1] https://docs.scipy.org/doc/scipy-0.13.0/reference/generated/scipy.optimize.minimize.html
-.. [2] https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html

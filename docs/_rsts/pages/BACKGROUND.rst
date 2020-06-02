@@ -6,7 +6,7 @@ Overall Framework
 
 PyXtalFF involves two important components: **descriptors** and **force field training**. Four types of descriptors are supported in the code, including, 
 
-- Behler-Parrinello Symmetry Functions,
+- (Weighted) Behler-Parrinello Symmetry Functions,
 - Embedded Atom Descriptors, 
 - SO(4) Bispectrum Components,
 - Smooth SO(3) power spectrum. 
@@ -29,8 +29,8 @@ In an atomic structure, Cartesian coordinates poorly describe the structural env
 
 In the following, the types of descriptors will be explained in details.
 
-Behler-Parrinello Symmetry Function
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Atom Centered Symmetry Function (ACSF)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Behler-Parrinello method---atom-centered descriptors---utilizes a set of symmetry functions [2]_. The symmetry functions map two atomic Cartesian coordinates to a distribution of distances between atom (radial functions) or three atomic Cartesian coordinates to a distribution of bond angles (angular functions). These mappings are invariant with respect to translation, rotation, and permutation of atoms of the system. Therefore, the energy of the system will remain unchanged under these mapping of symmetry functions.
  
 PyXtal_FF supports three types of symmetry functions:
@@ -46,10 +46,24 @@ PyXtal_FF supports three types of symmetry functions:
 
 where :math:`\eta` and :math:`R_s` are defined as the width and the shift of the symmetry function. As for :math:`G^{(4)}` and :math:`G^{(5)}`, they are a few of many ways to capture the angular information via three-body interactions (:math:`\theta_{ijk}`). :math:`\zeta` determines the strength of angular information. Finally, :math:`\lambda` values are set to +1 and -1, for inverting the shape of the cosine function.
 
+
+By default, ACSF splits each different atomic pair and triplets into different descriptors. For instance, a G2 function of SiO2 system for each Si has Si-Si, Si-O descriptors, while G4 has Si-Si-Si, Si-Si-O, O-Si-O. This is not convenient for its extension to multiple component systems. Therefore, an alterative solution is to assign the weight function to each G2 and G4 distances by the atomic number.
+
+.. math::
+    G^{(2)}_i = \sum_{j\neq i} Z_j e^{-\eta (R_{ij}-\mu)^2} \cdot f_c(R_{ij})
+
+.. math::
+    G^{(4)}_i = 2^{1-\zeta}\sum_{j\neq i} \sum_{k \neq i, j} Z_j Z_k [(1+\lambda \cos \theta_{ijk})^{\zeta} \cdot e^{-\eta (R_{ij}^2 + R_{ik}^2 + R_{jk}^2)} \cdot f_c(R_{ij}) \cdot f_c(R_{ik}) \cdot f_c(R_{jk})]
+
+.. math::
+    G^{(5)}_i = 2^{1-\zeta}\sum_{j\neq i} \sum_{k \neq i, j} Z_j Z_k [(1+\lambda \cos \theta_{ijk})^{\zeta} \cdot e^{-\eta (R_{ij}^2 + R_{ik}^2)} \cdot f_c(R_{ij}) \cdot f_c(R_{ik})]
+
+The above formula is called wACSF [3]_.
+
 Embedded Atom Density
 ^^^^^^^^^^^^^^^^^^^^^
 
-Embedded atom density (EAD) descriptor [3]_ is inspired by embedded atom method (EAM)---description of atomic bonding by assuming each atom is embedded in the uniform electron cloud of the neighboring atoms. The EAM generally consists of a functional form in a scalar uniform electron density for each of the "embedded" atom plus the short-range nuclear repulsion potential. Given the uniform electron gas model, the EAM only works for metallic systems, even so the EAM can severely underperform in predicting the metallic systems. Therefore, the density can be modified by including the square of the linear combination the atomic orbital components:
+Embedded atom density (EAD) descriptor [4]_ is inspired by embedded atom method (EAM)---description of atomic bonding by assuming each atom is embedded in the uniform electron cloud of the neighboring atoms. The EAM generally consists of a functional form in a scalar uniform electron density for each of the "embedded" atom plus the short-range nuclear repulsion potential. Given the uniform electron gas model, the EAM only works for metallic systems, even so the EAM can severely underperform in predicting the metallic systems. Therefore, the density can be modified by including the square of the linear combination the atomic orbital components:
 
 .. math::
     \rho_i(R_{ij}) = \sum_{l_x, l_y, l_z}^{l_x+l_y+l_z=L} \frac{L!}{l_x!l_y!l_z!} \bigg(\sum_{j\neq i}^{N} Z_j  \Phi(R_{ij})\bigg)^2
@@ -66,7 +80,7 @@ Furthermore, EAMD can be regarded as the improved Gaussian symmetry functions. E
 SO(4) Bispectrum Components
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The SO(4) bispectrum components [4]_, [5]_ are another type of atom-centered descriptor based on triple correlation of the atomic neighbor density function on the 3-sphere[4,5]_. The distribution of atoms in an atomic environment can be represented as a sum of delta functions, this is known as the atomic neighbor density function.
+The SO(4) bispectrum components [5]_, [6]_ are another type of atom-centered descriptor based on triple correlation of the atomic neighbor density function on the 3-sphere. The distribution of atoms in an atomic environment can be represented as a sum of delta functions, this is known as the atomic neighbor density function.
 
 .. math::
     \rho(\boldsymbol{r}) = \delta(\boldsymbol{r}) + \sum_i \delta(\boldsymbol{r}-\boldsymbol{r_i})
@@ -96,7 +110,7 @@ Where C is a Clebsch-Gordan coefficient.
     
 Smooth SO(3) Power Spectrum
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Now instead of considering a hyperdimensional space, we can derive a similar descriptor by taking the auto correlation of the atomic neighbor density function through expansions on the 2-sphere and a radial basis on a smoothened atomic neighbor density function [4]_.
+Now instead of considering a hyperdimensional space, we can derive a similar descriptor by taking the auto correlation of the atomic neighbor density function through expansions on the 2-sphere and a radial basis on a smoothened atomic neighbor density function [6]_.
 
 .. math::
    \rho ' = \sum_i e^{- \alpha |\boldsymbol{r}-\boldsymbol{r}_i|^2}
@@ -186,6 +200,7 @@ The value of a neuron (:math:`X_{n_i}^l`) at layer :math:`l` can determined by t
 
 .. [1] Albert P Bartok, Risi Kondor and Gabor Csanyi, “On representing chemical environments,” Phys. Rev. B 87, 184115 (2013)
 .. [2] Jorg Behler and Michele Parrinello, “Generalized neural-network representation of high-dimensional potential-energy surfaces,” Phys. Rev. Lett. 98, 146401 (2007)
-.. [3] Zhang, C. Hu, B. Jiang, "Embedded atom neural network potentials: Efficient and accurate machine learning with a physically inspired representation," The Journal of Physical Chemistry Letters 10 (17) (2019) 4962–4967 (2019).
-.. [4] Albert P Bartok, Mike C Payne, Risi Kondor and Gabor Csanyi, “Gaussian approximation potentials: The accuracy of quantum mechan-ics, without the electrons,” Phys. Rev. Lett. 104, 136403 (2010)
-.. [5] A.P. Thompson, L.P. Swiler, C.R. Trott, S.M. Foiles and G.J. Tucker, “Spectral neighbor analysis method for automated generation ofquantum-accurate interatomic potentials,” J. Comput. Phys. 285, 316–330 (2015)  
+.. [3] M. Gastegger, L. Schwiedrzik, M. Bittermann, F. Berzsenyi and P. Marquetand, J. Chem. Phys. 148, 241709 (2018)
+.. [4] Zhang, C. Hu, B. Jiang, "Embedded atom neural network potentials: Efficient and accurate machine learning with a physically inspired representation," The Journal of Physical Chemistry Letters 10 (17) (2019) 4962–4967 (2019).
+.. [5] Albert P Bartok, Mike C Payne, Risi Kondor and Gabor Csanyi, “Gaussian approximation potentials: The accuracy of quantum mechan-ics, without the electrons,” Phys. Rev. Lett. 104, 136403 (2010)
+.. [6] A.P. Thompson, L.P. Swiler, C.R. Trott, S.M. Foiles and G.J. Tucker, “Spectral neighbor analysis method for automated generation ofquantum-accurate interatomic potentials,” J. Comput. Phys. 285, 316–330 (2015)  
