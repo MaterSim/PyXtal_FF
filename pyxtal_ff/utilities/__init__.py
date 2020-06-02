@@ -5,7 +5,6 @@ import shelve
 import numpy as np
 from ase import Atoms
 from copy import deepcopy
-from random import sample
 from functools import partial
 from torch.utils.data import Dataset
 from monty.serialization import loadfn
@@ -103,17 +102,12 @@ class Database():#MutableSequence):
 
         _N = deepcopy(function['N'])
         _cpu = deepcopy(function['ncpu'])
-        _random = deepcopy(function['random_sample'])
         
         N1 = len(data)
         if _N is not None and _N < N1:
-            if _random:
-                lists = sample(range(N1), _N)
-            else:
-                lists = range(_N)
+            lists = range(_N)
         else:
             lists = range(N1)
-
             
         if _cpu == 1:
             for i, index in enumerate(lists):

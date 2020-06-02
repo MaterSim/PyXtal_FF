@@ -31,8 +31,6 @@ class PyXtal_FF():
             - N_test: int
                 The number of crystal structures in test data set 
                 to be converted into descriptors.
-            - random_sample: bool
-                If True, the data will be selected after they are shuffled.
             - ncpu: int
                 The number of cpu core to use for converting crystal structures 
                 into descriptors.
@@ -128,7 +126,7 @@ class PyXtal_FF():
         
         # Checking the keys in descriptors
         descriptors_keywords = ['type', 'Rc', 'N_train', 'N_test', 
-                                'random_sample', 'ncpu', 'parameters']
+                                'ncpu', 'parameters']
         if descriptors is not None:
             for key in descriptors.keys():
                 if key not in descriptors_keywords:
@@ -143,7 +141,6 @@ class PyXtal_FF():
                              'N': None,
                              'N_train': None,
                              'N_test': None,
-                             'random_sample': False,
                              'ncpu': 1,
                              }
         
