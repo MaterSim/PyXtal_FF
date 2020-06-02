@@ -276,8 +276,8 @@ def calculate_G2(Dij, IDs, atomic_numbers, type_set, Rc, parameters, Gtype):
         j_ids = atomic_numbers[IDs]
         for id, j_type in enumerate(type_set):
             ids = select_rows(j_ids, j_type)
-            #print(results[:, ids].shape, j_ids.shape, np.einsum('ij,j->i', results[:, ids], j_ids))
-            G2 += np.einsum('ij,j->i', results[:, ids], j_ids)
+            Z = j_ids[ids][0]
+            G2 += Z*np.einsum('ij->i', results[:, ids])
 
     else:
         G2 = np.zeros([n1*n2*l])
@@ -371,8 +371,9 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
  
         for id, j_type in enumerate(type_set):
             ids = select_rows(j_ids, j_type)
-            G2Prime += np.einsum('ijkl, j->lik', G2ip0[:, ids, :, :], j_ids)
-            rG2Prime += np.einsum('ijklm, j->likm', rG2ip0[:, ids, :, :, :], j_ids)
+            Z = j_ids[ids][0]
+            G2Prime += Z*np.einsum('ijkl->lik', G2ip0[:, ids, :, :])
+            rG2Prime += Z*np.einsum('ijklm->likm', rG2ip0[:, ids, :, :, :])
 
     else:
         j_ids = atomic_numbers[js]

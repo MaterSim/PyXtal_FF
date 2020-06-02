@@ -151,12 +151,12 @@ class Database():#MutableSequence):
     def compute(self, function, data):
         """ Compute descriptor for one structure to the database. """
 
-        if function['type'] in ['BehlerParrinello', 'SF']:
+        if function['type'] in ['BehlerParrinello', 'ACSF']:
             from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
             d = BehlerParrinello(function['parameters'],
                                  function['Rc'], 
                                  True, True, False).calculate(data['structure'])
-        elif function['type'] == 'AWSF':
+        elif function['type'] in ['wACSF', 'wacsf', 'AWSF']:
             from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
             d = BehlerParrinello(function['parameters'],
                                  function['Rc'], 

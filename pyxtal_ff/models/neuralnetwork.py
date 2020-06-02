@@ -760,25 +760,30 @@ class NeuralNetwork():
         dict
             The ranges of the descriptors for each chemical specie.
         """
-        _DRANGE = {}
-        db = shelve.open(self.path+data)
-        no_of_structures = len(list(db.keys()))
+        if not os.path.exists(self.path+'drange.npy'):
+            _DRANGE = {}
+            db = shelve.open(self.path+data)
+            no_of_structures = len(list(db.keys()))
 
-        for i in range(no_of_structures):
-            dic = db[str(i)]
-            for j, descriptor in enumerate(dic['x']):
-                element = dic['elements'][j]
-                if element not in _DRANGE.keys():
-                    _DRANGE[element] = np.asarray([np.asarray([__, __]) \
-                                      for __ in descriptor])
-                else:
-                    assert len(_DRANGE[element]) == len(descriptor)
-                    for j, des in enumerate(descriptor):
-                        if des < _DRANGE[element][j][0]:
-                            _DRANGE[element][j][0] = des
-                        elif des > _DRANGE[element][j][1]:
-                            _DRANGE[element][j][1] = des
-        db.close()
+            for i in range(no_of_structures):
+                dic = db[str(i)]
+                for j, descriptor in enumerate(dic['x']):
+                    element = dic['elements'][j]
+                    if element not in _DRANGE.keys():
+                        _DRANGE[element] = np.asarray([np.asarray([__, __]) \
+                                          for __ in descriptor])
+                    else:
+                        assert len(_DRANGE[element]) == len(descriptor)
+                        for j, des in enumerate(descriptor):
+                            if des < _DRANGE[element][j][0]:
+                                _DRANGE[element][j][0] = des
+                            elif des > _DRANGE[element][j][1]:
+                                _DRANGE[element][j][1] = des
+            db.close()
+            np.save(self.path+'drange.npy', [_DRANGE])
+
+        else:
+            _DRANGE = np.load(self.path+'drange.npy', allow_pickle=True)[0]
 
         return _DRANGE
 
