@@ -231,23 +231,23 @@ class NeuralNetwork():
                 self.optimizer.step(closure)
 
             elif optimizer['method'] in ['sgd', 'SGD', 'Adam', 'adam', 'ADAM']:
-                if epoch == 0:
-                    print("Initial state : ")
-                    train_loss, E_mae, F_mae, S_mae = 0., 0., 0., 0.
-                    total = 0
-                    for batch in self.data:
-                        total += len(batch)
-                        tl, Emae, Fmae, Smae = self.calculate_loss(self.models, batch)
-                        train_loss += tl * len(batch)
-                        E_mae += Emae * len(batch)
-                        F_mae += Fmae * len(batch)
-                        S_mae += Smae * len(batch)
-                    train_loss /= total
-                    E_mae /= total
-                    F_mae /= total
-                    S_mae /= total
-                    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
-                            format(train_loss, E_mae, F_mae, S_mae))
+                #if epoch == 0:
+                #    print("Initial state : ")
+                #    train_loss, E_mae, F_mae, S_mae = 0., 0., 0., 0.
+                #    total = 0
+                #    for batch in self.data:
+                #        total += len(batch)
+                #        tl, Emae, Fmae, Smae = self.calculate_loss(self.models, batch)
+                #        train_loss += tl * len(batch)
+                #        E_mae += Emae * len(batch)
+                #        F_mae += Fmae * len(batch)
+                #        S_mae += Smae * len(batch)
+                #    train_loss /= total
+                #    E_mae /= total
+                #    F_mae /= total
+                #    S_mae /= total
+                #    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
+                #            format(train_loss, E_mae, F_mae, S_mae))
 
                 print("\nIteration {:4d}: ".format(epoch+1))
                 for batch in self.data:
