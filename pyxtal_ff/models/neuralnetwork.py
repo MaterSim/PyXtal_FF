@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils import data
 import torch.nn.functional as F
 torch.set_default_tensor_type(torch.DoubleTensor)
-
+from random import randint
 import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
@@ -219,37 +219,34 @@ class NeuralNetwork():
         # Run Neural Network Potential Training
         t0 = time.time()
         for epoch in range(self.epoch):
+            print("\nEpoch {:4d}: ".format(epoch+1))
             if optimizer['method'] in ['lbfgs', 'LBFGS', 'lbfgsb']:
-                print("Initial state : ")
-                def closure(): # LBFGS gets loss and its gradient here.
-                    train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, self.data)
-                    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
-                            format(train_loss, E_mae, F_mae, S_mae))
-                    self.optimizer.zero_grad()
-                    train_loss.backward()
-                    return train_loss
-                self.optimizer.step(closure)
+                if self.batch_size is None: #Full batch
+                    print("Initial state : ")
+                    def closure(): # LBFGS gets loss and its gradient here.
+                        train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, self.data)
+                        print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
+                                format(train_loss, E_mae, F_mae, S_mae))
+                        self.optimizer.zero_grad()
+                        train_loss.backward()
+                        return train_loss
+                    self.optimizer.step(closure)
+                else: #mini batch #10 batches, id [0, 9], id=0, 1, 2, 3, 4, self.data[4]
+                    for i, batch in enumerate(self.data):
+                        if i == 0:
+                            def closure(): # LBFGS gets loss and its gradient here.
+                                train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, batch)
+                                print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
+                                    format(train_loss, E_mae, F_mae, S_mae))
+                                self.optimizer.zero_grad()
+                                train_loss.backward() 
+                                return train_loss
+                            self.optimizer.step(closure)
+                            break
+
+
 
             elif optimizer['method'] in ['sgd', 'SGD', 'Adam', 'adam', 'ADAM']:
-                #if epoch == 0:
-                #    print("Initial state : ")
-                #    train_loss, E_mae, F_mae, S_mae = 0., 0., 0., 0.
-                #    total = 0
-                #    for batch in self.data:
-                #        total += len(batch)
-                #        tl, Emae, Fmae, Smae = self.calculate_loss(self.models, batch)
-                #        train_loss += tl * len(batch)
-                #        E_mae += Emae * len(batch)
-                #        F_mae += Fmae * len(batch)
-                #        S_mae += Smae * len(batch)
-                #    train_loss /= total
-                #    E_mae /= total
-                #    F_mae /= total
-                #    S_mae /= total
-                #    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
-                #            format(train_loss, E_mae, F_mae, S_mae))
-
-                print("\nIteration {:4d}: ".format(epoch+1))
                 for batch in self.data:
                     train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, batch)
                     self.optimizer.zero_grad()

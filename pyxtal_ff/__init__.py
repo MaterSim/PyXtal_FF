@@ -5,7 +5,6 @@ from pyxtal_ff.utilities import Database
 from pyxtal_ff.models.polynomialregression import PR
 from pyxtal_ff.models.neuralnetwork import NeuralNetwork
 
-
 class PyXtal_FF():
     def __init__(self, descriptors=None, model=None, logo=True):
         """ PyXtal_FF develops Machine Learning Interatomic Potential.
@@ -320,15 +319,13 @@ class PyXtal_FF():
             if 'method' not in _model['optimizer']:
                 _model['optimizer']['method'] = 'lbfgs'
 
-            # If LBFGS is used, epoch is 1. Also, batch_size = None.
+                # In full batch-LBFGS, epoch is 1. 
             if _model['optimizer']['method'] in ['lbfgs', 'LBFGS', 'lbfgsb']:
-                if 'max_iter' in _model['optimizer']['parameters'].items():
-                    if _model['epoch'] > _model['optimizer']['parameters']['max_iter']:
-                        _model['optimizer']['parameters']['max_iter'] = _model['epoch']
-                else:
+                if _model['batch_size'] is None: #full batch
                     _model['optimizer']['parameters']['max_iter'] = _model['epoch']
-                _model['epoch'] = 1
-                _model['batch_size'] = None
+                    _model['epoch'] = 1
+                else:
+                    _model['optimizer']['parameters']['max_iter'] = 20
 
             self.model = NeuralNetwork(elements=_model['system'],
                                        hiddenlayers=_model['hiddenlayers'],
