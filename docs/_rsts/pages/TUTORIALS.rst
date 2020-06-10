@@ -75,24 +75,20 @@ The ``wACSF`` is also supported. In this case, the number of descriptors will li
 Defining your optimizer
 -----------------------
 
-The optimizer is defined by a dictionary which contains 3 keys: 
+The optimizer is defined by a dictionary which contains 2 keys: 
 
 - ``method`` 
-- ``derivative``
 - ``parameters``
 
 Currently, the ``method`` options are 
 
-- ``L-BFGS-B`` (from ``scipy.optimize.minimize`` [1]_)
-- ``CG`` (from ``scipy.optimize.minimize`` [1]_)
-- ``BFGS`` (from ``scipy.optimize.minimize`` [1]_)
-- ``SGD`` (built-in)
-- ``ADAM`` (built-in)
+- ``L-BFGS-B`` 
+- ``SGD`` 
+- ``ADAM`` 
 
-The ``derivative`` key is optional boolean, which is True by default.
-If False, the chosen method will calculate the numerical approximation of the jacobian, which is useful check if the jacobian from the NN code is correct. However, we advise that one should not set this option as False for the production runs. If ``SGD`` or ``ADAM`` is chosen, ``derivative`` has to be True.
+If ``SGD`` or ``ADAM`` is chosen, the default learning rate is 1e-3.
 Usually, one only needs to specify the ``method``.
-If no optimizer is defined, ``L-BFGS-B`` with a maximum iteration of 100 will be used.
+If no optimizer is defined, ``L-BFGS-B`` will be used.
 
 Setting the NN parameters
 -------------------------
@@ -156,6 +152,5 @@ Finally, one just need to load the defined data, descriptors and NN model to PyX
 .. code-block:: Python
 
     ff = PyXtal_FF(descriptors=descriptor, model=model)
-    ff.run(TrainData=TrainData, TestData=TestData,)
+    ff.run(TrainData=TrainData, TestData=TestData)
 
-.. [1] https://docs.scipy.org/doc/scipy-0.13.0/reference/generated/scipy.optimize.minimize.html
