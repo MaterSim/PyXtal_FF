@@ -28,7 +28,7 @@ class BehlerParrinello:
 
 
         if atom_weighted:
-            self._type = 'AWSF'
+            self._type = 'wACSF'
         else:
             self._type = 'BehlerParrinello'
         
@@ -271,7 +271,7 @@ def calculate_G2(Dij, IDs, atomic_numbers, type_set, Rc, parameters, Gtype):
     results = results.reshape([n1*n2, m])
     
     # Decompose G2 by species
-    if Gtype == 'AWSF':
+    if Gtype == 'wACSF':
         G2 = np.zeros([n1*n2])
         j_ids = atomic_numbers[IDs]
         for id, j_type in enumerate(type_set):
@@ -364,7 +364,7 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
     #    rG2ip0[:,ii_ids,:,i,:] = np.einsum('ijk,il->ijkl', G2ip0[:,ii_ids,:,i], Rij[ii_ids]) #[d,m,3], [m,3],->[d,m,3,3]
     
     # Decompose G2 Prime by species
-    if Gtype == 'AWSF':
+    if Gtype == 'wACSF':
         j_ids = atomic_numbers[IDs]
         G2Prime = np.zeros([N, n1*n2, 3]) # This is the final output
         rG2Prime = np.zeros([N, n1*n2, 3, 3]) # This is the final output
@@ -455,7 +455,7 @@ def calculate_G4(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
     results = results.reshape([n1*n2*n3*n4, jk])
 
     # Decompose G4 by species
-    if Gtype == 'AWSF':
+    if Gtype == 'wACSF':
         G4 = np.zeros([n1*n2*n3*n4])
         jk_ids = atomic_numbers[IDs[jks]]
  
@@ -547,7 +547,7 @@ def calculate_G5(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
     results = results.reshape([n1*n2*n3*n4, jk])
 
     # Decompose G5 by species
-    if Gtype == 'AWSF':
+    if Gtype == 'wACSF':
         G5 = np.zeros([n1*n2*n3*n4])
         jk_ids = atomic_numbers[IDs[jks]]
         for id, jk_type in enumerate(type_set):
@@ -677,7 +677,7 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
         rG4ip0[:,mm,:,k,:] += np.einsum('ij,k->ijk', tmp[:,:,k], rik[mm]+Ri)
 
     # Decompose G4 Prime by species
-    if Gtype == 'AWSF':
+    if Gtype == 'wACSF':
         G4Prime = np.zeros([N, n1*n2*n3*n4, 3])
         rG4Prime = np.zeros([N, n1*n2*n3*n4, 3, 3])
 
@@ -813,7 +813,7 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
         rG5ip0[:,mm,:,k,:] += np.einsum('ij,k->ijk', tmp[:,:,k], rik[mm]+Ri)
 
     # Decompose G4 Prime by species
-    if Gtype == 'AWSF':
+    if Gtype == 'wACSF':
         G5Prime = np.zeros([N, n1*n2*n3*n4, 3])
         rG5Prime = np.zeros([N, n1*n2*n3*n4, 3, 3])
 
