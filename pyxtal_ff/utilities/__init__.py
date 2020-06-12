@@ -72,6 +72,8 @@ class Database():#MutableSequence):
                 fmt = 'json'
             elif structure_file.find('xyz') > 0:
                 fmt = 'xyz'
+            elif structure_file.find('db') > 0:
+                fmt = 'db'
             else:
                 fmt = 'vasp-out'
         
@@ -82,13 +84,15 @@ class Database():#MutableSequence):
                 data = parse_OUTCAR_comp(structure_file)
             elif fmt == 'xyz':
                 data = parse_xyz(structure_file)
+            elif fmt == 'db':
+                data = parse_ase_db(structure_file)
             else:
                 raise NotImplementedError('PyXtal_FF supports only json, vasp-out, and xyz formats')
             print("{:d} structures have been loaded.".format(len(data)))
             
             self.add(function, data)
 
-            if ase_db is not None:
+            if ase_db is not None and fmt != 'db':
                 convert_to_ase_db(data, ase_db)
                 print("save the structures to {:}.".format(ase_db))
 
@@ -154,14 +158,15 @@ class Database():#MutableSequence):
             from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
             d = BehlerParrinello(function['parameters'],
                                  function['Rc'], 
-                                 True, True, True).calculate(data['structure'])
+                                 function['Force'],
+                                 function['stress'], True).calculate(data['structure'])
         
         elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
             from pyxtal_ff.descriptors.bispectrum import SO4_Bispectrum
             d = SO4_Bispectrum(function['parameters']['lmax'],
                                function['Rc'],
-                               derivative=True,
-                               stress=True,
+                               derivative=function['Force'],
+                               stress=function['stress'],
                                normalize_U=function['parameters']['normalize_U']).calculate(data['structure'])
         
         elif function['type'] in ['SO3', 'SOAP', 'soap']:
@@ -169,21 +174,21 @@ class Database():#MutableSequence):
             d = SOAP(function['parameters']['nmax'],
                      function['parameters']['lmax'],
                      function['Rc'],
-                     derivative=True,
-                     stress=True).calculate(data['structure'])
+                     derivative=function['force'],
+                     stress=function['stress']).calculate(data['structure'])
 
         elif function['type'] in ['EAMD', 'eamd']:
             from pyxtal_ff.descriptors.eamd import EAMD
             d = EAMD(function['parameters'],
                      function['Rc'],
-                     True, True).calculate(data['structure'])
+                     function['force'], function['stress']).calculate(data['structure'])
 
         else:
             msg = f"{function['type']} is not implemented"
             raise NotImplementedError(msg)
-        
-        shp = d['rdxdr'].shape
-        d['rdxdr'] = np.einsum('ijklm->iklm', d['rdxdr'])\
+        if d['rdxdr'] is not None:
+            shp = d['rdxdr'].shape
+            d['rdxdr'] = np.einsum('ijklm->iklm', d['rdxdr'])\
             .reshape([shp[0], shp[2], shp[3]*shp[4]])[:, :, [0, 4, 8, 1, 2, 5]]
 
         d['energy'] = np.asarray(data['energy'])
@@ -498,3 +503,35 @@ def convert_to_ase_db(data, db_path='test.db'):
             struc = d['structure']
             d.pop('structure', None)
             db.write(struc, data=d)
+
+def parse_ase_db(db_path, N=None, Random=False):
+    from ase.db import connect
+
+    data = []
+    with connect(db_path) as db:
+        if N is None:
+            N = len(db)
+
+        for i, row in enumerate(db.select()):
+            structure = db.get_atoms(row.id)
+            if "stress" in row.data:
+                stress = row.stress
+            else:
+                stress = None
+
+            if "group" in row.data:
+                group = row.data["group"]
+            else:
+                group = None
+
+            data.append({'structure': structure,
+                         'energy': row.data["dft_energy"], 
+                         'force': row.data["dft_force"],
+                         'group': group,
+                         'stress': stress})
+
+            if i == (N-1):
+                break
+
+    return data
+

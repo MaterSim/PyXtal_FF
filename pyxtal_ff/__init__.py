@@ -15,7 +15,7 @@ class PyXtal_FF():
             The atom-centered descriptors parameters are defined here.
             
             The list of the descriptors keys:
-            - type: str
+            - type: str (SO4)
                 The type of atom-centered descriptors.
                 + ACSF (BehlerParrinello Gaussian symmetry)
                 + wACSF (weighted Gaussian symmetry)
@@ -33,6 +33,10 @@ class PyXtal_FF():
             - ncpu: int
                 The number of cpu core to use for converting crystal structures 
                 into descriptors.
+            - stress: bool (False)
+                Compute rdxdr (needed for stress calculation) or not
+            - force: bool (True)
+                Compute dxdr (needed for force calculation) or not
             - parameters: dict
                 Example,
                 + BehlerParrinello
@@ -141,6 +145,8 @@ class PyXtal_FF():
                              'N_train': None,
                              'N_test': None,
                              'ncpu': 1,
+                             'force': True,
+                             'stress': False,
                              }
         
         # Update the default based on user-defined descriptors
