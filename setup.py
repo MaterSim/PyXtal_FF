@@ -24,7 +24,6 @@ setup(
               'pyxtal_ff.models', 
               'pyxtal_ff.models.optimizers', 
               'pyxtal_ff.utilities'],
-    scripts=['scripts/pyxtal_ff'],
     package_data={'pyxtal_ff.datasets': ['*.json'],
                   'pyxtal_ff.descriptors': ['*.npy'],
                  },
