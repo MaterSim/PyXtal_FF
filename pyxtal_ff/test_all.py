@@ -39,6 +39,7 @@ descriptor = {'type': 'Bispectrum',
               'parameters': parameters,
               'Rc': 3.0,
               'N_train': 10,
+              'stress': True,
               }
 
 descriptor_comp = {'type': 'Bispectrum',

@@ -158,14 +158,14 @@ class Database():#MutableSequence):
             from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
             d = BehlerParrinello(function['parameters'],
                                  function['Rc'], 
-                                 function['Force'],
+                                 function['force'],
                                  function['stress'], True).calculate(data['structure'])
         
         elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
             from pyxtal_ff.descriptors.bispectrum import SO4_Bispectrum
             d = SO4_Bispectrum(function['parameters']['lmax'],
                                function['Rc'],
-                               derivative=function['Force'],
+                               derivative=function['force'],
                                stress=function['stress'],
                                normalize_U=function['parameters']['normalize_U']).calculate(data['structure'])
         

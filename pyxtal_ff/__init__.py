@@ -129,7 +129,7 @@ class PyXtal_FF():
         
         # Checking the keys in descriptors
         descriptors_keywords = ['type', 'Rc', 'N_train', 'N_test', 
-                                'ncpu', 'parameters']
+                                'force', 'stress', 'ncpu', 'parameters']
         if descriptors is not None:
             for key in descriptors.keys():
                 if key not in descriptors_keywords:
