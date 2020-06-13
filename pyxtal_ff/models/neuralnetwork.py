@@ -503,8 +503,8 @@ class NeuralNetwork():
                         for _m in range(n_atoms):
                             ids = np.where(seq[element][:,1]==_m)[0]
                             #seq[element][ids, 0] -= min(seq[element][ids, 0])
-                            tmp[seq[element][ids, 0], _m, :, :] += dxdr[element][ids, :, :]
                             #print(seq[element][ids, 0])
+                            tmp[seq[element][ids, 0], _m, :, :] += dxdr[element][ids, :, :]
                             #import sys
                             #sys.exit()
                         _force -= torch.einsum("ik, ijkl->jl", dedx[element], tmp) # [N, L] [N, L, 3] -> 3
@@ -876,6 +876,15 @@ class NeuralNetwork():
                             d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
                             d['rdxdr'][element] += torch.from_numpy(0.529177 * dess)
                     d['seq'][element][:, 0] -= min(d['seq'][element][:, 0]) #adjust the initial position
+                    #print(d['seq'][element].shape, min(d['seq'][element][:,0]), max(d['seq'][element][:,0]))
+
+                #    print(descriptor['seq'].shape)
+                #    print(d['seq'][element].shape)
+                #    print(d['x'][element].shape)
+                #    print(d['dxdr'][element].shape)
+                #    print(d['rdxdr'][element].shape)
+                #import sys
+                #sys.exit()
                 
                 db2[str(i)] = d
                 

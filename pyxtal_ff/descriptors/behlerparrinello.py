@@ -176,7 +176,7 @@ class BehlerParrinello:
                         if self.stress:
                             rGiPrime = rG2iP
                     else:
-                        GiPrime_seq = np.append(GiPrime_seq, seq, axis=1)
+                        GiPrime_seq = np.append(GiPrime_seq, seq, axis=0)
                         GiPrime = np.append(GiPrime, G2iP, axis=1)
                         if self.stress:
                             rGiPrime = np.append(rGiPrime, rG2iP, axis=1)
@@ -196,10 +196,13 @@ class BehlerParrinello:
                         if self.stress:
                             rGiPrime = rG4iP
                     else:
-                        GiPrime_seq = np.append(GiPrime_seq, seq, axis=1)
+                        #GiPrime_seq = np.append(GiPrime_seq, seq, axis=0)
                         GiPrime = np.append(GiPrime, G4iP, axis=1)
                         if self.stress:
                             rGiPrime = np.append(rGiPrime, rG4iP, axis=1)
+                #print(seq.shape, G4iP.shape, rG4iP.shape)
+                #print(GiPrime_seq.shape, GiPrime.shape, rGiPrime.shape)
+ 
 
             if self.G5_parameters is not None:
                 G5i = calculate_G5(Rij, IDs, jks, atomic_numbers, type_set2,
@@ -216,7 +219,7 @@ class BehlerParrinello:
                         if self.stress:
                             rGiPrime = rG5iP
                     else:
-                        GiPrime_seq = np.append(GiPrime_seq, seq, axis=1)
+                        GiPrime_seq = np.append(GiPrime_seq, seq, axis=0)
                         GiPrime = np.append(GiPrime, G5iP, axis=1)
                         if self.stress:
                             rGiPrime = np.append(rGiPrime, rG5iP, axis=1)
