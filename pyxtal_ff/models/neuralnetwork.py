@@ -494,11 +494,19 @@ class NeuralNetwork():
                         #_force += -1 * torch.einsum("ik, ijkl -> jl", 
                         #                        dedx[element], dxdr[element]) # [natoms, 3]
                         #dxdr = torch.zeros([N, N, L, 3])
+                        
+                        # 1 loop
+                        #for _m in range(n_atoms):
+                        #    tmp = torch.zeros([n_atoms, x[element].shape[1], 3])
+                        #    ids = np.where(seq[element][:,1]==_m)[0]
+                        #    tmp[seq[element][ids, 0], :, :] += dxdr[element][ids, :, :]
+                        #    _force[_m, :] -= torch.einsum("ij, ijk->k", dedx[element], tmp) # [N, L] [N, L, 3] -> 3
+
+                        tmp = torch.zeros([n_atoms, n_atoms, x[element].shape[1], 3])
                         for _m in range(n_atoms):
-                             #tmp = torch.zeros([n_atoms, x[element].shape[1], 3])
-                             ids = np.where(seq[element][:,1]==_m)[0]
-                             tmp = dxdr[element][ids, :, :]
-                             _force[_m, :] -= torch.einsum("ij, ijk->k", dedx[element], tmp) # [N, L] [N, L, 3] -> 3
+                            ids = np.where(seq[element][:,1]==_m)[0]
+                            tmp[_m, seq[element][ids, 0], :, :] += dxdr[element][ids, :, :]
+                        _force -= torch.einsum("ik, ijkl->jl", dedx[element], tmp) # [N, L] [N, L, 3] -> 3
 
                     if self.stress_coefficient and (group in self.stress_group):
                         if self.force_coefficient is None:

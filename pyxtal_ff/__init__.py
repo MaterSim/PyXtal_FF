@@ -146,7 +146,7 @@ class PyXtal_FF():
                              'N_test': None,
                              'ncpu': 1,
                              'force': True,
-                             'stress': False,
+                             'stress': True,
                              }
         
         # Update the default based on user-defined descriptors

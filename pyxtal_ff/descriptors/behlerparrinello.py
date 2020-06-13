@@ -364,8 +364,8 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
     term_1_and_2 = term_1_and_2.reshape([n1*n2, m])
 
     dRij_dRm = np.zeros([m, 3, N1])
-    for mm in unique_js:
-        mm_list = mm * np.ones([m, 1], dtype=int)
+    for mm, _m in enumerate(unique_js):
+        mm_list = _m * np.ones([m, 1], dtype=int)
         dRij_dRm[:,:,mm] = dRij_dRm_norm(Rij, np.hstack((ij_list, mm_list)))
     
     # [d, m, 3, N1]
@@ -1002,8 +1002,9 @@ def dRijk_dRm(Rij, Rik, Rjk, ijk_list, m):
     ik_list = ijk_list[:,[0,2]]
     jk_list = ijk_list[:,[1,2]]
     
-    for mm in m:
-        mm_list = mm * np.ones([len(Rij), 1], dtype=int)
+    #for mm in m:
+    for mm, _m in enumerate(m):
+        mm_list = _m * np.ones([len(Rij), 1], dtype=int)
         dRij_dRm[:,:,mm] = dRij_dRm_norm(Rij, np.append(ij_list, mm_list, 
                                          axis=1))
         dRik_dRm[:,:,mm] = dRij_dRm_norm(Rik, np.append(ik_list, mm_list, 
