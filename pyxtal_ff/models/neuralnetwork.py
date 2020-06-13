@@ -311,7 +311,7 @@ class NeuralNetwork():
                         #     tmp = _dxdr[ids, :, :]
                         #     _Force[_m, :] -= torch.einsum("ij, ijk->k", dedx, tmp) # [N, L] [N, L, 3] -> 3
 
-                        tmp = torch.zeros([n_atoms, n_atoms, value['x'][element].shape[1], 3])
+                        tmp = torch.zeros([len(value['x'][element]), n_atoms, value['x'][element].shape[1], 3])
                         for _m in range(n_atoms):
                             ids = np.where(value['seq'][element][:,1]==_m)[0]
                             tmp[value['seq'][element][ids, 0], _m, :, :] += _dxdr[ids, :, :]
@@ -495,22 +495,18 @@ class NeuralNetwork():
 
                     if self.force_coefficient:
                         dedx[element] = torch.autograd.grad(_energy, _x, create_graph=True)[0]
-                        # new way to compute the force
                         #_force += -1 * torch.einsum("ik, ijkl -> jl", 
                         #                        dedx[element], dxdr[element]) # [natoms, 3]
-                        #dxdr = torch.zeros([N, N, L, 3])
-                        
-                        # 1 loop
-                        #for _m in range(n_atoms):
-                        #    tmp = torch.zeros([n_atoms, x[element].shape[1], 3])
-                        #    ids = np.where(seq[element][:,1]==_m)[0]
-                        #    tmp[seq[element][ids, 0], :, :] += dxdr[element][ids, :, :]
-                        #    _force[_m, :] -= torch.einsum("ij, ijk->k", dedx[element], tmp) # [N, L] [N, L, 3] -> 3
+                        # new way to compute the force
 
-                        tmp = torch.zeros([n_atoms, n_atoms, x[element].shape[1], 3])
+                        tmp = torch.zeros([len(x[element]), n_atoms, x[element].shape[1], 3])
                         for _m in range(n_atoms):
                             ids = np.where(seq[element][:,1]==_m)[0]
+                            #seq[element][ids, 0] -= min(seq[element][ids, 0])
                             tmp[seq[element][ids, 0], _m, :, :] += dxdr[element][ids, :, :]
+                            #print(seq[element][ids, 0])
+                            #import sys
+                            #sys.exit()
                         _force -= torch.einsum("ik, ijkl->jl", dedx[element], tmp) # [N, L] [N, L, 3] -> 3
 
                     if self.stress_coefficient and (group in self.stress_group):
@@ -879,6 +875,7 @@ class NeuralNetwork():
                         else:
                             d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
                             d['rdxdr'][element] += torch.from_numpy(0.529177 * dess)
+                    d['seq'][element][:, 0] -= min(d['seq'][element][:, 0]) #adjust the initial position
                 
                 db2[str(i)] = d
                 
