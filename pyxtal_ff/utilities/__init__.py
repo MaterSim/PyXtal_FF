@@ -153,7 +153,8 @@ class Database():#MutableSequence):
             from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
             d = BehlerParrinello(function['parameters'],
                                  function['Rc'], 
-                                 True, True, False).calculate(data['structure'])
+                                 function['force'],
+                                 function['stress'], False).calculate(data['structure'])
         elif function['type'] in ['wACSF', 'wacsf', 'AWSF']:
             from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
             d = BehlerParrinello(function['parameters'],
