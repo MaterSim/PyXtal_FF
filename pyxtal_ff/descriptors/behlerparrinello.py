@@ -678,7 +678,7 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, dRij_dRm) + \
                np.einsum('i,ijk->ijk', R1ik0, dRik_dRm) + \
                np.einsum('i,ijk->ijk', R1jk0, dRjk_dRm) 
-    dcos = dcosijk_dRm(rij, rik, ijk_list, dRij_dRm, dRik_dRm)
+    dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, dRij_dRm, dRik_dRm)
     dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, dcos) # n4*n3*3*m1*N1
     dcos = np.broadcast_to(dcos, (n2,)+(n4,n3,jk,3,N1))
     dcos = np.transpose(dcos, (1,2,0,3,4,5))
@@ -910,7 +910,7 @@ def dRij_dRm_norm(Rij, ijm_list):
     return dRij_m
 
 
-def dcosijk_dRm(Rij, Rik, ijk_list, dRij_dRm, dRik_dRm):
+def dcosijk_dRm(Rij, Rik, ijk_list, m_list, dRij_dRm, dRik_dRm):
     """Calculate the derivative of cosine_ijk function w. r. t. atom m.
     m must belong to one of the ijks. Otherwise, the derivative is zero.
     If the input Rij and Rik are (j*k)*3 dimensions, the output will be 
@@ -937,8 +937,10 @@ def dcosijk_dRm(Rij, Rik, ijk_list, dRij_dRm, dRik_dRm):
     ik_list = ijk_list[:,[0,2]]
     dcos = np.zeros([len(Rij), 3, m])
 
-    for mm in range(m):
-        mm_list = mm * np.ones([len(Rij), 1], dtype=int)
+    #for mm in range(m):
+    for mm, _m in enumerate(m_list):
+        mm_list = _m * np.ones([len(Rij), 1], dtype=int)
+        #mm_list = mm * np.ones([len(Rij), 1], dtype=int)
         dRij_dRm_v = dRij_dRm_vector(np.append(ij_list, mm_list, axis=1))
         dRik_dRm_v = dRij_dRm_vector(np.append(ik_list, mm_list, axis=1))
         term10 = np.einsum('i,ij->ij', rDijDik, Rik) # jk*3 arrray

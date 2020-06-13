@@ -11,6 +11,7 @@ from torch.utils import data
 import torch.nn.functional as F
 torch.set_default_tensor_type(torch.DoubleTensor)
 from random import randint
+from copy import deepcopy
 import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
@@ -502,11 +503,7 @@ class NeuralNetwork():
                         tmp = torch.zeros([len(x[element]), n_atoms, x[element].shape[1], 3])
                         for _m in range(n_atoms):
                             ids = np.where(seq[element][:,1]==_m)[0]
-                            #seq[element][ids, 0] -= min(seq[element][ids, 0])
-                            #print(seq[element][ids, 0])
                             tmp[seq[element][ids, 0], _m, :, :] += dxdr[element][ids, :, :]
-                            #import sys
-                            #sys.exit()
                         _force -= torch.einsum("ik, ijkl->jl", dedx[element], tmp) # [N, L] [N, L, 3] -> 3
 
                     if self.stress_coefficient and (group in self.stress_group):
@@ -856,7 +853,7 @@ class NeuralNetwork():
 
                     d['x'][element] = torch.zeros([i_size, self.no_of_descriptors], dtype=torch.float64)
                     d['dxdr'][element] = torch.zeros([m_size, self.no_of_descriptors, 3], dtype=torch.float64) ####
-                    d['seq'][element] = torch.zeros([m_size, 2], dtype=torch.int8) ####
+                    #d['seq'][element] = torch.zeros([m_size, 2], dtype=torch.int8) ####
                     d['rdxdr'][element] = torch.zeros([i_size, self.no_of_descriptors, 6], dtype=torch.float64)
 
                     #print('ee0:', ee0, 'ee1:', ee1)
@@ -867,7 +864,7 @@ class NeuralNetwork():
                         desp = np.einsum('j,ijk->ijk', scale, descriptor['dxdr'][ee0:ee1+1])
 
                         d['x'][element] += torch.from_numpy(des)
-                        d['seq'][element] = descriptor['seq'][ee0:ee1+1]
+                        d['seq'][element] = deepcopy(descriptor['seq'][ee0:ee1+1])
 
                         if unit == 'eV':
                             d['dxdr'][element] += torch.from_numpy(desp)
@@ -877,12 +874,15 @@ class NeuralNetwork():
                             d['rdxdr'][element] += torch.from_numpy(0.529177 * dess)
                     d['seq'][element][:, 0] -= min(d['seq'][element][:, 0]) #adjust the initial position
                     #print(d['seq'][element].shape, min(d['seq'][element][:,0]), max(d['seq'][element][:,0]))
-
-                #    print(descriptor['seq'].shape)
-                #    print(d['seq'][element].shape)
-                #    print(d['x'][element].shape)
-                #    print(d['dxdr'][element].shape)
-                #    print(d['rdxdr'][element].shape)
+                    #ids = np.where(d['seq'][element][:,1]==0)[0]
+                    #print(element, descriptor['seq'].shape, ee0, ee1, descriptor['seq'][ee0], descriptor['seq'][ee1])
+                    #print(d['seq'][element][ids, 0])
+                    #print(descriptor['seq'])
+ 
+                    #print(d['seq'][element].shape)
+                    #print(d['x'][element].shape)
+                    #print(d['dxdr'][element].shape)
+                    #print(d['rdxdr'][element].shape)
                 #import sys
                 #sys.exit()
                 
