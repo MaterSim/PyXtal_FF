@@ -187,9 +187,15 @@ class Database():#MutableSequence):
             msg = f"{function['type']} is not implemented"
             raise NotImplementedError(msg)
         if d['rdxdr'] is not None:
-            shp = d['rdxdr'].shape
-            d['rdxdr'] = np.einsum('ijklm->iklm', d['rdxdr'])\
-            .reshape([shp[0], shp[2], shp[3]*shp[4]])[:, :, [0, 4, 8, 1, 2, 5]]
+            N = d['x'].shape[0]
+            L = d['x'].shape[1]
+            rdxdr = np.zeros([N, L, 3, 3])
+            for _m in range(N):
+                ids = np.where(d['seq'][:,1]==_m)[0]
+                rdxdr[_m, :, :, :] += np.einsum('ijkl->jkl', d['rdxdr'][ids, :, :, :])
+            d['rdxdr'] = rdxdr.reshape([N, L, 9])[:, :, [0, 4, 8, 1, 2, 5]]
+            #d['rdxdr'] = np.einsum('ijklm->iklm', d['rdxdr'])\
+            #.reshape([shp[0], shp[2], shp[3]*shp[4]])[:, :, [0, 4, 8, 1, 2, 5]]  #need to change
 
         d['energy'] = np.asarray(data['energy'])
         d['force'] = np.asarray(data['force'])

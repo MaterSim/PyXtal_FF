@@ -233,7 +233,7 @@ class PyXtal_FF():
 
             # Calculate descriptors.
             self._descriptors.update({'N': self._descriptors['N_train']})
-            if not os.path.exists(self.path+'Train_db.dat'):
+            if not os.path.exists(self.path+'Train_db.dat') and not os.path.exists(self.path+'Train_db.db'):
                 trainDB = Database(name=self.path+'Train_db')
                 trainDB.store(TrainData, self._descriptors, True, self.path+'ase.db')
             else:
