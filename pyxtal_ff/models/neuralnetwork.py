@@ -305,12 +305,17 @@ class NeuralNetwork():
                         dedx = torch.autograd.grad(_e, _x)[0]
                         _dxdr = value['dxdr'][element]
                         #_Force += -1 * torch.einsum("ik, ijkl->jl", dedx, _dxdr)
-                        for _m in range(n_atoms):
-                             #tmp = torch.zeros([n_atoms, x[element].shape[1], 3])
-                             ids = np.where(value['seq'][element][:,1]==_m)[0]
-                             tmp = _dxdr[ids, :, :]
-                             _Force[_m, :] -= torch.einsum("ij, ijk->k", dedx, tmp) # [N, L] [N, L, 3] -> 3
+                        #for _m in range(n_atoms):
+                        #     #tmp = torch.zeros([n_atoms, x[element].shape[1], 3])
+                        #     ids = np.where(value['seq'][element][:,1]==_m)[0]
+                        #     tmp = _dxdr[ids, :, :]
+                        #     _Force[_m, :] -= torch.einsum("ij, ijk->k", dedx, tmp) # [N, L] [N, L, 3] -> 3
 
+                        tmp = torch.zeros([n_atoms, n_atoms, value['x'][element].shape[1], 3])
+                        for _m in range(n_atoms):
+                            ids = np.where(value['seq'][element][:,1]==_m)[0]
+                            tmp[value['seq'][element][ids, 0], _m, :, :] += _dxdr[ids, :, :]
+                        _Force -= torch.einsum("ik, ijkl->jl", dedx, tmp) # [N, L] [N, L, 3] -> 3
 
                     if self.stress_coefficient and (data2['group'] in self.stress_group):
                         if self.force_coefficient is None:
@@ -505,7 +510,7 @@ class NeuralNetwork():
                         tmp = torch.zeros([n_atoms, n_atoms, x[element].shape[1], 3])
                         for _m in range(n_atoms):
                             ids = np.where(seq[element][:,1]==_m)[0]
-                            tmp[_m, seq[element][ids, 0], :, :] += dxdr[element][ids, :, :]
+                            tmp[seq[element][ids, 0], _m, :, :] += dxdr[element][ids, :, :]
                         _force -= torch.einsum("ik, ijkl->jl", dedx[element], tmp) # [N, L] [N, L, 3] -> 3
 
                     if self.stress_coefficient and (group in self.stress_group):
