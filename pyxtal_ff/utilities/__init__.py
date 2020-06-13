@@ -192,7 +192,7 @@ class Database():#MutableSequence):
             L = d['x'].shape[1]
             rdxdr = np.zeros([N, L, 3, 3])
             for _m in range(N):
-                ids = np.where(d['seq'][:,1]==_m)[0]
+                ids = np.where(d['seq'][:,0]==_m)[0]
                 rdxdr[_m, :, :, :] += np.einsum('ijkl->jkl', d['rdxdr'][ids, :, :, :])
             d['rdxdr'] = rdxdr.reshape([N, L, 9])[:, :, [0, 4, 8, 1, 2, 5]]
             #d['rdxdr'] = np.einsum('ijklm->iklm', d['rdxdr'])\
