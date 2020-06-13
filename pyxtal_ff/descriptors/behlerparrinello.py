@@ -823,11 +823,11 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     g51 = np.einsum('i,ijklm->ijklm', powers, g51) # n4*n3*n2*n1*m1
     
     lamBda_zeta = np.einsum('i,j->ij', zetas, lamBdas) # n4*n3
-    (dRij_dRm, dRik_dRm, dRjk_dRm) = dRijk_dRm(rij, rik, rjk, ijk_list, unique_js ) # m1*3*N1
+    (dRij_dRm, dRik_dRm, dRjk_dRm) = dRijk_dRm(rij, rik, rjk, ijk_list, unique_js) # m1*3*N1
     Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, dRij_dRm) + \
                np.einsum('i,ijk->ijk', R1ik0, dRik_dRm)
                #np.einsum('i,ijk->ijk', R1jk0, dRjk_dRm) 
-    dcos = dcosijk_dRm(rij, rik, ijk_list, dRij_dRm, dRik_dRm)
+    dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, dRij_dRm, dRik_dRm)
     dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, dcos) # n4*n3*3*m1*N1
     dcos = np.broadcast_to(dcos, (n2,)+(n4,n3,jk,3,N1))
     dcos = np.transpose(dcos, (1,2,0,3,4,5))
