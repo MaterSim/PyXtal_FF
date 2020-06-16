@@ -363,6 +363,8 @@ def dRij_dRm_norm(Rij, ijm_list):
     dRij_m[l1, :] = -Rij[l1]/R1ij[l1]
     l2 = (ijm_list[:,2]==ijm_list[:,1])
     dRij_m[l2, :] = Rij[l2]/R1ij[l2]
+    l3 = (ijm_list[:,0]==ijm_list[:,1])
+    dRij_m[l3, :] = 0
     
     return dRij_m
 
