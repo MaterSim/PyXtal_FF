@@ -692,8 +692,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                             Rj[2] = z + Ri[2]
 
                             for k in range(numps):
-                                if i != j:
-                                    pstress[I, I, k] += np.outer(Ri, tempdp[k])
+                                pstress[I, I, k] += np.outer(Ri, tempdp[k])
                                 pstress[I, J, k] -= np.outer(Rj, tempdp[k])
 
 
@@ -754,8 +753,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     Rj[2] = z + Ri[2]
 
                     for k in range(numps):
-                        if i != j:
-                            pstress[I, I, k] += np.outer(Ri, tempdp[k])
+                        pstress[I, I, k] += np.outer(Ri, tempdp[k])
                         pstress[I, J, k] -= np.outer(Rj, tempdp[k])
 
         else:
@@ -961,6 +959,6 @@ if  __name__ == "__main__":
 
     #print(x['rdxdr'].shape)
     #print(x['rdxdr'])
-    #print(np.einsum('ijklm->klm', x['rdxdr']))
-    print(x['x'])
+    print(np.einsum('ijklm->klm', x['rdxdr']))
+    #print(x['x'])
     #print(x['dxdr'])
