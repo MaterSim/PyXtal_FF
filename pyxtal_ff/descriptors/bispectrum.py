@@ -106,7 +106,7 @@ class SO4_Bispectrum:
                 delattr(self, attr)
         return
 
-    def calculate(self, atoms, backend='ase'):
+    def calculate(self, atoms):
         '''
         args:
             atoms:  ASE atoms object for the corresponding structure
@@ -116,12 +116,11 @@ class SO4_Bispectrum:
         object
         '''
         self._atoms = atoms
-        self._backend = backend
         vol = atoms.get_volume()
         self.build_neighbor_list()
         self.initialize_arrays()
 
-        get_bispectrum_components(self.center_atoms,self.neighborlist, self.neighbor_indices,
+        get_bispectrum_components(self.center_atoms,self.neighborlist, self.seq,
                                   self.atomic_numbers, self.site_atomic_numbers,
                                   self._twol, self.rcut, self._norm, self.derivative,
                                   self.stress, self._blist, self._dblist, self._bstress)
@@ -151,87 +150,65 @@ class SO4_Bispectrum:
         Builds a neighborlist for the calculation of bispectrum components for
         a given ASE atoms object given in the calculate method.
         '''
-        if self._backend == 'ase':
-            atoms = self._atoms
-            # cutoffs for each atom
-            cutoffs = [self.rcut/2]*len(atoms)
-            # instantiate neighborlist calculator
-            nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
-            # provide atoms object to neighborlist calculator
-            nl.update(atoms)
-            # instantiate memory for neighbor separation vectors, periodic indices, and atomic numbers
-            center_atoms = np.zeros((len(atoms), 3), dtype=np.float64)
-            neighbors = []
-            neighbor_indices = []
-            atomic_numbers = []
+        atoms = self._atoms
+        cutoffs = [self.rcut/2]*len(atoms)
+        nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
+        nl.update(atoms)
+        center_atoms = np.zeros((len(atoms),3), dtype=np.float64)
+        neighbors = []
+        neighbor_indices = []
+        atomic_numbers = []
 
-            max_len = 0
-            for i in range(len(atoms)):
-                # get center atom position
-                center_atom = atoms.positions[i]
-                center_atoms[i] = center_atom
-                # get indices and cell offsets of each neighbor
-                indices, offsets = nl.get_neighbors(i)
-                # add an empty list to neighbors and atomic numbers for population
-                neighbors.append([])
-                atomic_numbers.append([])
-                # the indices are already numpy arrays so just append as is
-                neighbor_indices.append(indices)
-                for j, offset in zip(indices, offsets):
-                    # compute separation vector
-                    pos = atoms.positions[j] + np.dot(offset, atoms.get_cell()) - center_atom
-                    neighbors[i].append(pos)
-                    atomic_numbers[i].append(atoms[j].number)
+        for i in range(len(atoms)):
+            # get center atom position
+            center_atom = atoms.positions[i]
+            center_atoms[i] = center_atom
+            # get indices and cell offsets of each neighbor
+            indices, offsets = nl.get_neighbors(i)
+            # add an empty list to neighbors and atomic numbers for population
+            neighbors.append([])
+            atomic_numbers.append([])
+            # the indices are already numpy arrays so just append as is
+            neighbor_indices.append(indices)
+            for j, offset in zip(indices, offsets):
+                # compute separation vector
+                pos = atoms.positions[j] + np.dot(offset, atoms.get_cell()) - center_atom
+                neighbors[i].append(pos)
+                atomic_numbers[i].append(atoms[j].number)
 
-                if len(neighbors[i]) > max_len:
-                    max_len = len(neighbors[i])
+        Neighbors = []
+        Atomic_numbers = []
+        Seq = []
+        max_len = 0
+        for i in range(len(atoms)):
+            unique_atoms = np.unique(neighbor_indices[i])
+            for j in unique_atoms:
+                Seq.append([i,j])
+                neigh_locs = neighbor_indices[i] == j
+                temp_neighs = np.array(neighbors[i])
+                temp_ANs = np.array(atomic_numbers[i])
+                Neighbors.append(temp_neighs[neigh_locs])
+                Atomic_numbers .append(temp_ANs[neigh_locs])
+                length = sum(neigh_locs)
+                if length > max_len:
+                    max_len = length
 
-            # declare arrays to store the separation vectors, neighbor indices
-            # atomic numbers of each neighbor, and the atomic numbers of each
-            # site
-            neighborlist = np.zeros((len(atoms), max_len, 3), dtype=np.float64)
-            neighbor_inds = np.zeros((len(atoms), max_len), dtype=np.int64)
-            atm_nums = np.zeros((len(atoms), max_len), dtype=np.int64)
-            site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.int64)
-
-            # populate the arrays with list elements
-            for i in range(len(atoms)):
-                neighborlist[i, :len(neighbors[i]), :] = neighbors[i]
-                neighbor_inds[i, :len(neighbors[i])] = neighbor_indices[i]
-                atm_nums[i, :len(neighbors[i])] = atomic_numbers[i]
+        neighborlist = np.zeros((len(Neighbors), max_len, 3), dtype=np.float64)
+        Seq = np.array(Seq, dtype=np.int64)
+        atm_nums = np.zeros((len(Neighbors), max_len), dtype=np.int64)
+        site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.int64)
 
 
-        elif self._backend == 'pymatgen':
-            from pymatgen.io.ase import AseAtomsAdaptor
-            struc = AseAtomsAdaptor.get_structure(self._atoms)
-            neighbors = struc.get_all_neighbors(self._rcut, include_index=True)
+        for i in range(len(Neighbors)):
+            neighborlist[i, :len(Neighbors[i]), :] = Neighbors[i]
+            atm_nums[i, :len(Neighbors[i])] = Atomic_numbers[i]
 
-            max_len = 0
-            for i, neighlist in enumerate(neighbors):
-                if len(neighlist) > max_len:
-                    max_len = len(neighlist)
 
-            center_atoms = np.zeros((len(struc), 3), dtype=np.float64)
-            neighborlist = np.zeros((len(struc), max_len, 3), dtype=np.float64)
-            neighbor_inds = np.zeros((len(struc), max_len), dtype=np.int64)
-            atm_nums = np.zeros((len(struc), max_len), dtype=np.int64)
-            site_atomic_numbers = np.zeros(len(struc), dtype=np.int64)
-
-            for i, site in enumerate(struc):
-                neighlist = neighbors[i]
-                site_atomic_numbers[i] = site.specie.number
-                center_atoms[i] = site.coords
-                for j, neighbor in enumerate(neighlist):
-                    neighborlist[i, j, :] = neighbor[0].coords - site.coords
-                    neighbor_inds[i, j] = neighbor[2]
-                    atm_nums[i, j] = neighbor[0].specie.number
-
-        else: raise NotImplementedError('Specified backend not supported')
 
         # assign these arrays to attributes
         self.center_atoms = center_atoms
         self.neighborlist = neighborlist
-        self.neighbor_indices = neighbor_inds
+        self.seq = Seq
         self.atomic_numbers = atm_nums
         self.site_atomic_numbers = site_atomic_numbers
 
@@ -250,7 +227,7 @@ class SO4_Bispectrum:
         ncoefs = round(int((lmax+1)*(lmax+2)*(lmax+1.5)//3))
         # allocate memory for the bispectrum and its derivative
         self._blist = np.zeros([ncell, ncoefs], dtype=np.complex128)
-        self._dblist = np.zeros([ncell, ncell, ncoefs, 3], dtype=np.complex128)
+        self._dblist = np.zeros([len(self.seq), ncoefs, 3], dtype=np.complex128)
         self._bstress = np.zeros([ncell, ncell, ncoefs, 3, 3], dtype=np.complex128)
         return
 
@@ -914,9 +891,9 @@ def zero_3d(arr):
     return
 
 @nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8[:], nb.i8, nb.f8,
-                 nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:,:], nb.c16[:,:,:,:,:]),
+                 nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:,:]),
          cache=True, fastmath=True, nogil=True)
-def get_bispectrum_components(center_atoms, neighborlist, neighbor_indices, neighbor_ANs, site_ANs,
+def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, site_ANs,
                               twolmax, rcut, norm, derivative, stress, blist, dblist, bstress):
     '''
     Calculate the bispectrum components, and their derivatives (if specified)
@@ -1056,7 +1033,7 @@ def get_bispectrum_components(center_atoms, neighborlist, neighbor_indices, neig
 
 
     # calculate bispectrum components
-    nsites = neighborlist.shape[0]
+    npairs = neighborlist.shape[0]
     nneighbors = neighborlist.shape[1]
 
     ulisttot = np.zeros((idxu_count, 1), dtype=np.complex128)
@@ -1067,21 +1044,302 @@ def get_bispectrum_components(center_atoms, neighborlist, neighbor_indices, neig
     Rj = np.zeros(3, dtype=np.float64)
 
     if derivative == True:
+        if stress == True:
+            isite = seq[0,0]
+            nstart = 0
+            nsite = 0 # 0,0
+            for n in range(npairs):
+                i, j = seq[n]
+                # talk to Qiang about potential issue here
+                # when there are neighborlists where there
+                # are no i-i atom pairs
+                if i == j:
+                    nsite = n
+                weight = neighbor_ANs[n,0]
 
-        for site in range(nsites):
-            zero_1d(ulisttot)
-            zero_1d(zlist)
-            zero_3d(dulist)
-            addself_uarraytot(twolmax, idxu_block, ulisttot)
-            # multiply center atom atomic number to contribution
-            ulisttot *= site_ANs[site]
+                if i != isite:
+                    zero_1d(ulist)
+                    addself_uarraytot(twolmax, idxu_block, ulist)
+                    ulist *= site_ANs[isite]
+                    ulisttot += ulist
+                    ulisttot *= u_norm
+                    compute_zi(idxz_count, idxz, cglist, idxcg_block, idxu_block,
+                               ulisttot, zlist)
+                    compute_bi(ncoefs, idxb, idxz_block, idxu_block, ulisttot, zlist,
+                               blist[isite])
+                    for N in range(nstart, n, 1):
+                        I, J = seq[N]
+                        Ri = center_atoms[I]
+                        Weight = neighbor_ANs[N,0]
+                        zero_3d(dulist)
+                        for neighbor in prange(nneighbors):
+                            x = neighborlist[N, neighbor, 0]
+                            y = neighborlist[N, neighbor, 1]
+                            z = neighborlist[N, neighbor, 2]
+                            r = np.sqrt(x*x + y*y + z*z)
+                            if r < 10**(-8):
+                                continue
+                            psi = np.pi*r/rcut
+                            zero_1d(ulist)
+                            compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
+                                                         dulist[neighbor], idxu_block)
+
+                            dudr(x,y,z,r,rcut,ulist,dulist[neighbor])
+
+                            dulist[neighbor] *= Weight
+                            dulist[neighbor] *= u_norm
+
+                            zero_2d(tempdb)
+
+                            compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
+                                           zlist, tempdb)
+
+                            dblist[N] += tempdb
+                            if I != J:
+                                dblist[nsite] -= tempdb
+
+                            Rj[0] = x + Ri[0]
+                            Rj[1] = y + Ri[1]
+                            Rj[2] = z + Ri[2]
+
+                            for k in range(idxb_count):
+                                bstress[I,I,k] += np.outer(Ri, tempdb[k])
+                                bstress[I,J,k] -= np.outer(Rj, tempdb[k])
+
+                    isite = i
+                    nstart = n
+                    zero_1d(ulisttot)
+                    zero_1d(zlist)
+                    zero_3d(dulist)
+                # end if i != isite
+
+
+                for neighbor in prange(nneighbors):
+                    # get components of separation vector and its magnitude
+                    # this is also the axis of rotation
+                    x = neighborlist[n, neighbor, 0]
+                    y = neighborlist[n, neighbor, 1]
+                    z = neighborlist[n, neighbor, 2]
+                    r = np.sqrt(x*x + y*y + z*z)
+                    if r < 10**(-8):
+                        continue
+                    # angle of rotation
+                    psi = np.pi*r/rcut
+                    # populate ulist and dulist with Wigner U functions
+                    # and derivatives
+                    zero_1d(ulist)
+                    compute_uarray_polynomial(x, y, z, psi, r, twolmax, ulist,
+                                                 idxu_block)
+
+
+                    ulist *= weight
+
+                    add_uarraytot(r, rcut, ulisttot, ulist)
+
+            zero_1d(ulist)
+            addself_uarraytot(twolmax, idxu_block, ulist)
+            ulist *= site_ANs[isite]
+            ulisttot += ulist
+            ulisttot *= u_norm
+            compute_zi(idxz_count, idxz, cglist, idxcg_block, idxu_block,
+                       ulisttot, zlist)
+            compute_bi(ncoefs, idxb, idxz_block, idxu_block, ulisttot, zlist,
+                       blist[isite])
+            for N in range(nstart, npairs, 1):
+                I, J = seq[N]
+                Ri = center_atoms[I]
+                Weight = neighbor_ANs[N,0]
+                zero_3d(dulist)
+                for neighbor in prange(nneighbors):
+                    x = neighborlist[N, neighbor, 0]
+                    y = neighborlist[N, neighbor, 1]
+                    z = neighborlist[N, neighbor, 2]
+                    r = np.sqrt(x*x + y*y + z*z)
+                    if r < 10**(-8):
+                        continue
+                    psi = np.pi*r/rcut
+                    zero_1d(ulist)
+                    compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
+                                                 dulist[neighbor], idxu_block)
+
+                    dudr(x,y,z,r,rcut,ulist,dulist[neighbor])
+
+                    dulist[neighbor] *= Weight
+                    dulist[neighbor] *= u_norm
+
+                    zero_2d(tempdb)
+
+                    compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
+                                   zlist, tempdb)
+
+                    dblist[N] += tempdb
+                    if I != J:
+                        dblist[nsite] -= tempdb
+
+                    Rj[0] = x + Ri[0]
+                    Rj[1] = y + Ri[1]
+                    Rj[2] = z + Ri[2]
+
+                    for k in range(idxb_count):
+                        bstress[I,I,k] += np.outer(Ri, tempdb[k])
+                        bstress[I,J,k] -= np.outer(Rj, tempdb[k])
+
+
+        else:
+            isite = seq[0,0]
+            nstart = 0
+            nsite = 0 # 0,0
+            for n in range(npairs):
+                i, j = seq[n]
+                if i == j:
+                    nsite = n
+                weight = neighbor_ANs[n,0]
+
+                if i != isite:
+                    zero_1d(ulist)
+                    addself_uarraytot(twolmax, idxu_block, ulist)
+                    ulist *= site_ANs[isite]
+                    ulisttot += ulist
+                    ulisttot *= u_norm
+                    compute_zi(idxz_count, idxz, cglist, idxcg_block, idxu_block,
+                               ulisttot, zlist)
+                    compute_bi(ncoefs, idxb, idxz_block, idxu_block, ulisttot, zlist,
+                               blist[isite])
+                    for N in range(nstart, n, 1):
+                        I, J = seq[N]
+                        Weight = neighbor_ANs[N,0]
+                        zero_3d(dulist)
+                        for neighbor in prange(nneighbors):
+                            x = neighborlist[N, neighbor, 0]
+                            y = neighborlist[N, neighbor, 1]
+                            z = neighborlist[N, neighbor, 2]
+                            r = np.sqrt(x*x + y*y + z*z)
+                            if r < 10**(-8):
+                                continue
+                            psi = np.pi*r/rcut
+                            zero_1d(ulist)
+                            compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
+                                                         dulist[neighbor], idxu_block)
+
+                            dudr(x,y,z,r,rcut,ulist,dulist[neighbor])
+
+                            dulist[neighbor] *= Weight
+                            dulist[neighbor] *= u_norm
+
+                            zero_2d(tempdb)
+
+                            compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
+                                           zlist, tempdb)
+
+                            dblist[N] += tempdb
+                            if I != J:
+                                dblist[nsite] -= tempdb
+
+
+                    isite = i
+                    nstart = n
+                    zero_1d(ulisttot)
+                    zero_1d(zlist)
+                    zero_3d(dulist)
+                # end if i != isite
+
+
+                for neighbor in prange(nneighbors):
+                    # get components of separation vector and its magnitude
+                    # this is also the axis of rotation
+                    x = neighborlist[n, neighbor, 0]
+                    y = neighborlist[n, neighbor, 1]
+                    z = neighborlist[n, neighbor, 2]
+                    r = np.sqrt(x*x + y*y + z*z)
+                    if r < 10**(-8):
+                        continue
+                    # angle of rotation
+                    psi = np.pi*r/rcut
+                    # populate ulist and dulist with Wigner U functions
+                    # and derivatives
+                    zero_1d(ulist)
+                    compute_uarray_polynomial(x, y, z, psi, r, twolmax, ulist,
+                                                 idxu_block)
+
+
+                    ulist *= weight
+
+                    add_uarraytot(r, rcut, ulisttot, ulist)
+
+            zero_1d(ulist)
+            addself_uarraytot(twolmax, idxu_block, ulist)
+            ulist *= site_ANs[isite]
+            ulisttot += ulist
+            ulisttot *= u_norm
+            compute_zi(idxz_count, idxz, cglist, idxcg_block, idxu_block,
+                       ulisttot, zlist)
+            compute_bi(ncoefs, idxb, idxz_block, idxu_block, ulisttot, zlist,
+                       blist[isite])
+            for N in range(nstart, npairs, 1):
+                I, J = seq[N]
+                Weight = neighbor_ANs[N,0]
+                zero_3d(dulist)
+                for neighbor in prange(nneighbors):
+                    x = neighborlist[N, neighbor, 0]
+                    y = neighborlist[N, neighbor, 1]
+                    z = neighborlist[N, neighbor, 2]
+                    r = np.sqrt(x*x + y*y + z*z)
+                    if r < 10**(-8):
+                        continue
+                    psi = np.pi*r/rcut
+                    zero_1d(ulist)
+                    compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
+                                                 dulist[neighbor], idxu_block)
+
+                    dudr(x,y,z,r,rcut,ulist,dulist[neighbor])
+
+                    dulist[neighbor] *= Weight
+                    dulist[neighbor] *= u_norm
+
+                    zero_2d(tempdb)
+
+                    compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
+                                   zlist, tempdb)
+
+                    dblist[N] += tempdb
+                    if I != J:
+                        dblist[nsite] -= tempdb
+
+
+    else:
+        isite = seq[0,0]
+        nstart = 0
+        nsite = 0 # 0,0
+        for n in range(npairs):
+            i, j = seq[n]
+            if i == j:
+                nsite = n
+            weight = neighbor_ANs[n,0]
+
+            if i != isite:
+                zero_1d(ulist)
+                addself_uarraytot(twolmax, idxu_block, ulist)
+                ulist *= site_ANs[isite]
+                ulisttot += ulist
+                ulisttot *= u_norm
+                compute_zi(idxz_count, idxz, cglist, idxcg_block, idxu_block,
+                           ulisttot, zlist)
+                compute_bi(ncoefs, idxb, idxz_block, idxu_block, ulisttot, zlist,
+                           blist[isite])
+
+                isite = i
+                nstart = n
+                zero_1d(ulisttot)
+                zero_1d(zlist)
+            # end if i != isite
+
 
             for neighbor in prange(nneighbors):
                 # get components of separation vector and its magnitude
                 # this is also the axis of rotation
-                x = neighborlist[site, neighbor, 0]
-                y = neighborlist[site, neighbor, 1]
-                z = neighborlist[site, neighbor, 2]
+                x = neighborlist[n, neighbor, 0]
+                y = neighborlist[n, neighbor, 1]
+                z = neighborlist[n, neighbor, 2]
                 r = np.sqrt(x*x + y*y + z*z)
                 if r < 10**(-8):
                     continue
@@ -1090,115 +1348,23 @@ def get_bispectrum_components(center_atoms, neighborlist, neighbor_indices, neig
                 # populate ulist and dulist with Wigner U functions
                 # and derivatives
                 zero_1d(ulist)
-                compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
-                                             dulist[neighbor], idxu_block)
-
-                # compute total derivative of expansion coefficient
-                dudr(x, y, z, r, rcut, ulist, dulist[neighbor])
-
-                # weight ulist and dulist by the neighbors atomic number
-                weight = neighbor_ANs[site, neighbor]
-                ulist *= weight
-                dulist[neighbor] *= weight
-                # normalize the derivative expansion coefficient array
-                dulist[neighbor] *= u_norm
-
-                # add the Wigner U function array to the expansion coefficient array
-                add_uarraytot(r, rcut, ulisttot, ulist)
-
-            # normalize the expansion coefficient array
-            ulisttot *= u_norm
-            # compute zi for one site
-            compute_zi(idxz_count, idxz, cglist, idxcg_block, idxu_block, ulisttot, zlist)
-            # compute bispectrum components for one site
-            compute_bi(ncoefs, idxb, idxz_block, idxu_block, ulisttot, zlist, blist[site])
-
-            if stress == True:
-                # compute dbidrj for one site
-                Ri = center_atoms[site]
-                for neighbor in prange(nneighbors):
-                    zero_2d(tempdb)
-                    # compute dbidrj for one neighbor according to neighbor index
-                    compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
-                                   zlist, tempdb)
-                    # add it to the proper place in dblist
-                    dblist[site, neighbor_indices[site, neighbor]] += tempdb
-
-                    # get neighbors for stress calc
-                    xj = neighborlist[site, neighbor, 0] + Ri[0]
-                    yj = neighborlist[site, neighbor, 1] + Ri[1]
-                    zj = neighborlist[site, neighbor, 2] + Ri[2]
-
-                    # arrange into array for outer product
-                    Rj[0] = xj
-                    Rj[1] = yj
-                    Rj[2] = zj
-
-                    for k in range(idxb_count):
-                        # get outer product for ri and grad b
-                        bstress[site, site, k] += np.outer(Ri, tempdb[k])
-                        # get outer product for rj and the grad b
-                        bstress[site, neighbor_indices[site, neighbor], k] -= np.outer(Rj, tempdb[k])
-
-            else:
-                # compute dbidrj for one site
-                for neighbor in prange(nneighbors):
-                    # compute dbidrj for one neighbor according to neighbor index
-                    compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
-                                   zlist, dblist[site, neighbor_indices[site, neighbor]])
-
-        if stress == True:
-            # finalize dbidrj and stress
-            for i in range(nsites):
-                for j in range(nsites):
-                    if i != j:
-                        dblist[i,i] -= dblist[i,j]
-        else:
-            # finalize dbidrj
-            for i in range(nsites):
-                for j in range(nsites):
-                    if i != j:
-                        dblist[i,i] -= dblist[i,j]
-
-    else:
-
-        for site in range(nsites):
-            zero_1d(ulisttot)
-            zero_1d(zlist)
-            addself_uarraytot(twolmax, idxu_block, ulisttot)
-            # multiply center atom atomic number to contribution
-            ulisttot *= site_ANs[site]
-
-            for neighbor in prange(nneighbors):
-                # get components of separation vector and its magnitude
-                # this is also the axis of rotation
-                x = neighborlist[site, neighbor, 0]
-                y = neighborlist[site, neighbor, 1]
-                z = neighborlist[site, neighbor, 2]
-                r = np.sqrt(x*x + y*y + z*z)
-                if r < 10**(-8):
-                    continue
-                # angle of rotation
-                psi = np.pi*r/rcut
-                # populate ulist and dulist with Wigner U functions
-                zero_1d(ulist)
                 compute_uarray_polynomial(x, y, z, psi, r, twolmax, ulist,
                                              idxu_block)
 
 
-                # weight ulist by the neighbors atomic number
-                weight = neighbor_ANs[site, neighbor]
                 ulist *= weight
 
-                # add the Wigner U function array to the expansion coefficient array
                 add_uarraytot(r, rcut, ulisttot, ulist)
 
-            # normalize the expansion coefficient array
-            ulisttot *= u_norm
-            # compute zi for one site
-            compute_zi(idxz_count, idxz, cglist, idxcg_block, idxu_block, ulisttot, zlist)
-            # compute bispectrum components for one site
-            compute_bi(ncoefs, idxb, idxz_block, idxu_block, ulisttot, zlist, blist[site])
+        zero_1d(ulist)
+        addself_uarraytot(twolmax, idxu_block, ulist)
+        ulist *= site_ANs[isite]
+        ulisttot += ulist
+        ulisttot *= u_norm
+        compute_zi(idxz_count, idxz, cglist, idxcg_block, idxu_block,
+                   ulisttot, zlist)
+        compute_bi(ncoefs, idxb, idxz_block, idxu_block, ulisttot, zlist,
+                   blist[isite])
 
     return
 
@@ -1212,8 +1378,8 @@ if  __name__ == "__main__":
                       help="crystal from file, cif or poscar, REQUIRED",
                       metavar="crystal")
 
-    parser.add_option("-r", "--rcut", dest="rcut", default=2.0, type=float,
-                      help="cutoff for neighbor calcs, default: 2.0"
+    parser.add_option("-r", "--rcut", dest="rcut", default=4.0, type=float,
+                      help="cutoff for neighbor calcs, default: 4.0"
                       )
 
     parser.add_option("-l", "--lmax", dest="lmax", default=1, type=int,
@@ -1243,12 +1409,13 @@ if  __name__ == "__main__":
     stress = options.stress
 
     #import time
-    f = SO4_Bispectrum(lmax, rcut, derivative=der, stress=stress, normalize_U=False)
+    f = SO4_Bispectrum(lmax, rcut, derivative=False, stress=False, normalize_U=False)
     x = f.calculate(test)
     #start2 = time.time()
     #for key, item in x.items():
     #    print(key, item)
     #print('time elapsed: {}'.format(start2 - start1))
-    print(x['rdxdr'].shape)
-    print(x['rdxdr'])
+    #print(x['rdxdr'].shape)
+    #print(x['rdxdr'])
     #print(np.einsum('ijklm->klm', x['rdxdr']))
+    print(x['x'])
