@@ -151,7 +151,8 @@ class SOAP:
 
         if self.derivative:
 
-            x = {'x':self._plist.real, 'dxdr':self._dplist.real, 'elements':list(atoms.symbols)}
+            x = {'x':self._plist.real, 'dxdr':self._dplist.real,
+                 'elements':list(atoms.symbols), 'map':self.seq}
 
             if self._stress:
                 x['rdxdr'] = self._pstress.real/vol
@@ -159,7 +160,7 @@ class SOAP:
                 x['rdxdr'] = None
 
         else:
-            x = {'x':self._plist.real, 'elements':list(atoms.symbols)}
+            x = {'x':self._plist.real, 'dxdr': None, 'elements':list(atoms.symbols)}
 
         self.clear_memory()
         return x
@@ -684,8 +685,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                            tempdp)
 
                             dplist[N] += tempdp
-                            if I != J:
-                                dplist[nsite] -= tempdp
+                            #if I != J:
+                            #    dplist[nsite] -= tempdp
 
                             Rj[0] = x + Ri[0]
                             Rj[1] = y + Ri[1]
@@ -745,8 +746,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                    tempdp)
 
                     dplist[N] += tempdp
-                    if I != J:
-                        dplist[nsite] -= tempdp
+                    #if I != J:
+                    #    dplist[nsite] -= tempdp
 
                     Rj[0] = x + Ri[0]
                     Rj[1] = y + Ri[1]
@@ -799,8 +800,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                            tempdp)
 
                             dplist[N] += tempdp
-                            if I != J:
-                                dplist[nsite] -= tempdp
+                            #if I != J:
+                            #    dplist[nsite] -= tempdp
 
                     isite = i
                     nstart = n
@@ -850,8 +851,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                    tempdp)
 
                     dplist[N] += tempdp
-                    if I != J:
-                        dplist[nsite] -= tempdp
+                    #if I != J:
+                    #    dplist[nsite] -= tempdp
 
     else:
 
@@ -959,6 +960,6 @@ if  __name__ == "__main__":
 
     #print(x['rdxdr'].shape)
     #print(x['rdxdr'])
-    print(np.einsum('ijklm->klm', x['rdxdr']))
+    #print(np.einsum('ijklm->klm', x['rdxdr']))
     #print(x['x'])
-    #print(x['dxdr'])
+    print(x['dxdr'])

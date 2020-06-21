@@ -127,7 +127,8 @@ class SO4_Bispectrum:
 
         if self.derivative is True:
 
-            x = {'x':self._blist.real, 'dxdr':self._dblist.real, 'elements':list(atoms.symbols)}
+            x = {'x':self._blist.real, 'dxdr':self._dblist.real,
+                 'elements':list(atoms.symbols), 'map':self.seq}
 
             if self.stress is True:
                 x['rdxdr'] = self._bstress.real/vol
@@ -136,13 +137,13 @@ class SO4_Bispectrum:
 
         else:
             x = {'x':self._blist.real, 'dxdr': None, 'elements':list(atoms.symbols)}
-            
+
             if self.stress is True:
                 x['rdxdr'] = self._bstress.real/vol
             else:
                 x['rdxdr'] = None
 
-            self.clear_memory()
+        self.clear_memory()
         return x
 
     def build_neighbor_list(self):
@@ -1095,8 +1096,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                            zlist, tempdb)
 
                             dblist[N] += tempdb
-                            if I != J:
-                                dblist[nsite] -= tempdb
+                            #if I != J:
+                            #    dblist[nsite] -= tempdb
 
                             Rj[0] = x + Ri[0]
                             Rj[1] = y + Ri[1]
@@ -1173,8 +1174,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                    zlist, tempdb)
 
                     dblist[N] += tempdb
-                    if I != J:
-                        dblist[nsite] -= tempdb
+                    #if I != J:
+                    #    dblist[nsite] -= tempdb
 
                     Rj[0] = x + Ri[0]
                     Rj[1] = y + Ri[1]
@@ -1232,8 +1233,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                            zlist, tempdb)
 
                             dblist[N] += tempdb
-                            if I != J:
-                                dblist[nsite] -= tempdb
+                            #if I != J:
+                            #    dblist[nsite] -= tempdb
 
 
                     isite = i
@@ -1302,8 +1303,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                    zlist, tempdb)
 
                     dblist[N] += tempdb
-                    if I != J:
-                        dblist[nsite] -= tempdb
+                    #if I != J:
+                    #    dblist[nsite] -= tempdb
 
 
     else:
