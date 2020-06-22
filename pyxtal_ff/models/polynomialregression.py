@@ -6,7 +6,6 @@ import time
 import json
 import shelve
 import numpy as np
-from scipy.linalg import lstsq
 from torch import save, load
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -252,8 +251,8 @@ class PR():
                 msg = f"Regularization with {norm} norm is not implemented yet."
                 raise NotImplementedError(msg)
         else:
-            theta = lstsq(_X, _y, cond=None)[0]
-        
+            theta = np.linalg.lstsq(_X, _y, rcond=None)[0]
+
         return theta
 
 
@@ -423,9 +422,10 @@ class PR():
                 x = np.zeros((len(_x), d_max))
                 x[:, :self.d_max] += data['x'][:, :self.d_max]
                 if fc:
-                    _dxdr = data['dxdr'][:, :, :self.d_max, :]
-                    dxdr = np.zeros([len(_x), len(_x), d_max, 3])
-                    dxdr[:, :, :self.d_max, :] += _dxdr
+                    _dxdr = data['dxdr'][:, :self.d_max, :]
+                    dxdr = np.zeros([_dxdr.shape[0], d_max, 3])
+                    dxdr[:, :self.d_max, :] += _dxdr
+                    seq = data['seq']
                 
                 #if train:
                 if sc and _group: #(data['group'] in self.stress_group):
@@ -436,7 +436,11 @@ class PR():
                 # self-term for x, dxdr, and rdxdr
                 x_square = 0.5 * _x ** 2
                 if fc:
-                    dxdr_square = np.einsum('ijkl,ik->ijkl', _dxdr, _x)
+                    dxdr_square = np.zeros_like(_dxdr)
+                    for i in range(len(_x)):
+                        arr = np.where(seq[:, 0]==i)[0]
+                        dxdr_square[arr] = np.einsum('jkl, k->jkl', _dxdr[arr], _x[i])
+                    #dxdr_square = np.einsum('ijkl,ik->ijkl', _dxdr, _x)
                 if sc and _group:
                     rdxdr_square = np.einsum('ijk,ij->ijk', _rdxdr, _x)
                 
@@ -445,8 +449,15 @@ class PR():
                     # Cross term for x, dxdr, and rdxdr
                     x_d1_d2 = np.einsum('i, ij->ij', _x[:, d1], _x[:, d1+1:])
                     if fc:
-                        dxdr_d1_d2 = np.einsum('ijl,ik->ijkl', _dxdr[:, :, d1, :], _x[:, d1+1:]) + \
-                                     np.einsum('ijkl,i->ijkl', _dxdr[:, :, d1+1:, :], _x[:, d1])
+                        shp = _dxdr.shape
+                        dxdr_d1_d2 = np.zeros([shp[0], shp[1]-1-d1, shp[2]])
+                        for i in range(len(_x)):
+                            arr = np.where(seq[:, 0]==i)[0]
+                            dxdr_d1_d2[arr] = np.einsum('ij,k->ikj', _dxdr[arr][:, d1, :], _x[i, d1+1:]) + \
+                                    (_dxdr[arr][:, d1+1:, :] * _x[i, d1])
+
+                        #dxdr_d1_d2 = np.einsum('ijl,ik->ijkl', _dxdr[:, :, d1, :], _x[:, d1+1:]) + \
+                                #             np.einsum('ijkl,i->ijkl', _dxdr[:, :, d1+1:, :], _x[:, d1])
                     if sc and _group:
                         rdxdr_d1_d2 = np.einsum('ik,ij->ijk', _rdxdr[:, d1, :], _x[:, d1+1:]) + \
                                       np.einsum('ijk,i->ijk', _rdxdr[:, d1+1:, :], _x[:, d1])
@@ -454,7 +465,7 @@ class PR():
                     # Append for x, dxdr, rdxdr
                     x[:, dcount] += x_square[:, d1]
                     if fc:
-                        dxdr[:, :, dcount, :] += dxdr_square[:, :, d1, :]
+                        dxdr[:, dcount, :] += dxdr_square[:, d1, :]
                     if sc and _group:
                         rdxdr[:, dcount, :] += rdxdr_square[:, d1, :]
 
@@ -462,7 +473,7 @@ class PR():
                     
                     x[:, dcount:dcount+len(x_d1_d2[0])] += x_d1_d2
                     if fc:
-                        dxdr[:, :, dcount:dcount+len(x_d1_d2[0]), :] += dxdr_d1_d2
+                        dxdr[:, dcount:dcount+len(x_d1_d2[0]), :] += dxdr_d1_d2
                     if sc and _group:
                         rdxdr[:, dcount:dcount+len(x_d1_d2[0]), :] += rdxdr_d1_d2
                     dcount += len(x_d1_d2[0])
@@ -470,7 +481,8 @@ class PR():
             else:
                 x = data['x'][:, :d_max]
                 if fc:
-                    dxdr = data['dxdr'][:, :, :d_max, :]
+                    seq = data['seq']   
+                    dxdr = data['dxdr'][:, :d_max, :]
                 if sc and _group:
                     rdxdr = data['rdxdr'][:, :d_max, :]
             
@@ -480,7 +492,8 @@ class PR():
             bias_weights = 1.0/len(self.elements)
             
             sna = np.zeros([len(self.elements), 1+d_max])
-            snad = np.zeros([len(self.elements), len(x), 1+d_max, 3])
+            if fc:
+                snad = np.zeros([len(self.elements), len(x), 1+d_max, 3])
             if sc and _group:
                 snav = np.zeros([len(self.elements), 1+d_max, 6])
             
@@ -496,13 +509,19 @@ class PR():
                 if _sna[element] is None:
                     _sna[element] = 1 * x[e]
                     if fc:
-                        _snad[element] = -1 * dxdr[e]
+                        shp = snad.shape
+                        _snad[element] = np.zeros([shp[1], shp[2]-1, shp[3]])
+                        arr = np.where(seq[:, 0]==e)[0]
+                        _seq = seq[arr][:, 1]
+                        _snad[element][_seq] = -1 * dxdr[arr]
                     if sc and _group:
                         _snav[element] = -1 * rdxdr[e]  # [d, 6]
                 else:
                     _sna[element] += x[e]
                     if fc:
-                        _snad[element] -= dxdr[e]
+                        arr = np.where(seq[:, 0]==e)[0]
+                        _seq = seq[arr][:, 1]
+                        _snad[element][_seq] -= dxdr[arr]
                     if sc and _group: 
                         _snav[element] -= rdxdr[e]
                 _count[element] += 1
