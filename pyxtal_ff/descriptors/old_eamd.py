@@ -337,6 +337,9 @@ def dij_dm_list(m, ij_list):
     arr2 = (ijm_list[:, 2, :] == ijm_list[:, 1, :])
     result[arr2] = 1
 
+    arr3 = (ijm_list[:, 0, :] == ijm_list[:, 1, :])
+    result[arr3] = 0
+
     return result # [j, m]
 
 
