@@ -396,7 +396,7 @@ def dRij_dRm_norm(Rij, ijm_list):
     arr = (ijm_list[:,2]==ijm_list[:,1])
     dRij_m[arr, :] = Rij[arr]/R1ij[arr]
     arr = (ijm_list[:,0]==ijm_list[:,1]) # This condition doesn't seem
-    dRij_m[arr, :] = Rij[arr]/R1ij[arr]  # to contribute anything
+    dRij_m[arr, :] = 0 #Rij[arr]/R1ij[arr]  # to contribute anything
     
     return dRij_m
 
@@ -439,6 +439,6 @@ if __name__ == '__main__':
         
         print("G:", des['x'][0])
         print("GPrime")
-        #print(des['dxdr'][0:5,:,2])
-        print(des['rdxdr'][0:8, -1, :, :])
+        print(des['dxdr'][0:5,:,2])
+        #print(des['rdxdr'][0:8, -1, :, :])
         #pprint(np.einsum('ijklm->klm', des['rdxdr']))
