@@ -219,7 +219,6 @@ class BehlerParrinello:
                         if self.stress:
                             rGiPrime = rG5iP
                     else:
-                        GiPrime_seq = np.append(GiPrime_seq, seq, axis=0)
                         GiPrime = np.append(GiPrime, G5iP, axis=1)
                         if self.stress:
                             rGiPrime = np.append(rGiPrime, rG5iP, axis=1)
@@ -344,7 +343,7 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
      # QZ: the block to get the unique neighbors
     unique_js = np.unique(IDs)
     if i not in unique_js:
-        unique_js = np.append(unique_js, i)
+        unique_js = np.append(i, unique_js)
     seq = i*np.ones([len(unique_js), 2], dtype=int)
     seq[:, 1] = unique_js
     N1 = len(unique_js)
@@ -628,7 +627,7 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     # QZ: the block to get the unique neighbors
     unique_js = np.unique(IDs)
     if i not in unique_js:
-        unique_js = np.append(unique_js, i)
+        unique_js = np.append(i, unique_js)
     seq = i*np.ones([len(unique_js), 2], dtype=int)
     seq[:, 1] = unique_js
     N1 = len(unique_js)
@@ -777,7 +776,7 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     # QZ: the block to get the unique neighbors
     unique_js = np.unique(IDs)
     if i not in unique_js:
-        unique_js = np.append(unique_js, i)
+        unique_js = np.append(i, unique_js)
     seq = i*np.ones([len(unique_js), 2], dtype=int)
     seq[:, 1] = unique_js
     N1 = len(unique_js)
