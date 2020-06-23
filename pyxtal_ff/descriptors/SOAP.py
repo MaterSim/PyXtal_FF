@@ -227,6 +227,12 @@ class SOAP:
         max_len = 0
         for i in range(len(atoms)):
             unique_atoms = np.unique(neighbor_indices[i])
+            if i not in unique_atoms:
+                at = list(unique_atoms)
+                at.append(i)
+                at.sort()
+                unique_atoms = np.array(at)
+            # add i here if i doesnt exist (make sure its in the right spot)
             for j in unique_atoms:
                 Seq.append([i,j])
                 neigh_locs = neighbor_indices[i] == j
@@ -685,8 +691,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                            tempdp)
 
                             dplist[N] += tempdp
-                            #if I != J:
-                            #    dplist[nsite] -= tempdp
+                            if I != J:
+                                dplist[nsite] -= tempdp
 
                             Rj[0] = x + Ri[0]
                             Rj[1] = y + Ri[1]
@@ -746,8 +752,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                    tempdp)
 
                     dplist[N] += tempdp
-                    #if I != J:
-                    #    dplist[nsite] -= tempdp
+                    if I != J:
+                        dplist[nsite] -= tempdp
 
                     Rj[0] = x + Ri[0]
                     Rj[1] = y + Ri[1]
@@ -800,8 +806,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                            tempdp)
 
                             dplist[N] += tempdp
-                            #if I != J:
-                            #    dplist[nsite] -= tempdp
+                            if I != J:
+                                dplist[nsite] -= tempdp
 
                     isite = i
                     nstart = n
@@ -851,8 +857,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                    tempdp)
 
                     dplist[N] += tempdp
-                    #if I != J:
-                    #    dplist[nsite] -= tempdp
+                    if I != J:
+                        dplist[nsite] -= tempdp
 
     else:
 

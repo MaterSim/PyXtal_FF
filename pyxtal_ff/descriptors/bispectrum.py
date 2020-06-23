@@ -183,6 +183,11 @@ class SO4_Bispectrum:
         max_len = 0
         for i in range(len(atoms)):
             unique_atoms = np.unique(neighbor_indices[i])
+            if i not in unique_atoms:
+                at = list(unique_atoms)
+                at.append(i)
+                at.sort()
+                unique_atoms = np.array(at)
             for j in unique_atoms:
                 Seq.append([i,j])
                 neigh_locs = neighbor_indices[i] == j
@@ -1096,8 +1101,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                            zlist, tempdb)
 
                             dblist[N] += tempdb
-                            #if I != J:
-                            #    dblist[nsite] -= tempdb
+                            if I != J:
+                                dblist[nsite] -= tempdb
 
                             Rj[0] = x + Ri[0]
                             Rj[1] = y + Ri[1]
@@ -1174,8 +1179,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                    zlist, tempdb)
 
                     dblist[N] += tempdb
-                    #if I != J:
-                    #    dblist[nsite] -= tempdb
+                    if I != J:
+                        dblist[nsite] -= tempdb
 
                     Rj[0] = x + Ri[0]
                     Rj[1] = y + Ri[1]
@@ -1233,8 +1238,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                            zlist, tempdb)
 
                             dblist[N] += tempdb
-                            #if I != J:
-                            #    dblist[nsite] -= tempdb
+                            if I != J:
+                                dblist[nsite] -= tempdb
 
 
                     isite = i
@@ -1303,8 +1308,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                    zlist, tempdb)
 
                     dblist[N] += tempdb
-                    #if I != J:
-                    #    dblist[nsite] -= tempdb
+                    if I != J:
+                        dblist[nsite] -= tempdb
 
 
     else:
