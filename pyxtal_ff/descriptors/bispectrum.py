@@ -234,7 +234,7 @@ class SO4_Bispectrum:
         # allocate memory for the bispectrum and its derivative
         self._blist = np.zeros([ncell, ncoefs], dtype=np.complex128)
         self._dblist = np.zeros([len(self.seq), ncoefs, 3], dtype=np.complex128)
-        self._bstress = np.zeros([ncell, ncell, ncoefs, 3, 3], dtype=np.complex128)
+        self._bstress = np.zeros([len(self.seq), ncoefs, 3, 3], dtype=np.complex128)
         return
 
 @nb.njit(nb.void(nb.i8, nb.f8[:]), cache=True,
@@ -897,7 +897,7 @@ def zero_3d(arr):
     return
 
 @nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8[:], nb.i8, nb.f8,
-                 nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:,:]),
+                 nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:]),
          cache=True, fastmath=True, nogil=True)
 def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, site_ANs,
                               twolmax, rcut, norm, derivative, stress, blist, dblist, bstress):
@@ -1109,8 +1109,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                             Rj[2] = z + Ri[2]
 
                             for k in range(idxb_count):
-                                bstress[I,I,k] += np.outer(Ri, tempdb[k])
-                                bstress[I,J,k] -= np.outer(Rj, tempdb[k])
+                                bstress[nsite,k] += np.outer(Ri, tempdb[k])
+                                bstress[N,k] -= np.outer(Rj, tempdb[k])
 
                     isite = i
                     nstart = n
@@ -1187,8 +1187,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     Rj[2] = z + Ri[2]
 
                     for k in range(idxb_count):
-                        bstress[I,I,k] += np.outer(Ri, tempdb[k])
-                        bstress[I,J,k] -= np.outer(Rj, tempdb[k])
+                        bstress[nsite,k] += np.outer(Ri, tempdb[k])
+                        bstress[N,k] -= np.outer(Rj, tempdb[k])
 
 
         else:

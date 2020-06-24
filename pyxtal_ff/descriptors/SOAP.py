@@ -186,7 +186,7 @@ class SOAP:
         # as no array creation methods are supported in the numba cuda package
         self._plist = np.zeros((ncell, ncoefs), dtype=np.complex128)
         self._dplist = np.zeros((len(self.seq), ncoefs, 3), dtype=np.complex128)
-        self._pstress = np.zeros((ncell, ncell, ncoefs, 3, 3), dtype=np.complex128)
+        self._pstress = np.zeros((len(self.seq), ncoefs, 3, 3), dtype=np.complex128)
 
         return
 
@@ -624,7 +624,7 @@ def zero_4D_array(arr):
                     arr[i,j,k,l] = 0.0 + 0.0j
     return
 
-@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8, nb.i8, nb.f8, nb.f8, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:,:]),
+@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8, nb.i8, nb.f8, nb.f8, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:]),
          cache=True, fastmath=True, nogil=True)
 def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, nmax, lmax, rcut, alpha, derivative, stress, plist, dplist, pstress):
     '''
@@ -699,8 +699,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                             Rj[2] = z + Ri[2]
 
                             for k in range(numps):
-                                pstress[I, I, k] += np.outer(Ri, tempdp[k])
-                                pstress[I, J, k] -= np.outer(Rj, tempdp[k])
+                                pstress[nsite, k] += np.outer(Ri, tempdp[k])
+                                pstress[N, k] -= np.outer(Rj, tempdp[k])
 
 
 
@@ -760,8 +760,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     Rj[2] = z + Ri[2]
 
                     for k in range(numps):
-                        pstress[I, I, k] += np.outer(Ri, tempdp[k])
-                        pstress[I, J, k] -= np.outer(Rj, tempdp[k])
+                        pstress[nsite, k] += np.outer(Ri, tempdp[k])
+                        pstress[N, k] -= np.outer(Rj, tempdp[k])
 
         else:
             numps = nmax*(nmax+1)*(lmax+1)//2
