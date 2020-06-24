@@ -239,7 +239,7 @@ class SOAP:
                 temp_neighs = np.array(neighbors[i])
                 temp_ANs = np.array(atomic_numbers[i])
                 Neighbors.append(temp_neighs[neigh_locs])
-                Atomic_numbers .append(temp_ANs[neigh_locs])
+                Atomic_numbers.append(temp_ANs[neigh_locs])
                 length = sum(neigh_locs)
                 if length > max_len:
                     max_len = length
