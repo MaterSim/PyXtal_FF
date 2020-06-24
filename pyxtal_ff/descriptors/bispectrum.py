@@ -128,7 +128,7 @@ class SO4_Bispectrum:
         if self.derivative is True:
 
             x = {'x':self._blist.real, 'dxdr':self._dblist.real,
-                 'elements':list(atoms.symbols), 'map':self.seq}
+                 'elements':list(atoms.symbols), 'seq':self.seq}
 
             if self.stress is True:
                 x['rdxdr'] = self._bstress.real/vol

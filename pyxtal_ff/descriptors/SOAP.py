@@ -152,7 +152,7 @@ class SOAP:
         if self.derivative:
 
             x = {'x':self._plist.real, 'dxdr':self._dplist.real,
-                 'elements':list(atoms.symbols), 'map':self.seq}
+                 'elements':list(atoms.symbols), 'seq':self.seq}
 
             if self._stress:
                 x['rdxdr'] = self._pstress.real/vol
