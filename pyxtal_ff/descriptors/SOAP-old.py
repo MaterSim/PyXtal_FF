@@ -124,7 +124,7 @@ class SOAP:
                 delattr(self, attr)
         return
 
-    def calculate(self, atoms):
+    def calculate(self, atoms, backend='ase'):
         '''
         Calculates the SO(3) power spectrum components of the
         smoothened atomic neighbor density function
@@ -138,12 +138,12 @@ class SOAP:
                      elements, either ASE or pymatgen
         '''
         self._atoms = atoms
+        self._backend = backend
 
         self.build_neighbor_list()
         self.initialize_arrays()
 
-        get_power_spectrum_components(self.center_atoms, self.neighborlist,
-                                      self.seq,
+        get_power_spectrum_components(self.center_atoms, self.neighborlist, self.neighbor_indices,
                                       self.atomic_numbers, self.nmax, self.lmax,
                                       self.rcut, self.alpha, self.derivative,
                                       self.stress, self._plist, self._dplist, self._pstress)
@@ -151,8 +151,7 @@ class SOAP:
 
         if self.derivative:
 
-            x = {'x':self._plist.real, 'dxdr':self._dplist.real,
-                 'elements':list(atoms.symbols), 'seq':self.seq}
+            x = {'x':self._plist.real, 'dxdr':self._dplist.real, 'elements':list(atoms.symbols)}
 
             if self._stress:
                 x['rdxdr'] = self._pstress.real/vol
@@ -160,7 +159,7 @@ class SOAP:
                 x['rdxdr'] = None
 
         else:
-            x = {'x':self._plist.real, 'dxdr': None, 'elements':list(atoms.symbols)}
+            x = {'x':self._plist.real, 'elements':list(atoms.symbols)}
 
         self.clear_memory()
         return x
@@ -185,8 +184,8 @@ class SOAP:
         # to include GPU support we will need to define more arrays here
         # as no array creation methods are supported in the numba cuda package
         self._plist = np.zeros((ncell, ncoefs), dtype=np.complex128)
-        self._dplist = np.zeros((len(self.seq), ncoefs, 3), dtype=np.complex128)
-        self._pstress = np.zeros((len(self.seq), ncoefs, 3, 3), dtype=np.complex128)
+        self._dplist = np.zeros((ncell, ncell, ncoefs, 3), dtype=np.complex128)
+        self._pstress = np.zeros((ncell, ncell, ncoefs, 3, 3), dtype=np.complex128)
 
         return
 
@@ -195,71 +194,87 @@ class SOAP:
         Builds a neighborlist for the calculation of bispectrum components for
         a given ASE atoms object given in the calculate method.
         '''
-        atoms = self._atoms
-        cutoffs = [self.rcut/2]*len(atoms)
-        nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
-        nl.update(atoms)
-        center_atoms = np.zeros((len(atoms),3), dtype=np.float64)
-        neighbors = []
-        neighbor_indices = []
-        atomic_numbers = []
+        if self._backend == 'ase':
+            atoms = self._atoms
+            # cutoffs for each atom
+            cutoffs = [self.rcut/2]*len(atoms)
+            # instantiate neighborlist calculator
+            nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
+            # provide atoms object to neighborlist calculator
+            nl.update(atoms)
+            # instantiate memory for neighbor separation vectors, periodic indices, and atomic numbers
+            center_atoms = np.zeros((len(atoms), 3), dtype=np.float64)
+            neighbors = []
+            neighbor_indices = []
+            atomic_numbers = []
 
-        for i in range(len(atoms)):
-            # get center atom position
-            center_atom = atoms.positions[i]
-            center_atoms[i] = center_atom
-            # get indices and cell offsets of each neighbor
-            indices, offsets = nl.get_neighbors(i)
-            # add an empty list to neighbors and atomic numbers for population
-            neighbors.append([])
-            atomic_numbers.append([])
-            # the indices are already numpy arrays so just append as is
-            neighbor_indices.append(indices)
-            for j, offset in zip(indices, offsets):
-                # compute separation vector
-                pos = atoms.positions[j] + np.dot(offset, atoms.get_cell()) - center_atom
-                neighbors[i].append(pos)
-                atomic_numbers[i].append(atoms[j].number)
+            max_len = 0
+            for i in range(len(atoms)):
+                # get center atom position
+                center_atom = atoms.positions[i]
+                center_atoms[i] = center_atom
+                # get indices and cell offsets of each neighbor
+                indices, offsets = nl.get_neighbors(i)
+                # add an empty list to neighbors and atomic numbers for population
+                neighbors.append([])
+                atomic_numbers.append([])
+                # the indices are already numpy arrays so just append as is
+                neighbor_indices.append(indices)
+                for j, offset in zip(indices, offsets):
+                    # compute separation vector
+                    pos = atoms.positions[j] + np.dot(offset, atoms.get_cell()) - center_atom
+                    neighbors[i].append(pos)
+                    atomic_numbers[i].append(atoms[j].number)
 
-        Neighbors = []
-        Atomic_numbers = []
-        Seq = []
-        max_len = 0
-        for i in range(len(atoms)):
-            unique_atoms = np.unique(neighbor_indices[i])
-            if i not in unique_atoms:
-                at = list(unique_atoms)
-                at.append(i)
-                at.sort()
-                unique_atoms = np.array(at)
-            # add i here if i doesnt exist (make sure its in the right spot)
-            for j in unique_atoms:
-                Seq.append([i,j])
-                neigh_locs = neighbor_indices[i] == j
-                temp_neighs = np.array(neighbors[i])
-                temp_ANs = np.array(atomic_numbers[i])
-                Neighbors.append(temp_neighs[neigh_locs])
-                Atomic_numbers.append(temp_ANs[neigh_locs])
-                length = sum(neigh_locs)
-                if length > max_len:
-                    max_len = length
+                if len(neighbors[i]) > max_len:
+                    max_len = len(neighbors[i])
 
-        neighborlist = np.zeros((len(Neighbors), max_len, 3), dtype=np.float64)
-        Seq = np.array(Seq, dtype=np.int64)
-        atm_nums = np.zeros((len(Neighbors), max_len), dtype=np.int64)
-        site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.int64)
+            # declare arrays to store the separation vectors, neighbor indices
+            # atomic numbers of each neighbor, and the atomic numbers of each
+            # site
+            neighborlist = np.zeros((len(atoms), max_len, 3), dtype=np.float64)
+            neighbor_inds = np.zeros((len(atoms), max_len), dtype=np.int64)
+            atm_nums = np.zeros((len(atoms), max_len), dtype=np.int64)
+            site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.int64)
+
+            # populate the arrays with list elements
+            for i in range(len(atoms)):
+                neighborlist[i, :len(neighbors[i]), :] = neighbors[i]
+                neighbor_inds[i, :len(neighbors[i])] = neighbor_indices[i]
+                atm_nums[i, :len(neighbors[i])] = atomic_numbers[i]
 
 
-        for i in range(len(Neighbors)):
-            neighborlist[i, :len(Neighbors[i]), :] = Neighbors[i]
-            atm_nums[i, :len(Neighbors[i])] = Atomic_numbers[i]
+        elif self._backend == 'pymatgen':
+            from pymatgen.io.ase import AseAtomsAdaptor
+            struc = AseAtomsAdaptor.get_structure(self._atoms)
+            neighbors = struc.get_all_neighbors(self._rcut, include_index=True)
 
+            max_len = 0
+            for i, neighlist in enumerate(neighbors):
+                if len(neighlist) > max_len:
+                    max_len = len(neighlist)
 
+            center_atoms = np.zeros((len(struc), 3), dtype=np.float64)
+            neighborlist = np.zeros((len(struc), max_len, 3), dtype=np.float64)
+            neighbor_inds = np.zeros((len(struc), max_len), dtype=np.int64)
+            atm_nums = np.zeros((len(struc), max_len), dtype=np.int64)
+            site_atomic_numbers = np.zeros(len(struc), dtype=np.int64)
+
+            for i, site in enumerate(struc):
+                neighlist = neighbors[i]
+                site_atomic_numbers[i] = site.specie.number
+                center_atoms[i] = site.coords
+                for j, neighbor in enumerate(neighlist):
+                    neighborlist[i, j, :] = neighbor[0].coords - site.coords
+                    neighbor_inds[i, j] = neighbor[2]
+                    atm_nums[i, j] = neighbor[0].specie.number
+
+        else: raise NotImplementedError('Specified backend not supported')
 
         # assign these arrays to attributes
         self.center_atoms = center_atoms
         self.neighborlist = neighborlist
-        self.seq = Seq
+        self.neighbor_indices = neighbor_inds
         self.atomic_numbers = atm_nums
         self.site_atomic_numbers = site_atomic_numbers
 
@@ -624,14 +639,14 @@ def zero_4D_array(arr):
                     arr[i,j,k,l] = 0.0 + 0.0j
     return
 
-@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8, nb.i8, nb.f8, nb.f8, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:]),
+@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8, nb.i8, nb.f8, nb.f8, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:,:], nb.c16[:,:,:,:,:]),
          cache=True, fastmath=True, nogil=True)
-def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, nmax, lmax, rcut, alpha, derivative, stress, plist, dplist, pstress):
+def get_power_spectrum_components(center_atoms, neighborlist, neighbor_indices, neighbor_ANs, nmax, lmax, rcut, alpha, derivative, stress, plist, dplist, pstress):
     '''
     Interface to SOAP class, this is the main work function for the power spectrum calculation.
     '''
     # get the number of sites, number of neighbors, and number of spherical harmonics
-    npairs = neighborlist.shape[0]
+    nsites = neighborlist.shape[0]
     nneighbors = neighborlist.shape[1]
     numYlms = (lmax+1)**2
 
@@ -651,257 +666,101 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
             numps = nmax*(nmax+1)*(lmax+1)//2
             tempdp = np.zeros((numps, 3), dtype=np.complex128)
             Rj = np.zeros(3, dtype=np.float64)
-            isite = seq[0,0]
-            nstart = 0
-            nsite = 0 # atom 0,0
-            # get expansion coefficients and derivatives, also get power
-            # spectra
-            for n in range(npairs):
-                i, j = seq[n]
-                if i == j:
-                    nsite = n
-                weight = neighbor_ANs[n,0]
-
-                # once we change center atoms, we need to compute the power
-                # spectrum and derivatives for the previous center atom before moving
-                # on
-                if i != isite:
-                    compute_pi(nmax, lmax, clisttot, plist[isite])
-                    for N in range(nstart, n, 1):
-                        I, J = seq[N]
-                        Ri = center_atoms[I]
-                        Weight = neighbor_ANs[N,0]
-                        zero_4D_array(dclist)
-                        for neighbor in prange(nneighbors):
-                            x = neighborlist[N, neighbor, 0]
-                            y = neighborlist[N, neighbor, 1]
-                            z = neighborlist[N, neighbor, 2]
-                            r = np.sqrt(x*x + y*y + z*z)
-                            if r < 10**(-8):
-                                continue
-                            zero_2D_array(clist)
-
-                            compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor])
-
-                            dclist[neighbor] *= Weight
-
-                            zero_2D_array(tempdp)
-                            compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
-                                           tempdp)
-
-                            dplist[N] += tempdp
-                            if I != J:
-                                dplist[nsite] -= tempdp
-
-                            Rj[0] = x + Ri[0]
-                            Rj[1] = y + Ri[1]
-                            Rj[2] = z + Ri[2]
-
-                            for k in range(numps):
-                                pstress[nsite, k] += np.outer(Ri, tempdp[k])
-                                pstress[N, k] -= np.outer(Rj, tempdp[k])
-
-
-
-                    isite = i
-                    nstart = n
-                    zero_2D_array(clisttot)
-                # end if i != isite
-
+            for site in range(nsites):
+                zero_2D_array(clisttot)
+                zero_4D_array(dclist)
                 for neighbor in prange(nneighbors):
-                    x = neighborlist[n, neighbor, 0]
-                    y = neighborlist[n, neighbor, 1]
-                    z = neighborlist[n, neighbor, 2]
+                    x = neighborlist[site, neighbor, 0]
+                    y = neighborlist[site, neighbor, 1]
+                    z = neighborlist[site, neighbor, 2]
                     r = np.sqrt(x*x + y*y + z*z)
                     if r < 10**(-8):
                         continue
                     zero_2D_array(clist)
 
-                    compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist)
+                    compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w, clist, dclist[neighbor])
 
+                    weight = neighbor_ANs[site, neighbor]
                     clist *= weight
+                    dclist[neighbor] *= weight
 
                     add_carraytot(clisttot, clist)
 
-
-            # finish last center atom for power spectrum
-            compute_pi(nmax, lmax, clisttot, plist[isite])
-            for N in range(nstart, npairs, 1):
-                I, J = seq[N]
-                Ri = center_atoms[I]
-                Weight = neighbor_ANs[N,0]
-                zero_4D_array(dclist)
+                compute_pi(nmax, lmax, clisttot, plist[site])
+                Ri = center_atoms[site]
                 for neighbor in prange(nneighbors):
-                    x = neighborlist[N, neighbor, 0]
-                    y = neighborlist[N, neighbor, 1]
-                    z = neighborlist[N, neighbor, 2]
-                    r = np.sqrt(x*x + y*y + z*z)
-                    if r < 10**(-8):
-                        continue
-                    zero_2D_array(clist)
-
-                    compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor])
-
-                    dclist[neighbor] *= Weight
-
                     zero_2D_array(tempdp)
                     compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
                                    tempdp)
 
-                    dplist[N] += tempdp
-                    if I != J:
-                        dplist[nsite] -= tempdp
+                    dplist[site, neighbor_indices[site, neighbor]] += tempdp
 
-                    Rj[0] = x + Ri[0]
-                    Rj[1] = y + Ri[1]
-                    Rj[2] = z + Ri[2]
+                    # get cartesian coordinates
+                    Rj[0] = neighborlist[site, neighbor, 0] + Ri[0]
+                    Rj[1] = neighborlist[site, neighbor, 1] + Ri[1]
+                    Rj[2] = neighborlist[site, neighbor, 2] + Ri[2]
 
                     for k in range(numps):
-                        pstress[nsite, k] += np.outer(Ri, tempdp[k])
-                        pstress[N, k] -= np.outer(Rj, tempdp[k])
+                        pstress[site, site, k] += np.outer(Ri, tempdp[k])
+                        pstress[site, neighbor_indices[site, neighbor], k] -= np.outer(Rj, tempdp[k])
 
+
+            for i in range(nsites):
+                for j in range(nsites):
+                    if i != j:
+                        dplist[i,i] -= dplist[i,j]
         else:
-            numps = nmax*(nmax+1)*(lmax+1)//2
-            tempdp = np.zeros((numps, 3), dtype=np.complex128)
-            isite = seq[0,0]
-            nstart = 0
-            nsite = 0 # atom 0,0
-            # get expansion coefficients and derivatives, also get power
-            # spectra
-            for n in range(npairs):
-                i, j = seq[n]
-                if i == j:
-                    nsite = n
-                weight = neighbor_ANs[n,0]
-
-                # once we change center atoms, we need to compute the power
-                # spectrum and derivatives for the previous center atom before moving
-                # on
-                if i != isite:
-                    compute_pi(nmax, lmax, clisttot, plist[isite])
-                    for N in range(nstart, n, 1):
-                        I, J = seq[N]
-                        Ri = center_atoms[I]
-                        Weight = neighbor_ANs[N,0]
-                        zero_4D_array(dclist)
-                        for neighbor in prange(nneighbors):
-                            x = neighborlist[N, neighbor, 0]
-                            y = neighborlist[N, neighbor, 1]
-                            z = neighborlist[N, neighbor, 2]
-                            r = np.sqrt(x*x + y*y + z*z)
-                            if r < 10**(-8):
-                                continue
-                            zero_2D_array(clist)
-
-                            compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor])
-
-                            dclist[neighbor] *= Weight
-
-                            zero_2D_array(tempdp)
-                            compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
-                                           tempdp)
-
-                            dplist[N] += tempdp
-                            if I != J:
-                                dplist[nsite] -= tempdp
-
-                    isite = i
-                    nstart = n
-                    zero_2D_array(clisttot)
-                # end if i != isite
-
+            for site in range(nsites):
+                zero_2D_array(clisttot)
+                zero_4D_array(dclist)
                 for neighbor in prange(nneighbors):
-                    x = neighborlist[n, neighbor, 0]
-                    y = neighborlist[n, neighbor, 1]
-                    z = neighborlist[n, neighbor, 2]
+                    x = neighborlist[site, neighbor, 0]
+                    y = neighborlist[site, neighbor, 1]
+                    z = neighborlist[site, neighbor, 2]
                     r = np.sqrt(x*x + y*y + z*z)
                     if r < 10**(-8):
                         continue
                     zero_2D_array(clist)
 
-                    compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist)
+                    compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w, clist, dclist[neighbor])
 
+                    weight = neighbor_ANs[site, neighbor]
                     clist *= weight
+                    dclist[neighbor] *= weight
 
                     add_carraytot(clisttot, clist)
 
-
-            # finish last center atom for power spectrum
-            compute_pi(nmax, lmax, clisttot, plist[isite])
-            for N in range(nstart, npairs, 1):
-                I, J = seq[N]
-                Ri = center_atoms[I]
-                Weight = neighbor_ANs[N,0]
-                zero_4D_array(dclist)
+                compute_pi(nmax, lmax, clisttot, plist[site])
                 for neighbor in prange(nneighbors):
-                    x = neighborlist[N, neighbor, 0]
-                    y = neighborlist[N, neighbor, 1]
-                    z = neighborlist[N, neighbor, 2]
-                    r = np.sqrt(x*x + y*y + z*z)
-                    if r < 10**(-8):
-                        continue
-                    zero_2D_array(clist)
-
-                    compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor])
-
-                    dclist[neighbor] *= Weight
-
-                    zero_2D_array(tempdp)
                     compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
-                                   tempdp)
+                                   dplist[site, neighbor_indices[site,neighbor]])
 
-                    dplist[N] += tempdp
-                    if I != J:
-                        dplist[nsite] -= tempdp
+            for i in range(nsites):
+                for j in range(nsites):
+                    if i != j:
+                        dplist[i,i] -= dplist[i,j]
 
     else:
 
-            isite = seq[0,0]
-            nstart = 0
-            nsite = 0 # atom 0,0
-            # get expansion coefficients and derivatives, also get power
-            # spectra
-            for n in range(npairs):
-                i, j = seq[n]
-                if i == j:
-                    nsite = n
-                weight = neighbor_ANs[n,0]
+        for site in range(nsites):
+            zero_2D_array(clisttot)
+            for neighbor in prange(nneighbors):
+                x = neighborlist[site, neighbor, 0]
+                y = neighborlist[site, neighbor, 1]
+                z = neighborlist[site, neighbor, 2]
+                r = np.sqrt(x*x + y*y + z*z)
+                if r < 10**(-8):
+                    continue
+                zero_2D_array(clist)
 
-                # once we change center atoms, we need to compute the power
-                # spectrum and derivatives for the previous center atom before moving
-                # on
-                if i != isite:
-                    compute_pi(nmax, lmax, clisttot, plist[isite])
-                    isite = i
-                    nstart = n
-                    zero_2D_array(clisttot)
-                # end if i != isite
+                compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w, clist)
 
-                for neighbor in prange(nneighbors):
-                    x = neighborlist[n, neighbor, 0]
-                    y = neighborlist[n, neighbor, 1]
-                    z = neighborlist[n, neighbor, 2]
-                    r = np.sqrt(x*x + y*y + z*z)
-                    if r < 10**(-8):
-                        continue
-                    zero_2D_array(clist)
+                weight = neighbor_ANs[site, neighbor]
+                clist *= weight
 
-                    compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist)
+                add_carraytot(clisttot, clist)
 
-                    clist *= weight
-
-                    add_carraytot(clisttot, clist)
-
-
-            # finish last center atom for power spectrum
-            compute_pi(nmax, lmax, clisttot, plist[isite])
+            compute_pi(nmax, lmax, clisttot, plist[site])
     return
 
 if  __name__ == "__main__":
@@ -965,15 +824,6 @@ if  __name__ == "__main__":
     '''
 
     #print(x['rdxdr'].shape)
-    #print(x['rdxdr'])
+    print(x['dxdr'][0,:,1,:])
     #print(np.einsum('ijklm->klm', x['rdxdr']))
-    #print(x['x'])
-    # reconstruct the 3D array for the first atom
-    tmp = np.zeros([len(test), len(x['x'][0]), 3])
-    for id, s in enumerate(x['seq']):
-        i, j = s[0], s[1]
-        if i == 0:
-            tmp[j, :, :] = x['dxdr'][id]
-    print(tmp[:,1,:])
-    #print(x['seq'][:8])
     print('time elapsed: {}'.format(start2 - start1))
