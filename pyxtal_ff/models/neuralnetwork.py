@@ -615,31 +615,37 @@ class NeuralNetwork():
         energy, force, stress = 0., np.zeros([no_of_atoms, 3]), np.zeros([6])
         
         # Normalizing
-        d = {'x': {}, 'dxdr': {}, 'rdxdr': {}}
+        d = {'x': {}, 'dxdr': {}, 'seq': {}, 'rdxdr': {}}
         for element in self.elements:
             _drange = self.drange[element]
             scale = (1 - 0) / (_drange[:, 1] - _drange[:, 0])
 
-            i_size = list(descriptor['elements']).count(element)
-            j_size = descriptor['x'].shape[0]
-            d['x'][element] = torch.zeros([i_size, no_of_descriptors])
-            d['dxdr'][element] = torch.zeros([i_size, j_size, no_of_descriptors, 3])
-            d['rdxdr'][element] = torch.zeros([i_size, no_of_descriptors, 6])
-
             e = np.where(np.array(descriptor['elements'])==element)[0]
+            ee0 = np.where(descriptor['seq'][:,0]==e[0])[0][0]
+            ee1 = np.where(descriptor['seq'][:,0]==e[-1])[0][-1]
+
+            i_size = list(descriptor['elements']).count(element) #number of atoms in type i
+            m_size = ee1-ee0+1# number of pairs
+
+            d['x'][element] = torch.zeros([i_size, no_of_descriptors])
+            d['dxdr'][element] = torch.zeros([m_size, no_of_descriptors, 3], dtype=torch.float64) ####
+            d['rdxdr'][element] = torch.zeros([i_size, no_of_descriptors, 6])
 
             if e.size > 0:
                 des = 0 + np.einsum('j,ij->ij', scale, (descriptor['x'][e[0]:e[-1]+1] - np.expand_dims(_drange[:, 0], 0)))
-                desp = np.einsum('k,ijkl->ijkl', scale, descriptor['dxdr'][e[0]:e[-1]+1])
+                desp = np.einsum('j,ijk->ijk', scale, descriptor['dxdr'][ee0:ee1+1])
                 dess = np.einsum('j,ijk->ijk', scale, descriptor['rdxdr'][e[0]:e[-1]+1])
                 
                 d['x'][element] += torch.from_numpy(des)
+                d['seq'][element] = deepcopy(descriptor['seq'][ee0:ee1+1])
+
                 if self.unit == 'eV':  
-                    d['dxdr'][element] += torch.from_numpy(desp) #/A
-                    d['rdxdr'][element] += torch.from_numpy(dess) #/A^3
+                    d['dxdr'][element] += torch.from_numpy(desp)
+                    d['rdxdr'][element] += torch.from_numpy(dess)
                 else:
                     d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
                     d['rdxdr'][element] += torch.from_numpy(0.529177**3*desp)
+            d['seq'][element][:, 0] -= min(d['seq'][element][:, 0]) #adjust the initial position
 
         x = d['x']
         if bforce:
@@ -659,7 +665,18 @@ class NeuralNetwork():
                 
                 if bforce:
                     dedx = torch.autograd.grad(_e, _x)[0]
-                    force += -torch.einsum("ik, ijkl->jl", dedx, _dxdr).numpy()
+                    #force += -torch.einsum("ik, ijkl->jl", dedx, _dxdr).numpy()
+                    if no_of_atoms > 400: 
+                        for _m in range(no_of_atoms):
+                             ids = np.where(d['seq'][element][:,1]==_m)[0]
+                             tmp = _dxdr[ids, :, :]
+                             force[_m, :] -= torch.einsum("ij, ijk->k", dedx, tmp).numpy()
+                    else:
+                        tmp = torch.zeros([len(d['x'][element]), no_of_atoms, d['x'][element].shape[1], 3])
+                        for _m in range(no_of_atoms):
+                            ids = np.where(d['seq'][element][:,1]==_m)[0]
+                            tmp[d['seq'][element][ids, 0], _m, :, :] += _dxdr[ids, :, :]
+                        force -= torch.einsum("ik, ijkl->jl", dedx, tmp).numpy() 
 
                 if bstress:
                     if bforce == False:
@@ -1053,7 +1070,7 @@ class Dataset(data.Dataset):
             self.energy = torch.DoubleTensor(self.energy).to(self.device)
 
         else:
-            self.x, self.dxdr, self.seq, self.rdxdr = None, None, None
+            self.x, self.dxdr, self.seq, self.rdxdr = None, None, None, None
             self.energy, self.force, self.stress, self.group = [], [], [], []
 
             for i in range(len(list(db1.keys()))):

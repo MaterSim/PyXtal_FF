@@ -139,15 +139,10 @@ class TestBispectrum(unittest.TestCase):
         array2 = np.linalg.norm(self.b1_poly['dxdr'][0,:,:], axis=1)
         self.assertTrue(np.allclose(array1, array2))
 
-    #def test_dBdr_poly_vs_numerical(self):
-    #    array1 = (self.b2_poly['x'] - self.b0_poly['x']).flatten()/eps
-    #    array2 = self.b0_poly['dxdr'][0, :, 0].flatten()
-    #    #if not np.allclose(array1, array2):
-    #    #    print('\n Numerical dBdr_poly')
-    #    #    print(array1)
-    #    #    print('\n precompute')
-    #    #    print(array2)
-    #    self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
+    def test_dBdr_poly_vs_numerical(self):
+        array1 = (self.b2_poly['x'][0] - self.b0_poly['x'][0]).flatten()/eps
+        array2 = self.b0_poly['dxdr'][0, :, 0].flatten()
+        self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
 
 class TestSOAP(unittest.TestCase):
     from pyxtal_ff.descriptors.SOAP import SOAP
@@ -168,88 +163,83 @@ class TestSOAP(unittest.TestCase):
         array2 = np.linalg.norm(self.p1['dxdr'][0,:,:], axis=1)
         self.assertTrue(np.allclose(array1, array2))
 
-    #def test_dpdr_vs_numerical(self):
-    #    array1 = (self.p2['x'] - self.p0['x'])/eps
-    #    array2 = self.p0['dxdr'][0, :, 0]
-    #    if not np.allclose(array1, array2, atol=1e-6):
-    #        print('\n Numerical dPdr')
-    #        print(array1)
-    #        print('\n precompute')
-    #        print(array2)
-    #    self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
+    def test_dpdr_vs_numerical(self):
+        array1 = (self.p2['x'][0] - self.p0['x'][0])/eps
+        array2 = self.p0['dxdr'][0, :, 0]
+        self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
 
-#class TestRegression(unittest.TestCase):
-#
-#    model = {'system' : system,
-#             'hiddenlayers': [12, 12],
-#             'epoch': 10,
-#             'stress_coefficient': None,
-#             'force_coefficient': 0.03,
-#             'path': 'unittest/'
-#            }
-#    ff = PyXtal_FF(descriptors=descriptor, model=model)
-#    struc = bulk('Si', 'diamond', a=5.0, cubic=True)
-#
-#    @classmethod
-#    def tearDownClass(cls):
-#        shutil.rmtree('unittest')
-#        
-#    def test_1_NN_LBFGS(self):
-#        self.ff.algorithm = 'NN'
-#        self.ff._model['optimizer'] = {'method': 'lbfgs'}
-#        (train_stat, _) = self.ff.run(mode='train', TrainData=TrainData)
-#
-#    def test_2_NN_ADAM(self):
-#        self.ff.algorithm = 'NN'
-#        self.ff._model['optimizer']= {'method': 'ADAM'}
-#        self.ff._MODEL(self.ff._model)
-#        train_stat = self.ff.model.train('Train_db', self.ff.optimizer)
-#        self.ff.model.save_checkpoint(des_info=self.ff._descriptors)
-#
-#
-#    def test_3_lr(self):
-#        self.ff.algorithm = 'PR'
-#        self.ff._model['order'] = 1
-#        self.ff._MODEL(self.ff._model)
-#        train_stat = self.ff.model.train('Train_db', None)
-#        self.ff.model.save_checkpoint(des_info=self.ff._descriptors)
-#
-#    def test_4_qr(self):
-#        self.ff.algorithm = 'PR'
-#        self.ff._model['order'] = 2
-#        self.ff._MODEL(self.ff._model)
-#        train_stat = self.ff.model.train('Train_db', None)
-#
-#    def test_5_NN_calculator(self):
-#        calc = PyXtalFFCalculator(mliap='unittest/12-12-checkpoint.pth', logo=False)
-#        self.struc.set_calculator(calc)
-#        self.struc.get_potential_energy()
-#        self.struc.get_stress()
-#
-#    def test_6_LR_calculator(self):
-#        calc = PyXtalFFCalculator(mliap='unittest/PolyReg-checkpoint.pth', logo=False)
-#        self.struc.set_calculator(calc)
-#        self.struc.get_potential_energy()
-#        self.struc.get_stress()
-#
-#
-#class TestRegressionComp(unittest.TestCase):
-#
-#    model = {'system' : system,
-#             'stress_coefficient': None,
-#             'force_coefficient': 0.03,
-#             'path': 'unittest_comp/',
-#             'algorithm': 'PR',
-#            }
-#    ff = PyXtal_FF(descriptors=descriptor_comp, model=model)
-#
-#    @classmethod
-#    def tearDownClass(cls):
-#        shutil.rmtree('unittest_comp')
-#        
-#    def test_lr_comp(self):
-#        self.ff._model['order'] = 1
-#        (train_stat, _) = self.ff.run(mode='train', TrainData=TrainData)
+class TestRegression(unittest.TestCase):
+
+    model = {'system' : system,
+             'hiddenlayers': [12, 12],
+             'epoch': 10,
+             'stress_coefficient': None,
+             'force_coefficient': 0.03,
+             'path': 'unittest/'
+            }
+    ff = PyXtal_FF(descriptors=descriptor, model=model)
+    struc = bulk('Si', 'diamond', a=5.0, cubic=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree('unittest')
+        
+    def test_1_NN_LBFGS(self):
+        self.ff.algorithm = 'NN'
+        self.ff._model['optimizer'] = {'method': 'lbfgs'}
+        (train_stat, _) = self.ff.run(mode='train', TrainData=TrainData)
+
+    def test_2_NN_ADAM(self):
+        self.ff.algorithm = 'NN'
+        self.ff._model['optimizer']= {'method': 'ADAM'}
+        self.ff._MODEL(self.ff._model)
+        train_stat = self.ff.model.train('Train_db', self.ff.optimizer)
+        self.ff.model.save_checkpoint(des_info=self.ff._descriptors)
+
+
+    def test_3_lr(self):
+        self.ff.algorithm = 'PR'
+        self.ff._model['order'] = 1
+        self.ff._MODEL(self.ff._model)
+        train_stat = self.ff.model.train('Train_db', None)
+        self.ff.model.save_checkpoint(des_info=self.ff._descriptors)
+
+    def test_4_qr(self):
+        self.ff.algorithm = 'PR'
+        self.ff._model['order'] = 2
+        self.ff._MODEL(self.ff._model)
+        train_stat = self.ff.model.train('Train_db', None)
+
+    def test_5_NN_calculator(self):
+        calc = PyXtalFFCalculator(mliap='unittest/12-12-checkpoint.pth', logo=False)
+        self.struc.set_calculator(calc)
+        self.struc.get_potential_energy()
+        self.struc.get_stress()
+
+    def test_6_LR_calculator(self):
+        calc = PyXtalFFCalculator(mliap='unittest/PolyReg-checkpoint.pth', logo=False)
+        self.struc.set_calculator(calc)
+        self.struc.get_potential_energy()
+        self.struc.get_stress()
+
+
+class TestRegressionComp(unittest.TestCase):
+
+    model = {'system' : system,
+             'stress_coefficient': None,
+             'force_coefficient': 0.03,
+             'path': 'unittest_comp/',
+             'algorithm': 'PR',
+            }
+    ff = PyXtal_FF(descriptors=descriptor_comp, model=model)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree('unittest_comp')
+        
+    def test_lr_comp(self):
+        self.ff._model['order'] = 1
+        (train_stat, _) = self.ff.run(mode='train', TrainData=TrainData)
 
 if __name__ == '__main__':
 
