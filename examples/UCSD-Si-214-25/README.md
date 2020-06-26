@@ -71,3 +71,4 @@ The command is
 |C44(GPa)  |  81   | 76    |  59   | 65    |  68    |  69   |
 |B-VRH(GPa)|  99   | 95    |  91   | 88    |  85    |  87   |
 
+![phonon](https://github.com/qzhu2017/PyXtal_FF/blob/dxdr-3D/docs/imgs/Si_phonon.png)
