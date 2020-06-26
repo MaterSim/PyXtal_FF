@@ -658,8 +658,6 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
             # spectra
             for n in range(npairs):
                 i, j = seq[n]
-                if i == j:
-                    nsite = n
                 weight = neighbor_ANs[n,0]
 
                 # once we change center atoms, we need to compute the power
@@ -708,6 +706,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     nstart = n
                     zero_2D_array(clisttot)
                 # end if i != isite
+                if i == j:
+                    nsite = n
 
                 for neighbor in prange(nneighbors):
                     x = neighborlist[n, neighbor, 0]
@@ -773,8 +773,6 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
             # spectra
             for n in range(npairs):
                 i, j = seq[n]
-                if i == j:
-                    nsite = n
                 weight = neighbor_ANs[n,0]
 
                 # once we change center atoms, we need to compute the power
@@ -813,6 +811,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     nstart = n
                     zero_2D_array(clisttot)
                 # end if i != isite
+                if i == j:
+                    nsite = n
 
                 for neighbor in prange(nneighbors):
                     x = neighborlist[n, neighbor, 0]
@@ -973,7 +973,8 @@ if  __name__ == "__main__":
     for id, s in enumerate(x['seq']):
         i, j = s[0], s[1]
         if i == 0:
-            tmp[j, :, :] = x['dxdr'][id]
-    print(tmp[:,1,:])
+            print(j)
+            print(x['dxdr'][id])
+    #print(x['x'])
     #print(x['seq'][:8])
     print('time elapsed: {}'.format(start2 - start1))

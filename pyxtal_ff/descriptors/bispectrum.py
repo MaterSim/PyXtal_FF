@@ -1059,8 +1059,6 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                 # talk to Qiang about potential issue here
                 # when there are neighborlists where there
                 # are no i-i atom pairs
-                if i == j:
-                    nsite = n
                 weight = neighbor_ANs[n,0]
 
                 if i != isite:
@@ -1118,6 +1116,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     zero_1d(zlist)
                     zero_3d(dulist)
                 # end if i != isite
+                if i == j:
+                    nsite = n
 
 
                 for neighbor in prange(nneighbors):
@@ -1197,8 +1197,6 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
             nsite = 0 # 0,0
             for n in range(npairs):
                 i, j = seq[n]
-                if i == j:
-                    nsite = n
                 weight = neighbor_ANs[n,0]
 
                 if i != isite:
@@ -1248,6 +1246,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     zero_1d(zlist)
                     zero_3d(dulist)
                 # end if i != isite
+                if i == j:
+                    nsite = n
 
 
                 for neighbor in prange(nneighbors):
