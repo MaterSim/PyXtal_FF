@@ -665,12 +665,14 @@ class NeuralNetwork():
                 
                 if bforce:
                     dedx = torch.autograd.grad(_e, _x)[0]
+                    shp = dedx.shape
                     #force += -torch.einsum("ik, ijkl->jl", dedx, _dxdr).numpy()
                     if no_of_atoms > 400: 
                         for _m in range(no_of_atoms):
-                             ids = np.where(d['seq'][element][:,1]==_m)[0]
-                             tmp = _dxdr[ids, :, :]
-                             force[_m, :] -= torch.einsum("ij, ijk->k", dedx, tmp).numpy()
+                            ids = np.where(d['seq'][element][:,1]==_m)[0]
+                            tmp = _dxdr[ids, :, :]
+                            _dedx = dedx[d['seq'][element][ids][:,0]]
+                            force[_m, :] -= torch.einsum("ij, ijk->k", _dedx, tmp).numpy()
                     else:
                         tmp = torch.zeros([len(d['x'][element]), no_of_atoms, d['x'][element].shape[1], 3])
                         for _m in range(no_of_atoms):
