@@ -950,7 +950,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
             idxu_block[l] = idxu_count
             for mb in range(0, l + 1, 1):
                 for ma in range(0, l + 1, 1):
-                    u_norm[idxu_count] = np.sqrt(l+1)/4/np.pi
+                    u_norm[idxu_count] = 4*np.pi/np.sqrt(l+1)
                     idxu_count += 1
 
 

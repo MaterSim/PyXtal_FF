@@ -391,12 +391,12 @@ def dRij_dRm_norm(Rij, ijm_list):
     dRij_m = np.zeros([len(Rij), 3])
 
     R1ij = np.linalg.norm(Rij, axis=1).reshape([len(Rij),1])
-    arr = (ijm_list[:,2]==ijm_list[:,0])
-    dRij_m[arr, :] = -Rij[arr]/R1ij[arr]
-    arr = (ijm_list[:,2]==ijm_list[:,1])
-    dRij_m[arr, :] = Rij[arr]/R1ij[arr]
-    arr = (ijm_list[:,0]==ijm_list[:,1]) # This condition doesn't seem
-    dRij_m[arr, :] = 0 #Rij[arr]/R1ij[arr]  # to contribute anything
+    l1 = (ijm_list[:,2]==ijm_list[:,0])
+    dRij_m[l1, :] = -Rij[l1]/R1ij[l1]
+    l2 = (ijm_list[:,2]==ijm_list[:,1])
+    dRij_m[l2, :] = Rij[l2]/R1ij[l2]
+    l3 = (ijm_list[:,0]==ijm_list[:,1])
+    dRij_m[l3, :] = 0
     
     return dRij_m
 
