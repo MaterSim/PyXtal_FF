@@ -150,13 +150,13 @@ class Database():#MutableSequence):
         """ Compute descriptor for one structure to the database. """
 
         if function['type'] in ['BehlerParrinello', 'ACSF']:
-            from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
+            from pyxtal_ff.descriptors.ACSF import ACSF
             d = BehlerParrinello(function['parameters'],
                                  function['Rc'], 
                                  function['force'],
                                  function['stress'], False).calculate(data['structure'])
-        elif function['type'] in ['wACSF', 'wacsf', 'AWSF']:
-            from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
+        elif function['type'] in ['wACSF', 'wacsf']:
+            from pyxtal_ff.descriptors.ACSF import ACSF
             d = BehlerParrinello(function['parameters'],
                                  function['Rc'], 
                                  function['force'],
@@ -179,7 +179,7 @@ class Database():#MutableSequence):
                     stress=function['stress']).calculate(data['structure'])
 
         elif function['type'] in ['EAMD', 'eamd']:
-            from pyxtal_ff.descriptors.eamd import EAMD
+            from pyxtal_ff.descriptors.EAMD import EAMD
             d = EAMD(function['parameters'],
                      function['Rc'],
                      function['force'], function['stress']).calculate(data['structure'])
@@ -212,27 +212,32 @@ class Database():#MutableSequence):
 def compute_descriptor(function, structure):
     """ Compute descriptor for one structure. """
 
-    if function['type'] == 'BehlerParrinello':
-        from pyxtal_ff.descriptors.behlerparrinello import BehlerParrinello
-        d = BehlerParrinello(function['parameters'],
+    if function['type'] == ['BehlerParrinello', 'ACSF']:
+        from pyxtal_ff.descriptors.ACSF import ACSF
+        d = ACSF(function['parameters'],
                              function['Rc'], 
                              True, True).calculate(structure)
-    elif function['type'] == 'Bispectrum':
+    elif function['type'] in ['wACSF', 'wacsf']:
+        from pyxtal_ff.descriptors.ACSF import ACSF
+        d = ACSF(function['parameters'],
+                             function['Rc'], 
+                             True, False).calculate(structure)
+    elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
         from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
         d = SO4_Bispectrum(function['parameters']['lmax'],
                            function['Rc'],
                            derivative=True,
                            stress=True,
                            normalize_U=function['parameters']['normalize_U']).calculate(structure)
-    elif function['type'] == 'SO3':
+    elif function['type'] in ['SO3', 'SOAP', 'soap']:
         from pyxtal_ff.descriptors.SO3 import SO3
         d = SO3(function['parameters']['nmax'],
                 function['parameters']['lmax'],
                 function['Rc'],
                 derivative=True,
                 stress=True).calculate(structure)
-    elif function['type'] == 'EAMD':
-            from pyxtal_ff.descriptors.eamd import EAMD
+    elif function['type'] == ['EAMD', 'eamd']:
+            from pyxtal_ff.descriptors.EAMD import EAMD
             d = EAMD(function['parameters'],
                      function['Rc'],
                      True, True).calculate(structure)

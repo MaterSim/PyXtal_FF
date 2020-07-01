@@ -4,7 +4,7 @@ import numpy as np
 from ase.neighborlist import NeighborList
 from itertools import combinations, combinations_with_replacement
 
-class BehlerParrinello:
+class ACSF:
     """A class for calculating Behler-Parrinello symmetry functions.
     
     The forms of the functions are consistent with the 
@@ -30,7 +30,7 @@ class BehlerParrinello:
         if atom_weighted:
             self._type = 'wACSF'
         else:
-            self._type = 'BehlerParrinello'
+            self._type = 'ACSF'
         
         # Set up the symmetry parameters keywords. If a string are not in the
         # keyword, code will return an error.
@@ -1094,7 +1094,7 @@ if __name__ == '__main__':
         si.set_cell(cell)
         print(si.get_cell())
 
-        bp = BehlerParrinello(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=False)
+        bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=False)
         des = bp.calculate(si, system=[14])
         
         #print("G:", des['x'][0])
@@ -1104,7 +1104,7 @@ if __name__ == '__main__':
         #print("GPrime", des['dxdr'][0,:,4,:])
         #print(np.einsum('ijklm->klm', des['rdxdr']))
 
-        bp = BehlerParrinello(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=True)
+        bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=True)
         des = bp.calculate(si, system=[14])
         print("G:", des['x'][0])
         print("Sequence", des['seq'][0])
