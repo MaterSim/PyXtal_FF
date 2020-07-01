@@ -163,7 +163,7 @@ class Database():#MutableSequence):
                                  function['stress'], True).calculate(data['structure'])
         
         elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
-            from pyxtal_ff.descriptors.bispectrum import SO4_Bispectrum
+            from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
             d = SO4_Bispectrum(function['parameters']['lmax'],
                                function['Rc'],
                                derivative=function['force'],
@@ -171,12 +171,12 @@ class Database():#MutableSequence):
                                normalize_U=function['parameters']['normalize_U']).calculate(data['structure'])
         
         elif function['type'] in ['SO3', 'SOAP', 'soap']:
-            from pyxtal_ff.descriptors.SOAP import SOAP
-            d = SOAP(function['parameters']['nmax'],
-                     function['parameters']['lmax'],
-                     function['Rc'],
-                     derivative=function['force'],
-                     stress=function['stress']).calculate(data['structure'])
+            from pyxtal_ff.descriptors.SO3 import SO3
+            d = SO3(function['parameters']['nmax'],
+                    function['parameters']['lmax'],
+                    function['Rc'],
+                    derivative=function['force'],
+                    stress=function['stress']).calculate(data['structure'])
 
         elif function['type'] in ['EAMD', 'eamd']:
             from pyxtal_ff.descriptors.eamd import EAMD
@@ -218,19 +218,19 @@ def compute_descriptor(function, structure):
                              function['Rc'], 
                              True, True).calculate(structure)
     elif function['type'] == 'Bispectrum':
-        from pyxtal_ff.descriptors.bispectrum import SO4_Bispectrum
+        from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
         d = SO4_Bispectrum(function['parameters']['lmax'],
                            function['Rc'],
                            derivative=True,
                            stress=True,
                            normalize_U=function['parameters']['normalize_U']).calculate(structure)
-    elif function['type'] == 'SOAP':
-        from pyxtal_ff.descriptors.SOAP import SOAP
-        d = SOAP(function['parameters']['nmax'],
-                 function['parameters']['lmax'],
-                 function['Rc'],
-                 derivative=True,
-                 stress=True).calculate(structure)
+    elif function['type'] == 'SO3':
+        from pyxtal_ff.descriptors.SO3 import SO3
+        d = SO3(function['parameters']['nmax'],
+                function['parameters']['lmax'],
+                function['Rc'],
+                derivative=True,
+                stress=True).calculate(structure)
     elif function['type'] == 'EAMD':
             from pyxtal_ff.descriptors.eamd import EAMD
             d = EAMD(function['parameters'],

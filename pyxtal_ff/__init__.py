@@ -46,7 +46,7 @@ class PyXtal_FF():
                     {'L': 2, 'eta': [.3, .7], 'Rs': [.1, .2]}}
                 + SO4/Bispectrum
                     {'lmax': 3}
-                + SO4/SOAP
+                + SO3
                     {'nmax': 1, 'lmax': 3}
 
         model: dict
@@ -383,9 +383,9 @@ class PyXtal_FF():
         for key in keys:
             print('{:12s}: {:}'.format(key, _descriptors[key]))
 
-        if _descriptors['type'] == 'Bispectrum':
+        if _descriptors['type'] in ['SO4', 'Bispectrum']:
             key_params = ['lmax', 'normalize_U']
-        elif _descriptors['type'] == 'SOAP':
+        elif _descriptors['type'] in ['SO3', 'SOAP']:
             key_params = ['nmax', 'lmax']
         elif _descriptors['type'] == 'EAMD':
             key_params = ['L', 'eta', 'Rs']

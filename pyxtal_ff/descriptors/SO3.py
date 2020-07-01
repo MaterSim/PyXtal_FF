@@ -7,7 +7,7 @@ from copy import deepcopy
 from numba import prange, cuda
 from pyxtal_ff.descriptors.angular_momentum import Wigner_D
 
-class SOAP:
+class SO3:
     '''
     A class to generate the SO3 power spectrum components
     based off of the Gaussian atomic neighbor density function
@@ -32,7 +32,7 @@ class SOAP:
         return
 
     def __repr__(self):
-        return """SO3 SOAP power spectrum calculator"""
+        return """SO3 smooth power spectrum calculator"""
 
     @property
     def nmax(self):
@@ -628,7 +628,7 @@ def zero_4D_array(arr):
          cache=True, fastmath=True, nogil=True)
 def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, nmax, lmax, rcut, alpha, derivative, stress, plist, dplist, pstress):
     '''
-    Interface to SOAP class, this is the main work function for the power spectrum calculation.
+    Interface to SO3 class, this is the main work function for the power spectrum calculation.
     '''
     # get the number of sites, number of neighbors, and number of spherical harmonics
     npairs = neighborlist.shape[0]
@@ -955,7 +955,7 @@ if  __name__ == "__main__":
 
     import time
     start1 = time.time()
-    f = SOAP(nmax, lmax, rcut, alpha, derivative=der, stress=stress)
+    f = SO3(nmax, lmax, rcut, alpha, derivative=der, stress=stress)
     x = f.calculate(test)
     start2 = time.time()
     '''

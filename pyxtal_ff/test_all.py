@@ -120,8 +120,8 @@ class TestACSF(unittest.TestCase):
             print(array2)
         self.assertTrue(np.allclose(array1, array2))
 
-class TestBispectrum(unittest.TestCase):
-    from pyxtal_ff.descriptors.bispectrum import SO4_Bispectrum
+class TestSO4(unittest.TestCase):
+    from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
     struc = get_rotated_struc(cu)
     b0_poly = SO4_Bispectrum(lmax=1, rcut=rcut, stress=True, derivative=True).calculate(struc)#, backend='pymatgen')
     struc = get_rotated_struc(cu, 20, 'x')
@@ -144,16 +144,16 @@ class TestBispectrum(unittest.TestCase):
         array2 = self.b0_poly['dxdr'][0, :, 0].flatten()
         self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
 
-class TestSOAP(unittest.TestCase):
-    from pyxtal_ff.descriptors.SOAP import SOAP
+class TestSO3(unittest.TestCase):
+    from pyxtal_ff.descriptors.SO3 import SO3
     struc = get_rotated_struc(cu)
-    p0 = SOAP(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc) #, backend='ase')
+    p0 = SO3(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc) #, backend='ase')
     struc = get_rotated_struc(cu, 20, 'x')
-    p1 = SOAP(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc) #, backend='ase')
+    p1 = SO3(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc) #, backend='ase')
     struc = get_perturbed_struc(cu, eps)
-    p2 = SOAP(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc) #, backend='ase')
+    p2 = SO3(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc) #, backend='ase')
 
-    def test_SOAP_rotation_variance(self):
+    def test_SO3_rotation_variance(self):
         array1 = self.p0['x'].flatten()
         array2 = self.p1['x'].flatten()
         self.assertTrue(np.allclose(array1, array2))
