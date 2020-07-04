@@ -661,7 +661,7 @@ class NeuralNetwork():
                 if bstress:
                     _rdxdr = rdxdr[element]
                 _e = model(_x).sum()
-                energy += _e
+                energy += _e.detach().numpy() 
                 
                 if bforce:
                     dedx = torch.autograd.grad(_e, _x)[0]
