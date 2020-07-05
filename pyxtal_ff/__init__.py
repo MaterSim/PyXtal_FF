@@ -168,9 +168,10 @@ class PyXtal_FF():
             _system = model['system']
             self.path = "-".join(_system) + "-"
             self.path += self._descriptors['type'] + "/"
-        if not os.path.exists(self.path):
-            os.mkdir(self.path)
+
         if logo:
+            if not os.path.exists(self.path):
+                os.mkdir(self.path)
             self.print_descriptors(self._descriptors)
         
         # Checking the keys in model.
@@ -201,7 +202,9 @@ class PyXtal_FF():
         
         self._model = model
 
-    
+    def todict(self):
+        return {"descriptor": self._descriptors, "model": self._model}
+
     def run(self, mode='train', TrainData=None, TestData=None, mliap=None):
         """ Command PyXtal_FF to run in 2 modes:
         1. train

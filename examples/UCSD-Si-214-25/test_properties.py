@@ -19,7 +19,10 @@ if  __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     # load calculator
-    calc = PyXtalFFCalculator(mliap=options.file, logo=False)
+    #calc = PyXtalFFCalculator(mliap=options.file, logo=False)
+    ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
+    ff.run(mode='predict', mliap=options.file)
+    calc = PyXtalFFCalculator(ff=ff)
 
     # initial structure and calculator
     si = bulk('Si', 'diamond', a=5.0, cubic=True)

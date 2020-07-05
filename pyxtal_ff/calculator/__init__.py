@@ -21,14 +21,12 @@ class PyXtalFFCalculator(Calculator):
 
         Calculator.calculate(self, atoms, properties, system_changes)
 
-        chem_symbols = list(set(atoms.get_chemical_symbols()))
-        self.ff = PyXtal_FF(model={'system': chem_symbols}, 
-                            logo=self.parameters.logo)
-        self.ff.run(mode='predict', mliap=self.parameters.mliap)
+        #chem_symbols = list(set(atoms.get_chemical_symbols()))
+        #self.ff = PyXtal_FF(model={'system': chem_symbols}, logo=self.parameters.logo)
+        #self.ff.run(mode='predict', mliap=self.parameters.mliap)
 
-        desp = compute_descriptor(self.ff._descriptors, atoms)
-
-        energy, forces, stress = self.ff.model.calculate_properties(desp, bforce=True, bstress=True)
+        desp = compute_descriptor(self.parameters.ff._descriptors, atoms)
+        energy, forces, stress = self.parameters.ff.model.calculate_properties(desp, bforce=True, bstress=True)
 
         self.results['energy'] = energy*len(atoms)
         self.results['free_energy'] = energy*len(atoms)

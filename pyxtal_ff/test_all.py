@@ -211,13 +211,22 @@ class TestRegression(unittest.TestCase):
         train_stat = self.ff.model.train('Train_db', None)
 
     def test_5_NN_calculator(self):
-        calc = PyXtalFFCalculator(mliap='unittest/12-12-checkpoint.pth', logo=False)
+        #calc = PyXtalFFCalculator(mliap='unittest/12-12-checkpoint.pth', logo=False)
+        ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
+        ff.run(mode='predict', mliap='unittest/12-12-checkpoint.pth')
+        calc = PyXtalFFCalculator(ff=ff)
+
         self.struc.set_calculator(calc)
         self.struc.get_potential_energy()
         self.struc.get_stress()
 
     def test_6_LR_calculator(self):
-        calc = PyXtalFFCalculator(mliap='unittest/PolyReg-checkpoint.pth', logo=False)
+        #calc = PyXtalFFCalculator(mliap='unittest/PolyReg-checkpoint.pth', logo=False)
+        ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
+        ff.run(mode='predict', mliap='unittest/PolyReg-checkpoint.pth')
+        calc = PyXtalFFCalculator(ff=ff)
+
+
         self.struc.set_calculator(calc)
         self.struc.get_potential_energy()
         self.struc.get_stress()
