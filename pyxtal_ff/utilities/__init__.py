@@ -490,7 +490,15 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
                     read_composition = False
                     read_structure = True
                     count += 4
-                    line_number = len(symbol_array) + 16
+                    # search for "   energy  without entropy="
+                    line_number = 0
+                    for tmp in range(24):
+                        if lines[count+len(symbol_array)+tmp].find("entropy") > 0:
+                            line_number = len(symbol_array) + tmp
+                            break
+                    if line_number == 0:
+                        raise ValueError("Cannot identify the line starts with energy without entropy")
+
             else: #read_structure
                 lat_string = lines[count+1:count+4]
                 lat = np.zeros([3,3])
@@ -502,7 +510,8 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
                     array = np.fromstring(l, dtype=float, sep=' ')
                     coor[i,:] = array[:3]
                     force[i,:] = array[3:]
-                energy = float(lines[count+line_number-3].split()[-2])
+                
+                energy = float(lines[count+line_number-1].split()[-4])
                 structure = Atoms(symbols=symbol_array,
                                   positions=coor,
                                   cell=lat, pbc=True)
@@ -510,9 +519,11 @@ def parse_OUTCAR_comp(structure_file, N=1000000):
                              'energy': energy, 'force': force,
                              'stress': None, 'group': 'random'})
                 count += line_number - 1
+
             count += 1
             if count >= len(lines) or len(data) == N:
                 break
+
     return data
 
 def convert_to_ase_db(data, db_path='test.db'):
