@@ -305,18 +305,12 @@ class NeuralNetwork():
                     if self.force_coefficient:
                         dedx = torch.autograd.grad(_e, _x)[0]
                         _dxdr = value['dxdr'][element]
-                        #_Force += -1 * torch.einsum("ik, ijkl->jl", dedx, _dxdr)
-                        #for _m in range(n_atoms):
-                        #     #tmp = torch.zeros([n_atoms, x[element].shape[1], 3])
-                        #     ids = np.where(value['seq'][element][:,1]==_m)[0]
-                        #     tmp = _dxdr[ids, :, :]
-                        #     _Force[_m, :] -= torch.einsum("ij, ijk->k", dedx, tmp) # [N, L] [N, L, 3] -> 3
 
-                        tmp = torch.zeros([len(value['x'][element]), n_atoms, value['x'][element].shape[1], 3])
+                        tmp = np.zeros([len(value['x'][element]), n_atoms, value['x'][element].shape[1], 3])
                         for _m in range(n_atoms):
-                            ids = np.where(value['seq'][element][:,1]==_m)[0]
-                            tmp[value['seq'][element][ids, 0], _m, :, :] += _dxdr[ids, :, :]
-                        _Force -= torch.einsum("ik, ijkl->jl", dedx, tmp) # [N, L] [N, L, 3] -> 3
+                            rows = np.where(value['seq'][element][:,1]==_m)[0]
+                            tmp[value['seq'][element][rows, 0], _m, :, :] += _dxdr[rows, :, :]
+                        _Force -= torch.einsum("ik, ijkl->jl", dedx, torch.from_numpy(tmp)) 
 
                     if self.stress_coefficient and (data2['group'] in self.stress_group):
                         if self.force_coefficient is None:
@@ -478,7 +472,7 @@ class NeuralNetwork():
         energy_mae, force_mae, stress_mae = 0., 0., 0.
         all_atoms = 0
         s_count = 0
-        
+
         for x, dxdr, seq, rdxdr, energy, force, stress, sf, group in batch:
             n_atoms = sum(len(value) for value in x.values())
             all_atoms += n_atoms
@@ -496,15 +490,11 @@ class NeuralNetwork():
 
                     if self.force_coefficient:
                         dedx[element] = torch.autograd.grad(_energy, _x, create_graph=True)[0]
-                        #_force += -1 * torch.einsum("ik, ijkl -> jl", 
-                        #                        dedx[element], dxdr[element]) # [natoms, 3]
-                        # new way to compute the force
-
-                        tmp = torch.zeros([len(x[element]), n_atoms, x[element].shape[1], 3])
+                        tmp = np.zeros([len(x[element]), n_atoms, x[element].shape[1], 3])
                         for _m in range(n_atoms):
-                            ids = np.where(seq[element][:,1]==_m)[0]
-                            tmp[seq[element][ids, 0], _m, :, :] += dxdr[element][ids, :, :]
-                        _force -= torch.einsum("ik, ijkl->jl", dedx[element], tmp) # [N, L] [N, L, 3] -> 3
+                            rows = np.where(seq[element][:,1]==_m)[0]
+                            tmp[seq[element][rows, 0], _m, :, :] += dxdr[element][rows, :, :]
+                        _force -= torch.einsum("ik, ijkl->jl", dedx[element], torch.from_numpy(tmp)) 
 
                     if self.stress_coefficient and (group in self.stress_group):
                         if self.force_coefficient is None:
@@ -871,12 +861,10 @@ class NeuralNetwork():
                     m_size = ee1-ee0+1# number of pairs
 
                     d['x'][element] = torch.zeros([i_size, self.no_of_descriptors], dtype=torch.float64)
-                    d['dxdr'][element] = torch.zeros([m_size, self.no_of_descriptors, 3], dtype=torch.float64) ####
-                    #d['seq'][element] = torch.zeros([m_size, 2], dtype=torch.int8) ####
+                    #d['dxdr'][element] = torch.zeros([m_size, self.no_of_descriptors, 3], dtype=torch.float64) ####
+                    d['dxdr'][element] = np.zeros([m_size, self.no_of_descriptors, 3]) ####
                     d['rdxdr'][element] = torch.zeros([i_size, self.no_of_descriptors, 6], dtype=torch.float64)
 
-                    #print('ee0:', ee0, 'ee1:', ee1)
-                    #print(descriptor['dxdr'].shape)
                     if e.size > 0:
                         des = norm[0] + np.einsum('j,ij->ij', scale, (descriptor['x'][e[0]:e[-1]+1] - np.expand_dims(_drange[:, 0], 0)))
                         dess = np.einsum('j,ijk->ijk', scale, descriptor['rdxdr'][e[0]:e[-1]+1])
@@ -884,26 +872,17 @@ class NeuralNetwork():
 
                         d['x'][element] += torch.from_numpy(des)
                         d['seq'][element] = deepcopy(descriptor['seq'][ee0:ee1+1])
+                        #d['seq'][element] = torch.from_numpy(descriptor['seq'][ee0:ee1+1])
 
                         if unit == 'eV':
-                            d['dxdr'][element] += torch.from_numpy(desp)
+                            #d['dxdr'][element] += torch.from_numpy(desp)
+                            d['dxdr'][element] += desp
                             d['rdxdr'][element] += torch.from_numpy(dess)
                         else:
                             d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
                             d['rdxdr'][element] += torch.from_numpy(0.529177 * dess)
-                    d['seq'][element][:, 0] -= min(d['seq'][element][:, 0]) #adjust the initial position
-                    #print(d['seq'][element].shape, min(d['seq'][element][:,0]), max(d['seq'][element][:,0]))
-                    #ids = np.where(d['seq'][element][:,1]==0)[0]
-                    #print(element, descriptor['seq'].shape, ee0, ee1, descriptor['seq'][ee0], descriptor['seq'][ee1])
-                    #print(d['seq'][element][ids, 0])
-                    #print(descriptor['seq'])
- 
-                    #print(d['seq'][element].shape)
-                    #print(d['x'][element].shape)
-                    #print(d['dxdr'][element].shape)
-                    #print(d['rdxdr'][element].shape)
-                #import sys
-                #sys.exit()
+                    #d['seq'][element][:, 0] -= torch.min(d['seq'][element][:, 0]) #adjust the initial position
+                    d['seq'][element][:, 0] -= np.min(d['seq'][element][:, 0]) #adjust the initial position
                 
                 db2[str(i)] = d
                 
@@ -1052,7 +1031,8 @@ class Dataset(data.Dataset):
                 x, dx, seq, rdx = {}, {}, {}, {}
                 for k in data2['x'].keys(): #["Si", "O"]
                     x[k] = data2['x'][k].to(self.device)
-                    dx[k] = data2['dxdr'][k].to(self.device) if self.fc else None
+                    #dx[k] = data2['dxdr'][k].to(self.device) if self.fc else None
+                    dx[k] = data2['dxdr'][k] if self.fc else None
                     seq[k] = data2['seq'][k] if self.fc else None
                     #seq[k] = data2['seq'][k].to(self.device) if self.fc else None
                     rdx[k] = data2['rdxdr'][k].to(self.device) if (self.sc and data1['stress'] is not None) else None
@@ -1119,7 +1099,7 @@ class Dataset(data.Dataset):
             if self.device == 'cuda':
                 for k in x.keys():
                     x[k] = x[k].to(self.device)
-                    dxdr[k] = dxdr[k].to(self.device)
+                    #dxdr[k] = dxdr[k].to(self.device)
                     rdxdr[k] = rdxdr[k].to(self.device)
 
         return x, dxdr, seq, rdxdr, energy, force, stress, sf, group
