@@ -19,7 +19,7 @@ The aim of PyXtal_FF is to promote the application of atomistic simulations by p
 - the atom-centered symmetry functions, 
 - embedded atom density, 
 - SO4 bispectrum, 
-- smooth SO3 power spectrum). 
+- smooth SO3 power spectrum. 
 
 PyXtal\_FF can train the MLPs with either the linear regression or neural networks model, by simultaneously minimizing the errors of energy/forces/stress tensors in comparison with the data from the ab-initio simulation.
 
