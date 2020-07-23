@@ -151,16 +151,16 @@ class Database():#MutableSequence):
 
         if function['type'] in ['BehlerParrinello', 'ACSF']:
             from pyxtal_ff.descriptors.ACSF import ACSF
-            d = BehlerParrinello(function['parameters'],
-                                 function['Rc'], 
-                                 function['force'],
-                                 function['stress'], False).calculate(data['structure'])
+            d = ACSF(function['parameters'],
+                     function['Rc'], 
+                     function['force'],
+                     function['stress'], False).calculate(data['structure'])
         elif function['type'] in ['wACSF', 'wacsf']:
             from pyxtal_ff.descriptors.ACSF import ACSF
-            d = BehlerParrinello(function['parameters'],
-                                 function['Rc'], 
-                                 function['force'],
-                                 function['stress'], True).calculate(data['structure'])
+            d = ACSF(function['parameters'],
+                     function['Rc'], 
+                     function['force'],
+                     function['stress'], True).calculate(data['structure'])
         
         elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
             from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
