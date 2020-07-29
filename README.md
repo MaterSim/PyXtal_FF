@@ -30,7 +30,7 @@ See the [documentation page](https://pyxtal-ff.readthedocs.io/en/latest/) for mo
 ## Relevant works
 
 [1]. Yanxon H, Zagaceta D, Tang B, Matteson D, Zhu Q* (2020)\
-PyXtal\_FF: a Python Library for Automated Force Field Generation (to appear soon)
+[PyXtal\_FF: a Python Library for Automated Force Field Generation](http://arxiv.org/abs/2007.13012)
 
 [2]. Zagaceta D, Yanxon H, Zhu Q* (2020) \
 [Spectral Neural Network Potentials for Binary Alloys](http://arxiv.org/abs/2005.04332)
