@@ -48,13 +48,16 @@ class EAMD:
         self.stress = stress
 
     
-    def calculate(self, crystal):
+    def calculate(self, crystal, ids=None):
         """Calculate and return the EAMD.
         
         Parameters
         ----------
         crystal: object
             ASE Structure object.
+        ids: list
+            A list of the centered atoms to be computed
+            if None, all atoms will be considered
         
         Returns
         -------
@@ -88,7 +91,11 @@ class EAMD:
             self.d['rdxdr'] = np.zeros([unique_N, self.dsize, 3, 3])
         
         seq_count = 0
-        for i in range(self.total_atoms):
+
+        if ids is None:
+            ids = range(len(crystal))
+
+        for i in ids: #range(self.total_atoms):
             element = crystal.get_chemical_symbols()[i]
             indices, offsets = neighbors.get_neighbors(i)
             Z = []  # atomic numbers of neighbors

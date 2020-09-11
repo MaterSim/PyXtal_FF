@@ -81,7 +81,7 @@ class ACSF:
         self.stress = stress
         
        
-    def calculate(self, crystal, system=None):
+    def calculate(self, crystal, system=None, ids=None):
         """The symmetry functions are obtained through this `calculate` method.
         
         Parameters
@@ -93,6 +93,9 @@ class ACSF:
             All elements in the list have to be integer. For example, the
             system of crystal structure is NaCl system. Then, system should be
             pass as [11, 17]
+        ids: list
+            A list of the centered atoms to be computed
+            if None, all atoms will be considered
             
         Returns
         -------
@@ -133,7 +136,10 @@ class ACSF:
                                  skin=0.0)
         neighbors.update(crystal)
         
-        for i in range(len(crystal)):
+        if ids is None:
+            ids = range(len(crystal))
+
+        for i in ids: #range(len(crystal)):
             element = crystal.get_chemical_symbols()[i]
             indices, offsets = neighbors.get_neighbors(i)
             
@@ -1105,7 +1111,8 @@ if __name__ == '__main__':
         #print(np.einsum('ijklm->klm', des['rdxdr']))
 
         bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=True)
-        des = bp.calculate(si, system=[14])
+        des = bp.calculate(si, system=[14], ids=[1, 2])
+        print(des['x'].shape)
         print("G:", des['x'][0])
         print("Sequence", des['seq'][0])
         print("GPrime", des['dxdr'].shape)
