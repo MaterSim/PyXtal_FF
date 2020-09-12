@@ -124,7 +124,7 @@ class SO3:
                 delattr(self, attr)
         return
 
-    def calculate(self, atoms):
+    def calculate(self, atoms, atom_ids=None):
         '''
         Calculates the SO(3) power spectrum components of the
         smoothened atomic neighbor density function
@@ -139,7 +139,7 @@ class SO3:
         '''
         self._atoms = atoms
 
-        self.build_neighbor_list()
+        self.build_neighbor_list(atom_ids)
         self.initialize_arrays()
 
         get_power_spectrum_components(self.center_atoms, self.neighborlist,
@@ -171,7 +171,7 @@ class SO3:
         # atoms in the unit cell
         # for a cluster/molecule(s) this will be the total number
         # of atoms
-        ncell = len(self._atoms)
+        ncell = len(self.center_atoms) #self._atoms)
         # degree of spherical harmonic expansion
         lmax = self.lmax
         # degree of radial expansion
@@ -190,21 +190,25 @@ class SO3:
 
         return
 
-    def build_neighbor_list(self):
+    def build_neighbor_list(self, atom_ids=None):
         '''
         Builds a neighborlist for the calculation of bispectrum components for
         a given ASE atoms object given in the calculate method.
         '''
+        if atom_ids is None:
+            atom_ids = range(len(atoms))
+ 
         atoms = self._atoms
         cutoffs = [self.rcut/2]*len(atoms)
         nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
         nl.update(atoms)
-        center_atoms = np.zeros((len(atoms),3), dtype=np.float64)
+
+        center_atoms = np.zeros((len(atom_ids),3), dtype=np.float64)
         neighbors = []
         neighbor_indices = []
         atomic_numbers = []
-
-        for i in range(len(atoms)):
+           
+        for i in atom_ids: #range(len(atoms)):
             # get center atom position
             center_atom = atoms.positions[i]
             center_atoms[i] = center_atom
@@ -225,7 +229,7 @@ class SO3:
         Atomic_numbers = []
         Seq = []
         max_len = 0
-        for i in range(len(atoms)):
+        for i in atom_ids: #range(len(atoms)):
             unique_atoms = np.unique(neighbor_indices[i])
             if i not in unique_atoms:
                 at = list(unique_atoms)
@@ -956,7 +960,8 @@ if  __name__ == "__main__":
     import time
     start1 = time.time()
     f = SO3(nmax, lmax, rcut, alpha, derivative=der, stress=stress)
-    x = f.calculate(test)
+    x = f.calculate(test, atom_ids=[0, 1])
+    print(x)
     start2 = time.time()
     '''
     for key, item in x.items():
@@ -969,12 +974,12 @@ if  __name__ == "__main__":
     #print(np.einsum('ijklm->klm', x['rdxdr']))
     #print(x['x'])
     # reconstruct the 3D array for the first atom
-    tmp = np.zeros([len(test), len(x['x'][0]), 3])
-    for id, s in enumerate(x['seq']):
-        i, j = s[0], s[1]
-        if i == 0:
-            print(j)
-            print(x['dxdr'][id])
+    #tmp = np.zeros([len(test), len(x['x'][0]), 3])
+    #for id, s in enumerate(x['seq']):
+    #    i, j = s[0], s[1]
+    #    if i == 0:
+    #        print(j)
+    #        print(x['dxdr'][id])
     #print(x['x'])
     #print(x['seq'][:8])
     print('time elapsed: {}'.format(start2 - start1))

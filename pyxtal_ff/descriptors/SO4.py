@@ -106,7 +106,7 @@ class SO4_Bispectrum:
                 delattr(self, attr)
         return
 
-    def calculate(self, atoms):
+    def calculate(self, atoms, atom_ids=None):
         '''
         args:
             atoms:  ASE atoms object for the corresponding structure
@@ -117,7 +117,7 @@ class SO4_Bispectrum:
         '''
         self._atoms = atoms
         vol = atoms.get_volume()
-        self.build_neighbor_list()
+        self.build_neighbor_list(atom_ids)
         self.initialize_arrays()
 
         get_bispectrum_components(self.center_atoms,self.neighborlist, self.seq,
@@ -146,21 +146,24 @@ class SO4_Bispectrum:
         self.clear_memory()
         return x
 
-    def build_neighbor_list(self):
+    def build_neighbor_list(self, atom_ids=None):
         '''
         Builds a neighborlist for the calculation of bispectrum components for
         a given ASE atoms object given in the calculate method.
         '''
+        if atom_ids is None:
+            atom_ids = range(len(atoms))
+ 
         atoms = self._atoms
         cutoffs = [self.rcut/2]*len(atoms)
         nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
         nl.update(atoms)
-        center_atoms = np.zeros((len(atoms),3), dtype=np.float64)
+        center_atoms = np.zeros((len(atom_ids),3), dtype=np.float64)
         neighbors = []
         neighbor_indices = []
         atomic_numbers = []
 
-        for i in range(len(atoms)):
+        for i in atom_ids: #range(len(atoms)):
             # get center atom position
             center_atom = atoms.positions[i]
             center_atoms[i] = center_atom
@@ -181,7 +184,7 @@ class SO4_Bispectrum:
         Atomic_numbers = []
         Seq = []
         max_len = 0
-        for i in range(len(atoms)):
+        for i in atom_ids: #range(len(atoms)):
             unique_atoms = np.unique(neighbor_indices[i])
             if i not in unique_atoms:
                 at = list(unique_atoms)
@@ -226,7 +229,7 @@ class SO4_Bispectrum:
         derivatives
         '''
         # number of atoms in periodic arrangement
-        ncell = len(self._atoms)
+        ncell = len(self.center_atoms)
         # degree of hyperspherical expansion
         lmax = self.lmax
         # number of bispectrum coefficents
