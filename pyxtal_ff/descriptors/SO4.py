@@ -151,10 +151,11 @@ class SO4_Bispectrum:
         Builds a neighborlist for the calculation of bispectrum components for
         a given ASE atoms object given in the calculate method.
         '''
+        atoms = self._atoms
+
         if atom_ids is None:
             atom_ids = range(len(atoms))
  
-        atoms = self._atoms
         cutoffs = [self.rcut/2]*len(atoms)
         nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
         nl.update(atoms)
