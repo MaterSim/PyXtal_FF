@@ -27,11 +27,13 @@ class SO4_Bispectrum:
         self.stress = stress
         self.normalize_U = normalize_U
 
+    def __str__(self):
+        s = "SO4 bispectrum descriptor with Cutoff: {:6.3f}".format(self.rcut)
+        s += " lmax: {:d}\n".format(self.lmax)
+        return s
+
     def __repr__(self):
-        return """S04 bispectrum coefficient calculator for the
-    atomic neighbor density function for a Wigner-D
-    expansion of order {} and cutoff
-    radius {}""".format(self.lmax, self.rcut)
+        return str(self)
 
     @property
     def lmax(self):
@@ -210,8 +212,9 @@ class SO4_Bispectrum:
 
 
         for i in range(len(Neighbors)):
-            neighborlist[i, :len(Neighbors[i]), :] = Neighbors[i]
-            atm_nums[i, :len(Neighbors[i])] = Atomic_numbers[i]
+            if len(Neighbors[i]) > 0:
+                neighborlist[i, :len(Neighbors[i]), :] = Neighbors[i]
+                atm_nums[i, :len(Neighbors[i])] = Atomic_numbers[i]
 
 
 

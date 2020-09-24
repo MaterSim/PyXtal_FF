@@ -31,8 +31,13 @@ class SO3:
         self.stress = stress
         return
 
+    def __str__(self):
+        s = "SO3 descriptor with Cutoff: {:6.3f}".format(self.rcut)
+        s += " lmax: {:d}, nmax: {:d}, alpha: {:.3f}\n".format(self.lmax, self.nmax, self.alpha)
+        return s
+
     def __repr__(self):
-        return """SO3 smooth power spectrum calculator"""
+        return str(self)
 
     @property
     def nmax(self):
@@ -255,8 +260,9 @@ class SO3:
 
 
         for i in range(len(Neighbors)):
-            neighborlist[i, :len(Neighbors[i]), :] = Neighbors[i]
-            atm_nums[i, :len(Neighbors[i])] = Atomic_numbers[i]
+            if len(Neighbors[i]) > 0:
+                neighborlist[i, :len(Neighbors[i]), :] = Neighbors[i]
+                atm_nums[i, :len(Neighbors[i])] = Atomic_numbers[i]
 
 
 

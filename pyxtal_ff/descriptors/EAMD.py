@@ -47,6 +47,27 @@ class EAMD:
         self.derivative = derivative
         self.stress = stress
 
+    def __str__(self):
+        s = "EAMD descriptor with Cutoff: {:6.3f}\n".format(self.Rc)
+        for key in self.parameters.keys():
+            s += "  {:s}: ".format(key)
+            vals = self.parameters[key]
+            if key in ['eta']:
+                for val in vals:
+                    s += "{:8.3f}, ".format(val) 
+            elif key in ['Rs']:
+                for val in vals:
+                    s += "{:6.3f}".format(val) 
+            else:
+                s += "{:2d}".format(vals)
+        s += "\n"
+                
+        return s
+
+    def __repr__(self):
+        return str(self)
+
+
     
     def calculate(self, crystal, ids=None):
         """Calculate and return the EAMD.
