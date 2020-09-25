@@ -50,7 +50,7 @@ descriptor_comp = {'type': 'Bispectrum',
 
 class TestEAMD(unittest.TestCase):
     from pyxtal_ff.descriptors.EAMD import EAMD
-    symmetry = {'L': 2, 'eta': [0.36], 'Rs': [1.]}
+    symmetry = {'L': 2, 'eta': [0.36], 'Rs': [1.], 'cutoff': 'cosine'}
     struc = get_rotated_struc(cu)
     rho0 = EAMD(symmetry, rcut, derivative=True).calculate(struc)
     struc = get_rotated_struc(cu, 10, 'x')
@@ -83,9 +83,9 @@ class TestEAMD(unittest.TestCase):
 
 class TestACSF(unittest.TestCase):
     from pyxtal_ff.descriptors.ACSF import ACSF
-    symmetry = {'G2': {'eta': [0.003214], 'Rs': [0]},
-                'G4': {'lambda': [1], 'zeta':[1], 'eta': [0.000357]},
-                'G5': {'lambda': [-1], 'zeta':[1], 'eta': [0.004]},
+    symmetry = {'G2': {'eta': [0.003214], 'Rs': [0], 'cutoff': 'cosine'},
+                'G4': {'lambda': [1], 'zeta':[1], 'eta': [0.000357], 'cutoff': 'cosine'},
+                'G5': {'lambda': [-1], 'zeta':[1], 'eta': [0.004], 'cutoff': 'cosine'},
                 }
     struc = get_rotated_struc(cu)
     g0 = ACSF(symmetry, rcut, derivative=True).calculate(struc)

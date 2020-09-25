@@ -40,10 +40,10 @@ class PyXtal_FF():
             - parameters: dict
                 Example,
                 + BehlerParrinello
-                    {'G2': {'eta': [1.3, 2.], 'Rs': [.1, .2]},
-                    'G4': {'eta': [.3, .7], 'lambda': [-1, 1], 'zeta': [.8, 2]}}
-                + SO4/Bispectrum
-                    {'L': 2, 'eta': [.3, .7], 'Rs': [.1, .2]}}
+                    {'G2': {'eta': [.3, 2.], 'Rs': [1., 2.], 'cutoff': 'cosine'},
+                     'G4': {'eta': [.3, .7], 'lambda': [-1, 1], 'zeta': [.8, 2], 'cutoff': 'cosine'}}
+                + EAMD
+                    {'L': 2, 'eta': [.3, .7], 'Rs': [.1, .2], 'cutoff': 'cosine'}
                 + SO4/Bispectrum
                     {'lmax': 3}
                 + SO3
@@ -153,9 +153,9 @@ class PyXtal_FF():
         if descriptors is not None:
             self._descriptors.update(descriptors)
             if 'type' in descriptors and descriptors['type'] == 'EAMD':
-                _parameters = {'L': 3, 'eta': [0.1], 'Rs': [1.]}
+                _parameters = {'L': 3, 'eta': [0.1], 'Rs': [1.], 'cutoff': 'cosine'}
             else:
-                _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False}
+                _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False, 'cutoff': 'cosine'}
             if 'parameters' in descriptors:
                 _parameters.update(descriptors['parameters'])
                 self._descriptors['parameters'] = _parameters
@@ -386,12 +386,12 @@ class PyXtal_FF():
         for key in keys:
             print('{:12s}: {:}'.format(key, _descriptors[key]))
 
-        if _descriptors['type'] in ['SO4', 'Bispectrum']:
+        if _descriptors['type'] in ['SO4', 'Bispectrum', 'cutoff']:
             key_params = ['lmax', 'normalize_U']
         elif _descriptors['type'] in ['SO3', 'SOAP']:
-            key_params = ['nmax', 'lmax']
+            key_params = ['nmax', 'lmax', 'cutoff']
         elif _descriptors['type'] == 'EAMD':
-            key_params = ['L', 'eta', 'Rs']
+            key_params = ['L', 'eta', 'Rs', 'cutoff']
         else:
             key_params = []
 

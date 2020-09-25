@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from ase.neighborlist import NeighborList
+from .cutoff import Cutoff
 
 
 class EAMD:
@@ -29,7 +30,7 @@ class EAMD:
         self.parameters = {}
         
         # Set up keywords
-        keywords = ['L', 'eta', 'Rs']
+        keywords = ['L', 'eta', 'Rs', 'cutoff']
         for k, v in parameters.items():
             if k not in keywords:
                 msg = f"{k} is not a valid key. "\
@@ -38,6 +39,8 @@ class EAMD:
             else:
                 if k == 'L':
                     self.dsize *= (v+1)
+                    self.parameters[k] = v
+                elif k == 'cutoff':
                     self.parameters[k] = v
                 else:
                     self.dsize *= len(v)
@@ -165,6 +168,8 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
             The width of the Gaussian-type orbitals.
         L: int (d3)
             The total orbital angular momentum.
+        cutoff: str
+            The cutoff function.
     derivative:
         If True, calculate the derivative of EAMD.
     stress: bool
@@ -181,6 +186,7 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
     Rs = parameters['Rs']       # d1
     etas = parameters['eta']    # d2
     L = parameters['L']         # d3
+    cutoff = Cutoff(parameters['cutoff'])
     d1, d2, d3, j = len(Rs), len(etas), L+1, len(dij)
 
     ij_list = i * np.ones([len(IDs), 2], dtype=int)
@@ -200,7 +206,7 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
     d0 = dij - Rs[:, np.newaxis]
     d02 = d0 ** 2 # [d1, j]
 
-    fc = Cosine(dij, Rc) # [j]
+    fc = cutoff.calculate(dij, Rc) # [j]
     cj_cutoff = Z * fc # [j]
     term2_1 = np.exp(np.einsum('i,jk->ijk', -etas, d02)) # [d2, d1, j]
     term2 = np.einsum('ijk,k->ijk', term2_1, cj_cutoff) # [d2, d1, j]
@@ -213,7 +219,7 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
         dterm1 = np.einsum('ij, jklm->jmilk', dterm11, d_term1) # [j, D3, d2*d1, 3, uN]
 
         dterm20 = np.einsum('ij, ki->jki', term1, dterm0) # [D3, d2*d1, j]
-        dterm21 = CosinePrime(dij, Rc) # [j]
+        dterm21 = cutoff.calculate_derivative(dij, Rc) # [j]
         _dterm22 = np.einsum('ij,j->ij', d0, fc) # [d1, j]
         dterm22 = 2 * np.einsum('i,jk->ijk', etas, _dterm22) # [d2, d1, j]
         dterm23 = (dterm21 - dterm22).reshape([d2*d1, j]) # [d2*d1, j]
@@ -408,31 +414,13 @@ def dRij_dRm_norm(Rij, ijm_list):
     return dRij_m
 
     
-############################# Cutoff Functionals ##############################
-
-
-def Cosine(dij, rc):
-    ids = (dij > rc)
-    result = 0.5 * (np.cos(np.pi * dij / rc) + 1.)
-    result[ids] = 0.
-    return result
-
-
-def CosinePrime(Rij, Rc):
-    # Rij is the norm
-    ids = (Rij > Rc)
-    result = -0.5 * np.pi / Rc * np.sin(np.pi * Rij / Rc)
-    result[ids] = 0
-    
-    return result
-
 if __name__ == '__main__':
     import time
     from ase.build import bulk
     np.set_printoptions(formatter={'float': '{: 0.4f}'.format})
 
     Rc = 10
-    parameters1 = {'L': 2, 'eta': [0.036, 0.071], 'Rs': [0]}
+    parameters1 = {'L': 2, 'eta': [0.036, 0.071], 'Rs': [0], 'cutoff': 'cosine'}
 
     # Test for stress
     for a in [5.0]: #, 5.4, 5.8]:

@@ -1,8 +1,7 @@
-# Numpy Version
-
 import numpy as np
 from ase.neighborlist import NeighborList
 from itertools import combinations, combinations_with_replacement
+from .cutoff import Cutoff
 
 class ACSF:
     """A class for calculating Behler-Parrinello symmetry functions.
@@ -26,7 +25,6 @@ class ACSF:
     def __init__(self, symmetry_parameters, Rc=6.5, 
                  derivative=True, stress=False, atom_weighted=False):
 
-
         if atom_weighted:
             self._type = 'wACSF'
         else:
@@ -34,8 +32,8 @@ class ACSF:
         
         # Set up the symmetry parameters keywords. If a string are not in the
         # keyword, code will return an error.
-        G2_keywords = ['Rs', 'eta']
-        G4_keywords = ['Rs', 'eta', 'lambda', 'zeta']
+        G2_keywords = ['Rs', 'eta', 'cutoff']
+        G4_keywords = ['Rs', 'eta', 'lambda', 'zeta', 'cutoff']
         G5_keywords = G4_keywords
         
         # Setting up parameters for each of the symmetry function type.
@@ -48,7 +46,10 @@ class ACSF:
                 self.G2_parameters = {'eta': [1], 'Rs': np.array([0.])}
                 for key0, value0 in value.items():
                     if key0 in G2_keywords:
-                        self.G2_parameters[key0] = to_array(value0)
+                        if key0 == 'cutoff':
+                            self.G2_parameters[key0] = value0
+                        else:
+                            self.G2_parameters[key0] = to_array(value0)
                     else:
                         msg = f"{key0} is not available. "\
                         f"Choose from {G2_keywords}"
@@ -59,7 +60,10 @@ class ACSF:
                                       'eta': [1], 'zeta': [1], 'lambda': [1]}
                 for key0, value0 in value.items():
                     if key0 in G4_keywords:
-                        self.G4_parameters[key0] = to_array(value0)
+                        if key0 == 'cutoff':
+                            self.G4_parameters[key0] = value0
+                        else:
+                            self.G4_parameters[key0] = to_array(value0)
                     else:
                         msg = f"{key0} is not available. "\
                         f"Choose from {G4_keywords}"
@@ -70,7 +74,10 @@ class ACSF:
                                       'eta': [1], 'zeta': [1], 'lambda': [1]}
                 for key0, value0 in value.items():
                     if key0 in G5_keywords:
-                        self.G5_parameters[key0] = to_array(value0)
+                        if key0 == 'cutoff':
+                            self.G5_parameters[key0] = value0
+                        else:
+                            self.G5_parameters[key0] = to_array(value0)
                     else:
                         msg = f"{key0} is not available. "\
                         f"Choose from {G5_keywords}"
@@ -287,11 +294,12 @@ def calculate_G2(Dij, IDs, atomic_numbers, type_set, Rc, parameters, Gtype):
     """
     Rs = parameters['Rs']       # n1
     etas = parameters['eta']    # n2
+    cutoff = Cutoff(parameters['cutoff'])
     n1, n2, m, l = len(Rs), len(etas), len(Dij), len(type_set)
 
     d20 = (Dij - Rs[:, np.newaxis]) ** 2  # n1*m
     term = np.exp(np.einsum('i,jk->ijk', -etas, d20)) # n2*n1*m
-    results = np.einsum('ijk,k->ijk', term, Cosine(Dij, Rc)) # n2*n1*m
+    results = np.einsum('ijk,k->ijk', term, cutoff.calculate(Dij, Rc)) # n2*n1*m
     results = results.reshape([n1*n2, m])
     
     # Decompose G2 by species
@@ -344,6 +352,7 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
     """
     etas = parameters['eta']
     Rs = parameters['Rs']
+    cutoff = Cutoff(parameters['cutoff'])
     n1, n2, m, l = len(Rs), len(etas), len(Rij), len(type_set)
     js, N = IDs, len(atomic_numbers)
      # QZ: the block to get the unique neighbors
@@ -364,8 +373,8 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
     dij = R1ij - Rs[:, np.newaxis]
     dij2 = (dij) ** 2
     term1 = np.exp(np.einsum('i,jk->ijk', -etas, dij2)) # n2*n1*m
-    term21 = CosinePrime(R1ij, Rc) # m
-    _term22 = np.einsum('ij,j->ij', dij, Cosine(R1ij, Rc)) # n1*m
+    term21 = cutoff.calculate_derivative(R1ij, Rc) # m
+    _term22 = np.einsum('ij,j->ij', dij, cutoff.calculate(R1ij, Rc)) # n1*m
     term22 = 2 * np.einsum('i,jk->ijk', etas, _term22) # n2*n1*m
     term2 = term21 - term22
     term_1_and_2 = term1 * term2
@@ -448,6 +457,7 @@ def calculate_G4(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
     etas = parameters['eta']
     zetas = parameters['zeta']
     lamBdas = parameters['lambda']
+    cutoff = Cutoff(parameters['cutoff'])
     n1, n2, n3, n4, l = len(Rs), len(etas), len(lamBdas), len(zetas), len(type_set)
     jk = len(jks)  #m1
     
@@ -474,7 +484,7 @@ def calculate_G4(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
     zetas1 = zetas.repeat(n3*jk).reshape([n4, n3, jk])  # n4*n3*m1
     term2 = np.power(term1, zetas1) # n4*n3*m1
     term3 = np.exp(np.einsum('i,jk->ijk', -etas, (R2ij+R2jk+R2ik))) # n2*n1*m1
-    term4 = Cosine(R1ij0, Rc) * Cosine(R1ik0, Rc) * Cosine(R1jk0, Rc) # m1
+    term4 = cutoff.calculate(R1ij0, Rc) * cutoff.calculate(R1ik0, Rc) * cutoff.calculate(R1jk0, Rc) # m1
     term5 = np.einsum('ijk,lmk->ijlmk', term2, term3) #n4*n3*n2*n1*m1
     term6 = np.einsum('ijkml,l->ijkml', term5, term4) #n4*n3*n2*n1*m1
     results = np.einsum('i,ijkml->ijkml', powers, term6) #n4*n3*n2*n1*m1
@@ -534,6 +544,7 @@ def calculate_G5(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
     etas = parameters['eta']
     zetas = parameters['zeta']
     lamBdas = parameters['lambda']
+    cutoff = Cutoff(parameters['cutoff'])
     n1, n2, n3, n4, l = len(Rs), len(etas), len(lamBdas), len(zetas), len(type_set)
     jk = len(jks)  #m1
     
@@ -566,7 +577,7 @@ def calculate_G5(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
     zetas1 = zetas.repeat(n3*jk).reshape([n4, n3, jk])  # n4*n3*m1
     term2 = np.power(term1, zetas1) # n4*n3*m1
     term3 = np.exp(np.einsum('i,jk->ijk', -etas, (R2ij+R2ik))) # n2*n1*m1
-    term4 = Cosine(R1ij0, Rc) * Cosine(R1ik0, Rc) #* Cosine(R1jk0, Rc) # m1
+    term4 = cutoff.calculate(R1ij0, Rc) * cutoff.calculate(R1ik0, Rc) #* Cosine(R1jk0, Rc) # m1
     term5 = np.einsum('ijk,lmk->ijlmk', term2, term3) #n4*n3*n2*n1*m1
     term6 = np.einsum('ijkml,l->ijkml', term5, term4) #n4*n3*n2*n1*m1
     results = np.einsum('i,ijkml->ijkml', powers, term6) #n4*n3*n2*n1*m1
@@ -627,6 +638,7 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     etas = parameters['eta']
     zetas = parameters['zeta']
     lamBdas = parameters['lambda']
+    cutoff = Cutoff(parameters['cutoff'])
     n1, n2, n3, n4, l = len(Rs), len(etas), len(lamBdas), len(zetas), len(type_set)
     N, jk = len(atomic_numbers), len(jks)
     
@@ -663,12 +675,12 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
  
     cos_ijk = np.sum(rij * rik, axis=1) / R1ij0/ R1ik0 # m1 array
 
-    dfcij = CosinePrime(R1ij0, Rc)
-    dfcjk = CosinePrime(R1jk0, Rc)
-    dfcik = CosinePrime(R1ik0, Rc)
-    fcij = Cosine(R1ij0, Rc)
-    fcjk = Cosine(R1jk0, Rc)
-    fcik = Cosine(R1ik0, Rc)
+    dfcij = cutoff.calculate_derivative(R1ij0, Rc)
+    dfcjk = cutoff.calculate_derivative(R1jk0, Rc)
+    dfcik = cutoff.calculate_derivative(R1ik0, Rc)
+    fcij = cutoff.calculate(R1ij0, Rc)
+    fcjk = cutoff.calculate(R1jk0, Rc)
+    fcik = cutoff.calculate(R1ik0, Rc)
 
     powers = 2. ** (1.-zetas) #n4
     term1 = 1. + np.einsum('i,j->ij', lamBdas, cos_ijk) # n3*m1
@@ -776,6 +788,7 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     etas = parameters['eta']
     zetas = parameters['zeta']
     lamBdas = parameters['lambda']
+    cutoff = Cutoff(parameters['cutoff'])
     n1, n2, n3, n4, l = len(Rs), len(etas), len(lamBdas), len(zetas), len(type_set)
     N, jk = len(atomic_numbers), len(jks)
     
@@ -812,12 +825,12 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
  
     cos_ijk = np.sum(rij * rik, axis=1) / R1ij0/ R1ik0 # m1 array
 
-    dfcij = CosinePrime(R1ij0, Rc)
+    dfcij = cutoff.calculate_derivative(R1ij0, Rc)
     #dfcjk = CosinePrime(R1jk0, Rc)
-    dfcik = CosinePrime(R1ik0, Rc)
-    fcij = Cosine(R1ij0, Rc)
+    dfcik = cutoff.calculate_derivative(R1ik0, Rc)
+    fcij = cutoff.calculate(R1ij0, Rc)
     #fcjk = Cosine(R1jk0, Rc)
-    fcik = Cosine(R1ik0, Rc)
+    fcik = cutoff.calculate(R1ik0, Rc)
 
     powers = 2. ** (1.-zetas) #n4
     term1 = 1. + np.einsum('i,j->ij', lamBdas, cos_ijk) # n3*m1
@@ -1025,27 +1038,6 @@ def dRijk_dRm(Rij, Rik, Rjk, ijk_list, m):
     return (dRij_dRm, dRik_dRm, dRjk_dRm)
 
 
-############################# Cutoff Functionals ##############################
-
-
-def Cosine(Rij, Rc):
-    # Rij is the norm 
-    ids = (Rij > Rc)
-    result = 0.5 * (np.cos(np.pi * Rij / Rc) + 1.)
-    result[ids] = 0
-    
-    return result
-
-
-def CosinePrime(Rij, Rc):
-    # Rij is the norm
-    ids = (Rij > Rc)
-    result = -0.5 * np.pi / Rc * np.sin(np.pi * Rij / Rc)
-    result[ids] = 0
-    
-    return result
-
-
 ########################### Auxiliary Functions ###############################
     
 
@@ -1088,9 +1080,9 @@ if __name__ == '__main__':
 
     # Set up symmetry parameters
     Rc = 5.5
-    symmetry = {'G2': {'eta': [0.036, 0.071,], 'Rs': [0]},
-                'G4': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071]},
-                'G5': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071]},
+    symmetry = {'G2': {'eta': [0.036, 0.071,], 'Rs': [0], 'cutoff': 'cosine'},
+                'G4': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071], 'cutoff': 'cosine'},
+                'G5': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071], 'cutoff': 'cosine'},
                }
     
     for a in [5.0]: #, 5.4, 5.8]:
@@ -1100,8 +1092,8 @@ if __name__ == '__main__':
         si.set_cell(cell)
         print(si.get_cell())
 
-        bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=False)
-        des = bp.calculate(si, system=[14])
+        #bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=False)
+        #des = bp.calculate(si, system=[14])
         
         #print("G:", des['x'][0])
         #print("Sequence", des['seq'][0])
@@ -1111,7 +1103,7 @@ if __name__ == '__main__':
         #print(np.einsum('ijklm->klm', des['rdxdr']))
 
         bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=True)
-        des = bp.calculate(si, system=[14], ids=[1, 2])
+        des = bp.calculate(si, system=[14])
         print(des['x'].shape)
         print("G:", des['x'][0])
         print("Sequence", des['seq'][0])
