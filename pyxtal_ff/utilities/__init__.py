@@ -154,13 +154,16 @@ class Database():#MutableSequence):
             d = ACSF(function['parameters'],
                      function['Rc'], 
                      function['force'],
-                     function['stress'], False).calculate(data['structure'])
+                     function['stress'], 
+                     function['cutoff'], False).calculate(data['structure'])
+
         elif function['type'] in ['wACSF', 'wacsf']:
             from pyxtal_ff.descriptors.ACSF import ACSF
             d = ACSF(function['parameters'],
                      function['Rc'], 
                      function['force'],
-                     function['stress'], True).calculate(data['structure'])
+                     function['stress'], 
+                     function['cutoff'], True).calculate(data['structure'])
         
         elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
             from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
@@ -178,15 +181,17 @@ class Database():#MutableSequence):
                     derivative=function['force'],
                     stress=function['stress']).calculate(data['structure'])
 
-        elif function['type'] in ['EAMD', 'eamd']:
-            from pyxtal_ff.descriptors.EAMD import EAMD
-            d = EAMD(function['parameters'],
+        elif function['type'] in ['EAD', 'ead']:
+            from pyxtal_ff.descriptors.EAD import EAD
+            d = EAD(function['parameters'],
                      function['Rc'],
-                     function['force'], function['stress']).calculate(data['structure'])
+                     function['force'], function['stress'],
+                     function['cutoff']).calculate(data['structure'])
 
         else:
             msg = f"{function['type']} is not implemented"
             raise NotImplementedError(msg)
+
         if d['rdxdr'] is not None:
             N = d['x'].shape[0]
             L = d['x'].shape[1]
@@ -215,13 +220,17 @@ def compute_descriptor(function, structure):
     if function['type'] == ['BehlerParrinello', 'ACSF']:
         from pyxtal_ff.descriptors.ACSF import ACSF
         d = ACSF(function['parameters'],
-                             function['Rc'], 
-                             True, True).calculate(structure)
+                 function['Rc'], 
+                 function['force'],
+                 function['stress'],
+                 function['cutoff'], True).calculate(structure)
     elif function['type'] in ['wACSF', 'wacsf']:
         from pyxtal_ff.descriptors.ACSF import ACSF
         d = ACSF(function['parameters'],
-                             function['Rc'], 
-                             True, False).calculate(structure)
+                 function['Rc'], 
+                 function['force'],
+                 function['stress'],
+                 function['cutoff'], False).calculate(structure)
     elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
         from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
         d = SO4_Bispectrum(function['parameters']['lmax'],
@@ -236,11 +245,12 @@ def compute_descriptor(function, structure):
                 function['Rc'],
                 derivative=True,
                 stress=True).calculate(structure)
-    elif function['type'] == ['EAMD', 'eamd']:
-            from pyxtal_ff.descriptors.EAMD import EAMD
+    elif function['type'] == ['EAD', 'ead']:
+            from pyxtal_ff.descriptors.EAD import EAD
             d = EAMD(function['parameters'],
                      function['Rc'],
-                     True, True).calculate(structure)
+                     True, True,
+                     function['cutoff']).calculate(structure)
     else:
         msg = f"{function['type']} is not implemented"
         raise NotImplementedError(msg)

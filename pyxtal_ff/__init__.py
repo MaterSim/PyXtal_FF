@@ -19,7 +19,7 @@ class PyXtal_FF():
                 The type of atom-centered descriptors.
                 + ACSF (BehlerParrinello Gaussian symmetry)
                 + wACSF (weighted Gaussian symmetry)
-                + EAMD (embeded atom method descriptor)
+                + EAD (embeded atom density)
                 + SO4 (bispectrum)
                 + SO3 (smoothed powerspectrum)
             - Rc: float
@@ -42,7 +42,7 @@ class PyXtal_FF():
                 + BehlerParrinello
                     {'G2': {'eta': [.3, 2.], 'Rs': [1., 2.], 'cutoff': 'cosine'},
                      'G4': {'eta': [.3, .7], 'lambda': [-1, 1], 'zeta': [.8, 2], 'cutoff': 'cosine'}}
-                + EAMD
+                + EAD
                     {'L': 2, 'eta': [.3, .7], 'Rs': [.1, .2], 'cutoff': 'cosine'}
                 + SO4/Bispectrum
                     {'lmax': 3}
@@ -152,7 +152,7 @@ class PyXtal_FF():
         # Update the default based on user-defined descriptors
         if descriptors is not None:
             self._descriptors.update(descriptors)
-            if 'type' in descriptors and descriptors['type'] == 'EAMD':
+            if 'type' in descriptors and descriptors['type'] == 'EAD':
                 _parameters = {'L': 3, 'eta': [0.1], 'Rs': [1.], 'cutoff': 'cosine'}
             else:
                 _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False, 'cutoff': 'cosine'}
@@ -390,7 +390,7 @@ class PyXtal_FF():
             key_params = ['lmax', 'normalize_U']
         elif _descriptors['type'] in ['SO3', 'SOAP']:
             key_params = ['nmax', 'lmax', 'cutoff']
-        elif _descriptors['type'] == 'EAMD':
+        elif _descriptors['type'] == 'EAD':
             key_params = ['L', 'eta', 'Rs', 'cutoff']
         else:
             key_params = []

@@ -23,7 +23,7 @@ class ACSF:
         If True, calculate the virial stress contribution.
     """
     def __init__(self, symmetry_parameters, Rc=6.5, 
-                 derivative=True, stress=False, atom_weighted=False):
+                 derivative=True, stress=False, cutoff='cosine', atom_weighted=False):
 
         if atom_weighted:
             self._type = 'wACSF'
@@ -32,8 +32,8 @@ class ACSF:
         
         # Set up the symmetry parameters keywords. If a string are not in the
         # keyword, code will return an error.
-        G2_keywords = ['Rs', 'eta', 'cutoff']
-        G4_keywords = ['Rs', 'eta', 'lambda', 'zeta', 'cutoff']
+        G2_keywords = ['Rs', 'eta'] 
+        G4_keywords = ['Rs', 'eta', 'lambda', 'zeta']
         G5_keywords = G4_keywords
         
         # Setting up parameters for each of the symmetry function type.
@@ -43,41 +43,32 @@ class ACSF:
         
         for key, value in symmetry_parameters.items():
             if key == 'G2':
-                self.G2_parameters = {'eta': [1], 'Rs': np.array([0.])}
+                self.G2_parameters = {'eta': [1], 'Rs': np.array([0.]), 'cutoff': cutoff}
                 for key0, value0 in value.items():
                     if key0 in G2_keywords:
-                        if key0 == 'cutoff':
-                            self.G2_parameters[key0] = value0
-                        else:
-                            self.G2_parameters[key0] = to_array(value0)
+                        self.G2_parameters[key0] = to_array(value0)
                     else:
                         msg = f"{key0} is not available. "\
                         f"Choose from {G2_keywords}"
                         raise NotImplementedError(msg)
                         
             elif key == 'G4':
-                self.G4_parameters = {'Rs': np.array([0.]), 
+                self.G4_parameters = {'Rs': np.array([0.]), 'cutoff': cutoff,
                                       'eta': [1], 'zeta': [1], 'lambda': [1]}
                 for key0, value0 in value.items():
                     if key0 in G4_keywords:
-                        if key0 == 'cutoff':
-                            self.G4_parameters[key0] = value0
-                        else:
-                            self.G4_parameters[key0] = to_array(value0)
+                        self.G4_parameters[key0] = to_array(value0)
                     else:
                         msg = f"{key0} is not available. "\
                         f"Choose from {G4_keywords}"
                         raise NotImplementedError(msg)
                         
             elif key == 'G5':
-                self.G5_parameters = {'Rs': np.array([0.]), 
+                self.G5_parameters = {'Rs': np.array([0.]), 'cutoff': cutoff,
                                       'eta': [1], 'zeta': [1], 'lambda': [1]}
                 for key0, value0 in value.items():
                     if key0 in G5_keywords:
-                        if key0 == 'cutoff':
-                            self.G5_parameters[key0] = value0
-                        else:
-                            self.G5_parameters[key0] = to_array(value0)
+                        self.G5_parameters[key0] = to_array(value0)
                     else:
                         msg = f"{key0} is not available. "\
                         f"Choose from {G5_keywords}"
@@ -286,6 +277,8 @@ def calculate_G2(Dij, IDs, atomic_numbers, type_set, Rc, parameters, Gtype):
             The shift from the center of the G2 symmetry function.
         etas: float array (n2)
              eta parameters of G2 symmetry function.
+        cutoff: str
+            The cutoff function.
     
     Returns
     -------
@@ -342,7 +335,9 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
             The shift from the center of the G2 symmetry function.
         etas: float array (n2)
              eta parameters of G2 symmetry function.
-    
+        cutoff: str
+            The cutoff function.
+
     Returns
     -------
     G2Prime: 1D float array [m, (n1*n2*l), 3]
@@ -447,6 +442,7 @@ def calculate_G4(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
         etas: float array (n2)
         lamBdas: float array (n3)
         zetas: float array (n4)
+        cutoff: str
         
     Returns
     -------
@@ -534,6 +530,7 @@ def calculate_G5(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
         etas: float array (n2)
         lamBdas: float array (n3)
         zetas: float array (n4)
+        cutoff: str
         
     Returns
     -------
@@ -628,6 +625,7 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
         zetas: float array (n1)
         lamBdas: float array (n2)
         etas: float array (n3)
+        cutoff: str
         
     Returns
 
@@ -777,6 +775,7 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
         zetas: float array (n1)
         lamBdas: float array (n2)
         etas: float array (n3)
+        cutoff: str
         
     Returns
     -------
@@ -1080,9 +1079,9 @@ if __name__ == '__main__':
 
     # Set up symmetry parameters
     Rc = 5.5
-    symmetry = {'G2': {'eta': [0.036, 0.071,], 'Rs': [0], 'cutoff': 'cosine'},
-                'G4': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071], 'cutoff': 'cosine'},
-                'G5': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071], 'cutoff': 'cosine'},
+    symmetry = {'G2': {'eta': [0.036, 0.071,], 'Rs': [0]},
+                'G4': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071]},
+                'G5': {'Rs': [0], 'lambda': [1], 'zeta': [1,], 'eta': [0.036, 0.071]}
                }
     
     for a in [5.0]: #, 5.4, 5.8]:
@@ -1102,7 +1101,7 @@ if __name__ == '__main__':
         #print("GPrime", des['dxdr'][0,:,4,:])
         #print(np.einsum('ijklm->klm', des['rdxdr']))
 
-        bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=True)
+        bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, cutoff='cosine', atom_weighted=True)
         des = bp.calculate(si, system=[14])
         print(des['x'].shape)
         print("G:", des['x'][0])

@@ -48,15 +48,15 @@ descriptor_comp = {'type': 'Bispectrum',
               'N_train': 10,
               }
 
-class TestEAMD(unittest.TestCase):
-    from pyxtal_ff.descriptors.EAMD import EAMD
-    symmetry = {'L': 2, 'eta': [0.36], 'Rs': [1.], 'cutoff': 'cosine'}
+class TestEAD(unittest.TestCase):
+    from pyxtal_ff.descriptors.EAD import EAD
+    symmetry = {'L': 2, 'eta': [0.36], 'Rs': [1.]}
     struc = get_rotated_struc(cu)
-    rho0 = EAMD(symmetry, rcut, derivative=True).calculate(struc)
+    rho0 = EAD(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
     struc = get_rotated_struc(cu, 10, 'x')
-    rho1 = EAMD(symmetry, rcut, derivative=True).calculate(struc)
+    rho1 = EAD(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
     struc = get_perturbed_struc(cu, eps)
-    rho2 = EAMD(symmetry, rcut, derivative=False).calculate(struc)
+    rho2 = EAD(symmetry, rcut, derivative=False, cutoff='cosine').calculate(struc)
 
     def test_rho_value(self):
         self.assertAlmostEqual(self.rho0['x'][0,0], 21.07766448405431)
@@ -83,16 +83,16 @@ class TestEAMD(unittest.TestCase):
 
 class TestACSF(unittest.TestCase):
     from pyxtal_ff.descriptors.ACSF import ACSF
-    symmetry = {'G2': {'eta': [0.003214], 'Rs': [0], 'cutoff': 'cosine'},
-                'G4': {'lambda': [1], 'zeta':[1], 'eta': [0.000357], 'cutoff': 'cosine'},
-                'G5': {'lambda': [-1], 'zeta':[1], 'eta': [0.004], 'cutoff': 'cosine'},
+    symmetry = {'G2': {'eta': [0.003214], 'Rs': [0]},
+                'G4': {'lambda': [1], 'zeta':[1], 'eta': [0.000357]},
+                'G5': {'lambda': [-1], 'zeta':[1], 'eta': [0.004]},
                 }
     struc = get_rotated_struc(cu)
-    g0 = ACSF(symmetry, rcut, derivative=True).calculate(struc)
+    g0 = ACSF(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
     struc = get_rotated_struc(cu, 10, 'x')
-    g1 = ACSF(symmetry, rcut, derivative=True).calculate(struc)
+    g1 = ACSF(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
     struc = get_perturbed_struc(cu, eps)
-    g2 = ACSF(symmetry, rcut, derivative=False).calculate(struc)
+    g2 = ACSF(symmetry, rcut, derivative=False, cutoff='cosine').calculate(struc)
 
     def test_G2_value(self):
         self.assertAlmostEqual(self.g0['x'][0,0], 0.36925589)

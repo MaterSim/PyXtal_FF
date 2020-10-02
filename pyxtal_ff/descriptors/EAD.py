@@ -4,12 +4,12 @@ from ase.neighborlist import NeighborList
 from .cutoff import Cutoff
 
 
-class EAMD:
-    """EAMD is an atom-centered descriptor that is inspired by Embedded Atom method (EAM).
+class EAD:
+    """EAD is an atom-centered descriptor that is inspired by Embedded Atom method (EAM).
     The EAM utilizes the orbital-dependent density components. The orbital-dependent
     component consists of a set of local atomic density descriptions.
 
-    The functional form of EAMD is consistent with:
+    The functional form of EAD is consistent with:
         Zhang, Y., et. al. (2019). The Journal of Physical Chemistry Letters, 10(17), 4962-4967.
 
     Parameters
@@ -18,19 +18,19 @@ class EAMD:
         The user-defined parameters for component of local atomic density descriptions.
         i.e. {'L': 2, 'eta': [0.36], 'Rs': [1.0]}
     Rc: float
-        The EAMD will be calculated within this radius.
+        The EAD will be calculated within this radius.
     derivative: bool
-        If True, calculate the derivative of EAMD.
+        If True, calculate the derivative of EAD.
     stress: bool
-        If True, calculate the virial stress contribution of EAMD.
+        If True, calculate the virial stress contribution of EAD.
     """
-    def __init__(self, parameters, Rc=5., derivative=True, stress=False):
-        self._type = 'EAMD'
+    def __init__(self, parameters, Rc=5., derivative=True, stress=False, cutoff='cosine'):
+        self._type = 'EAD'
         self.dsize = int(1)
         self.parameters = {}
         
         # Set up keywords
-        keywords = ['L', 'eta', 'Rs', 'cutoff']
+        keywords = ['L', 'eta', 'Rs']
         for k, v in parameters.items():
             if k not in keywords:
                 msg = f"{k} is not a valid key. "\
@@ -40,19 +40,18 @@ class EAMD:
                 if k == 'L':
                     self.dsize *= (v+1)
                     self.parameters[k] = v
-                elif k == 'cutoff':
-                    self.parameters[k] = v
                 else:
                     self.dsize *= len(v)
                     self.parameters[k] = np.array(v)
-
+        self.parameters['cutoff'] = cutoff
+        
         self.Rc = Rc
         self.derivative = derivative
         self.stress = stress
 
     
     def calculate(self, crystal, ids=None):
-        """Calculate and return the EAMD.
+        """Calculate and return the EAD.
         
         Parameters
         ----------
@@ -65,7 +64,7 @@ class EAMD:
         Returns
         -------
         d: dict
-            The user-defined EAMD that represent the crystal.
+            The user-defined EAD that represent the crystal.
             d = {'x': [N, d], 'dxdr': [N, m, d, 3], 'rdxdr': [N, m, d, 3, 3],
             'elements': list of elements}
         """
@@ -143,7 +142,7 @@ class EAMD:
 
 
 def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
-    """ Calculate the EAMD for a center atom i.
+    """ Calculate the EAD for a center atom i.
     
     Parameters
     ----------
@@ -171,13 +170,13 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
         cutoff: str
             The cutoff function.
     derivative:
-        If True, calculate the derivative of EAMD.
+        If True, calculate the derivative of EAD.
     stress: bool
-        If True, calculate the virial stress contribution of EAMD.
+        If True, calculate the virial stress contribution of EAD.
 
     Returns
     -------
-    Dict of EAMD descriptors with its derivative and stress contribution.
+    Dict of EAD descriptors with its derivative and stress contribution.
     """
     l_index = [1, 4, 10, 20]
     normalize = 1 / np.sqrt(np.array([1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 
@@ -420,7 +419,7 @@ if __name__ == '__main__':
     np.set_printoptions(formatter={'float': '{: 0.4f}'.format})
 
     Rc = 10
-    parameters1 = {'L': 2, 'eta': [0.036, 0.071], 'Rs': [0], 'cutoff': 'cosine'}
+    parameters1 = {'L': 2, 'eta': [0.036, 0.071], 'Rs': [0]}
 
     # Test for stress
     for a in [5.0]: #, 5.4, 5.8]:
@@ -429,7 +428,7 @@ if __name__ == '__main__':
         cell[0,1] += 0.1
         si.set_cell(cell)
 
-        bp = EAMD(parameters1, Rc=Rc, derivative=True, stress=True)
+        bp = EAD(parameters1, Rc=Rc, derivative=True, stress=True, cutoff='cosine')
         des = bp.calculate(si)
         
         print("G:", des['x'][0])
