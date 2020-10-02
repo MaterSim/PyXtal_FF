@@ -37,13 +37,15 @@ class PyXtal_FF():
                 Compute rdxdr (needed for stress calculation) or not
             - force: bool (True)
                 Compute dxdr (needed for force calculation) or not
+             - cutoff: str
+                The cutoff function.
             - parameters: dict
                 Example,
                 + BehlerParrinello
-                    {'G2': {'eta': [.3, 2.], 'Rs': [1., 2.], 'cutoff': 'cosine'},
-                     'G4': {'eta': [.3, .7], 'lambda': [-1, 1], 'zeta': [.8, 2], 'cutoff': 'cosine'}}
+                    {'G2': {'eta': [.3, 2.], 'Rs': [1., 2.]}, 
+                     'G4': {'eta': [.3, .7], 'lambda': [-1, 1], 'zeta': [.8, 2]}}
                 + EAD
-                    {'L': 2, 'eta': [.3, .7], 'Rs': [.1, .2], 'cutoff': 'cosine'}
+                    {'L': 2, 'eta': [.3, .7], 'Rs': [.1, .2]}
                 + SO4/Bispectrum
                     {'lmax': 3}
                 + SO3
@@ -128,7 +130,7 @@ class PyXtal_FF():
             self.print_logo()
         
         # Checking the keys in descriptors
-        descriptors_keywords = ['type', 'Rc', 'N_train', 'N_test', 
+        descriptors_keywords = ['type', 'Rc', 'N_train', 'N_test', 'cutoff',
                                 'force', 'stress', 'ncpu', 'parameters']
         if descriptors is not None:
             for key in descriptors.keys():
@@ -147,15 +149,16 @@ class PyXtal_FF():
                              'ncpu': 1,
                              'force': True,
                              'stress': True,
+                             'cutoff': 'cosine',
                              }
         
         # Update the default based on user-defined descriptors
         if descriptors is not None:
             self._descriptors.update(descriptors)
             if 'type' in descriptors and descriptors['type'] == 'EAD':
-                _parameters = {'L': 3, 'eta': [0.1], 'Rs': [1.], 'cutoff': 'cosine'}
+                _parameters = {'L': 3, 'eta': [0.1], 'Rs': [1.]}
             else:
-                _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False, 'cutoff': 'cosine'}
+                _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False}
             if 'parameters' in descriptors:
                 _parameters.update(descriptors['parameters'])
                 self._descriptors['parameters'] = _parameters
@@ -382,16 +385,16 @@ class PyXtal_FF():
         """ Print the descriptors information. """
 
         print('Descriptor parameters:')
-        keys = ['type', 'Rc']
+        keys = ['type', 'Rc', 'cutoff']
         for key in keys:
             print('{:12s}: {:}'.format(key, _descriptors[key]))
 
-        if _descriptors['type'] in ['SO4', 'Bispectrum', 'cutoff']:
+        if _descriptors['type'] in ['SO4', 'Bispectrum']:
             key_params = ['lmax', 'normalize_U']
         elif _descriptors['type'] in ['SO3', 'SOAP']:
-            key_params = ['nmax', 'lmax', 'cutoff']
+            key_params = ['nmax', 'lmax']
         elif _descriptors['type'] == 'EAD':
-            key_params = ['L', 'eta', 'Rs', 'cutoff']
+            key_params = ['L', 'eta', 'Rs']
         else:
             key_params = []
 
