@@ -42,7 +42,7 @@ setup(
         'spglib>=1.12.1',
         'monty>=3.0.2',
         'seekpath>=1.9.5',
-        'numba>=0.44.1'],
+        'numba>=0.50.1'],
     python_requires='>=3.7',
     license='MIT',
 )
