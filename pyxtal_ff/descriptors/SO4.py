@@ -365,14 +365,20 @@ def Poly4Prime(Rij, Rc):
 @nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
 def Exponent(Rij, Rc):
     x = Rij/Rc
-    result = np.exp(1 - 1/(1-x**2))
+    try:
+        result = np.exp(1 - 1/(1-x**2))
+    except:
+        result = 0
     return result
 
 
 @nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
 def ExponentPrime(Rij, Rc):
     x = Rij/Rc
-    result = 2*x * np.exp(1 - 1/(1-x**2)) / (1+x**2)**2
+    try:
+        result = 2*x * np.exp(1 - 1/(1-x**2)) / (1+x**2)**2
+    except:
+        result = 0
     return result
 
 @nb.njit(nb.void(nb.i8, nb.f8[:]), cache=True,
