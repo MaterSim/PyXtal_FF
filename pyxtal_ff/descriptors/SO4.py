@@ -19,13 +19,14 @@ class SO4_Bispectrum:
     U-functions using horner form
     '''
 
-    def __init__(self, lmax, rcut, derivative=True, stress=False, normalize_U=False):
+    def __init__(self, lmax, rcut, derivative=True, stress=False, normalize_U=False, cutoff_function='cosine'):
         # populate attributes
         self.lmax = lmax
         self.rcut = rcut
         self.derivative = derivative
         self.stress = stress
         self.normalize_U = normalize_U
+        self.cutoff_function = cutoff_function
 
     def __repr__(self):
         return """S04 bispectrum coefficient calculator for the
@@ -96,13 +97,48 @@ class SO4_Bispectrum:
         else:
             raise ValueError('normalize_U must be a boolean value')
 
+    @property
+    def cutoff_function(self):
+        return self._cutoff_function
+
+    @cutoff_function.setter
+    def cutoff_function(self, cutoff_function):
+        if isinstance(cutoff_function, str) is True:
+            # more conditions
+            if cutoff_function == 'cosine':
+                self._cutoff_id = 1
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'tanh':
+                self._cutoff_id = 2
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'poly1':
+                self._cutoff_id = 3
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'poly2':
+                self._cutoff_id = 4
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'poly3':
+                self._cutoff_id = 5
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'poly4':
+                self._cutoff_id = 6
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'exp':
+                self._cutoff_id = 7
+                self._cutoff_function = cutoff_function
+            else:
+                raise NotImplementedError('The requested cutoff function has not been implemented')
+        else:
+            raise ValueError('You must specify the cutoff function as a string')
+
     def clear_memory(self):
         '''
         Clears all memory that isn't an essential attribute for the calculator
         '''
         attrs = list(vars(self).keys())
         for attr in attrs:
-            if attr not in {'_twol', '_rcut', '_derivative', '_stress', '_norm'}:
+            if attr not in {'_twol', '_rcut', '_derivative', '_stress', '_norm',
+                            '_cutoff_function', '_cutoff_id'}:
                 delattr(self, attr)
         return
 
@@ -123,7 +159,7 @@ class SO4_Bispectrum:
         get_bispectrum_components(self.center_atoms,self.neighborlist, self.seq,
                                   self.atomic_numbers, self.site_atomic_numbers,
                                   self._twol, self.rcut, self._norm, self.derivative,
-                                  self.stress, self._blist, self._dblist, self._bstress)
+                                  self.stress, self._blist, self._dblist, self._bstress, self._cutoff_id)
 
         if self.derivative is True:
 
@@ -241,6 +277,104 @@ class SO4_Bispectrum:
         self._bstress = np.zeros([len(self.seq), ncoefs, 3, 3], dtype=np.complex128)
         return
 
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Cosine(Rij, Rc):
+    # Rij is the norm 
+    result = 0.5 * (np.cos(np.pi * Rij / Rc) + 1.)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def CosinePrime(Rij, Rc):
+    # Rij is the norm
+    result = -0.5 * np.pi / Rc * np.sin(np.pi * Rij / Rc)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Tanh(Rij, Rc):
+    result = np.tanh(1-Rij/Rc)**3
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def TanhPrime(Rij, Rc):
+    tanh_square = np.tanh(1-Rij/Rc)**2
+    result = - (3/Rc) * tanh_square * (1-tanh_square)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly1(Rij, Rc):
+    x = Rij/Rc
+    x_square = x**2
+    result = x_square * (2*x-3) + 1
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly1Prime(Rij, Rc):
+    term1 = (6 / Rc**2) * Rij
+    term2 = Rij/Rc - 1
+    result = term1*term2
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly2(Rij, Rc):
+    x = Rij/Rc
+    result = x**3 * (x*(15-6*x)-10) + 1
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly2Prime(Rij, Rc):
+    x = Rij/Rc
+    result = (-30/Rc) * (x**2 * (x-1)**2)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly3(Rij, Rc):
+    x = Rij/Rc
+    result = x**4*(x*(x*(20*x-70)+84)-35)+1
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly3Prime(Rij, Rc):
+    x = Rij/Rc
+    result = (140/Rc) * (x**3 * (x-1)**3)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly4(Rij, Rc):
+    x = Rij/Rc
+    result = x**5*(x*(x*(x*(315-70*x)-540)+420)-126)+1
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly4Prime(Rij, Rc):
+    x = Rij/Rc
+    result = (-630/Rc) * (x**4 * (x-1)**4)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Exponent(Rij, Rc):
+    x = Rij/Rc
+    result = np.exp(1 - 1/(1-x**2))
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def ExponentPrime(Rij, Rc):
+    x = Rij/Rc
+    result = 2*x * np.exp(1 - 1/(1-x**2)) / (1+x**2)**2
+    return result
+
 @nb.njit(nb.void(nb.i8, nb.f8[:]), cache=True,
          fastmath=True, nogil=True)
 def init_clebsch_gordan(twol, cglist):
@@ -313,8 +447,8 @@ def init_clebsch_gordan(twol, cglist):
 
     return
 
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def compute_sfac(r, rcut):
+@nb.njit(nb.f8(nb.f8, nb.f8, nb.i8), cache=True, fastmath=True, nogil=True)
+def compute_sfac(r, rcut, cutoff_id):
     '''Calculates the cosine cutoff function value given in
     On Representing Chemical Environments, Batrok, et al.
 
@@ -338,11 +472,25 @@ def compute_sfac(r, rcut):
     if r > rcut:
         return 0
     else:
-        rcutfac = np.pi / rcut
-        return 0.5 * (np.cos(r * rcutfac) + 1.0)
+        if cutoff_id == 1:
+            return Cosine(r, rcut)
+        elif cutoff_id == 2:
+            return Tanh(r, rcut)
+        elif cutoff_id == 3:
+            return Poly1(r, rcut)
+        elif cutoff_id == 4:
+            return Poly2(r, rcut)
+        elif cutoff_id == 5:
+            return Poly3(r, rcut)
+        elif cutoff_id == 6:
+            return Poly4(r, rcut)
+        elif cutoff_id == 7:
+            return Exponent(r, rcut)
+        else:
+            raise ValueError('not implemented')
 
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def compute_dsfac(r, rcut):
+@nb.njit(nb.f8(nb.f8, nb.f8, nb.i8), cache=True, fastmath=True, nogil=True)
+def compute_dsfac(r, rcut, cutoff_id):
     '''Calculates the derivative of the cosine cutoff for a given radii
 
     Parameters
@@ -360,12 +508,26 @@ def compute_dsfac(r, rcut):
         return 0
 
     else:
-        rcutfac = np.pi / rcut
-        return -0.5 * np.sin(r * rcutfac) * rcutfac
+        if cutoff_id == 1:
+            return CosinePrime(r, rcut)
+        elif cutoff_id == 2:
+            return TanhPrime(r, rcut)
+        elif cutoff_id == 3:
+            return Poly1Prime(r, rcut)
+        elif cutoff_id == 4:
+            return Poly2Prime(r, rcut)
+        elif cutoff_id == 5:
+            return Poly3Prime(r, rcut)
+        elif cutoff_id == 6:
+            return Poly4Prime(r, rcut)
+        elif cutoff_id == 7:
+               return ExponentPrime(r, rcut)
+        else:
+            raise ValueError('not implemented')
 
-@nb.njit(nb.void(nb.i8, nb.i8[:], nb.c16[:,:]), cache=True,
+@nb.njit(nb.void(nb.i8, nb.i8[:], nb.c16[:,:], nb.i8, nb.f8), cache=True,
          fastmath=True, nogil=True)
-def addself_uarraytot(twol, idxu_block, ulisttot):
+def addself_uarraytot(twol, idxu_block, ulisttot, cutoff_id, rcut):
     '''Add the central atom contribution to the hyperspherical
     expansion coefficient array.
 
@@ -393,11 +555,12 @@ def addself_uarraytot(twol, idxu_block, ulisttot):
     -------
     None
     '''
+    fcut = compute_sfac(0.0, rcut, cutoff_id)
     ldim = twol + 1
     for l in range(0, ldim, 1):
         llu = idxu_block[l]
         for ma in range(0, l + 1, 1):
-            ulisttot[llu] = 1.0 + 0.0j
+            ulisttot[llu] = (1.0 + 0.0j)*fcut
             llu += l + 2
     return
 
@@ -633,32 +796,32 @@ def compute_uarray_polynomial_wD(x, y, z, psi, r, twol, ulist, dulist, idxu_bloc
 
     return
 
-@nb.njit(nb.void(nb.f8, nb.f8, nb.c16[:,:], nb.c16[:,:]),
+@nb.njit(nb.void(nb.f8, nb.f8, nb.c16[:,:], nb.c16[:,:], nb.i8),
          cache=True, fastmath=True, nogil=True)
-def add_uarraytot(r, rcut, ulisttot, ulist):
+def add_uarraytot(r, rcut, ulisttot, ulist, cutoff_id):
     '''
     add the hyperspherical harmonic array for one neighbor to the
     expansion coefficient array
     '''
-    sfac = compute_sfac(r, rcut)
+    sfac = compute_sfac(r, rcut, cutoff_id)
 
     ulisttot += sfac * ulist
     return
 
-@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb. f8, nb.c16[:,:], nb.c16[:,:]),
+@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb. f8, nb.c16[:,:], nb.c16[:,:], nb.i8),
          cache=True, fastmath=True, nogil=True)
-def dudr(x, y, z, r, rcut, ulist, dulist):
+def dudr(x, y, z, r, rcut, ulist, dulist, cutoff_id):
     '''
     Compute the total derivative of the hyperspherical
     expansion coefficients.
     '''
-    sfac = compute_sfac(r, rcut)
+    sfac = compute_sfac(r, rcut, cutoff_id)
     gradr = np.zeros((len(ulist),3), np.complex128)
     gradr[:,0] = x
     gradr[:,1] = y
     gradr[:,2] = z
     gradr = gradr/r
-    dsfac = compute_dsfac(r, rcut)*gradr
+    dsfac = compute_dsfac(r, rcut, cutoff_id)*gradr
 
     dulist *= sfac
     dulist += ulist*dsfac
@@ -901,10 +1064,10 @@ def zero_3d(arr):
     return
 
 @nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8[:], nb.i8, nb.f8,
-                 nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:]),
+                 nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:], nb.i8),
          cache=True, fastmath=True, nogil=True)
 def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, site_ANs,
-                              twolmax, rcut, norm, derivative, stress, blist, dblist, bstress):
+                              twolmax, rcut, norm, derivative, stress, blist, dblist, bstress, cutoff_id):
     '''
     Calculate the bispectrum components, and their derivatives (if specified)
     for a given neighbor list.  This is the main work function.
@@ -1067,7 +1230,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
 
                 if i != isite:
                     zero_1d(ulist)
-                    addself_uarraytot(twolmax, idxu_block, ulist)
+                    addself_uarraytot(twolmax, idxu_block, ulist, cutoff_id, rcut)
                     ulist *= site_ANs[isite]
                     ulisttot += ulist
                     ulisttot *= u_norm
@@ -1092,7 +1255,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                             compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
                                                          dulist[neighbor], idxu_block)
 
-                            dudr(x,y,z,r,rcut,ulist,dulist[neighbor])
+                            dudr(x,y,z,r,rcut,ulist,dulist[neighbor],cutoff_id)
 
                             dulist[neighbor] *= Weight
                             dulist[neighbor] *= u_norm
@@ -1144,10 +1307,10 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
 
                     ulist *= weight
 
-                    add_uarraytot(r, rcut, ulisttot, ulist)
+                    add_uarraytot(r, rcut, ulisttot, ulist, cutoff_id)
 
             zero_1d(ulist)
-            addself_uarraytot(twolmax, idxu_block, ulist)
+            addself_uarraytot(twolmax, idxu_block, ulist, cutoff_id, rcut)
             ulist *= site_ANs[isite]
             ulisttot += ulist
             ulisttot *= u_norm
@@ -1172,7 +1335,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
                                                  dulist[neighbor], idxu_block)
 
-                    dudr(x,y,z,r,rcut,ulist,dulist[neighbor])
+                    dudr(x,y,z,r,rcut,ulist,dulist[neighbor],cutoff_id)
 
                     dulist[neighbor] *= Weight
                     dulist[neighbor] *= u_norm
@@ -1205,7 +1368,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
 
                 if i != isite:
                     zero_1d(ulist)
-                    addself_uarraytot(twolmax, idxu_block, ulist)
+                    addself_uarraytot(twolmax, idxu_block, ulist, cutoff_id, rcut)
                     ulist *= site_ANs[isite]
                     ulisttot += ulist
                     ulisttot *= u_norm
@@ -1229,7 +1392,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                             compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
                                                          dulist[neighbor], idxu_block)
 
-                            dudr(x,y,z,r,rcut,ulist,dulist[neighbor])
+                            dudr(x,y,z,r,rcut,ulist,dulist[neighbor], cutoff_id)
 
                             dulist[neighbor] *= Weight
                             dulist[neighbor] *= u_norm
@@ -1274,10 +1437,10 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
 
                     ulist *= weight
 
-                    add_uarraytot(r, rcut, ulisttot, ulist)
+                    add_uarraytot(r, rcut, ulisttot, ulist, cutoff_id)
 
             zero_1d(ulist)
-            addself_uarraytot(twolmax, idxu_block, ulist)
+            addself_uarraytot(twolmax, idxu_block, ulist, cutoff_id, rcut)
             ulist *= site_ANs[isite]
             ulisttot += ulist
             ulisttot *= u_norm
@@ -1301,7 +1464,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
                                                  dulist[neighbor], idxu_block)
 
-                    dudr(x,y,z,r,rcut,ulist,dulist[neighbor])
+                    dudr(x,y,z,r,rcut,ulist,dulist[neighbor], cutoff_id)
 
                     dulist[neighbor] *= Weight
                     dulist[neighbor] *= u_norm
@@ -1328,7 +1491,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
 
             if i != isite:
                 zero_1d(ulist)
-                addself_uarraytot(twolmax, idxu_block, ulist)
+                addself_uarraytot(twolmax, idxu_block, ulist, cutoff_id, rcut)
                 ulist *= site_ANs[isite]
                 ulisttot += ulist
                 ulisttot *= u_norm
@@ -1364,10 +1527,10 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
 
                 ulist *= weight
 
-                add_uarraytot(r, rcut, ulisttot, ulist)
+                add_uarraytot(r, rcut, ulisttot, ulist, cutoff_id)
 
         zero_1d(ulist)
-        addself_uarraytot(twolmax, idxu_block, ulist)
+        addself_uarraytot(twolmax, idxu_block, ulist, cutoff_id, rcut)
         ulist *= site_ANs[isite]
         ulisttot += ulist
         ulisttot *= u_norm
@@ -1419,7 +1582,7 @@ if  __name__ == "__main__":
     stress = options.stress
 
     #import time
-    f = SO4_Bispectrum(lmax, rcut, derivative=False, stress=False, normalize_U=False)
+    f = SO4_Bispectrum(lmax, rcut, derivative=False, stress=False, normalize_U=False, cutoff_function='tanh')
     x = f.calculate(test)
     #start2 = time.time()
     #for key, item in x.items():
