@@ -1,7 +1,7 @@
-pyxtal_ff.descriptors.eamd
+pyxtal_ff.descriptors.ACSF
 ==========================
 
-.. automodule:: pyxtal_ff.descriptors.eamd
+.. automodule:: pyxtal_ff.descriptors.ACSF
     :members:
     :undoc-members:
     :show-inheritance:

@@ -11,9 +11,8 @@ Submodules
 
 .. toctree::
 
-    pyxtal_ff.descriptors.behlerparrinello
-    pyxtal_ff.descriptors.eamd
-    pyxtal_ff.descriptors.bispectrum
-    pyxtal_ff.descriptors.SOAP
-
-
+    pyxtal_ff.descriptors.ACSF
+    pyxtal_ff.descriptors.EAD
+    pyxtal_ff.descriptors.SO4
+    pyxtal_ff.descriptors.SO3
+    pyxtal_ff.descriptors.cutoff

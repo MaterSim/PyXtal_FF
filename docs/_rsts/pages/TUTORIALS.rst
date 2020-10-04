@@ -13,7 +13,7 @@ Define the source of data
 
     TrainData = "pyxtal_ff/datasets/SiO2/OUTCAR_SiO2"
     
-Choosing the desrcriptor
+Choosing the descriptor
 ------------------------
 Four types of descriptors are available (see `Atomic Descriptors <_background.html#atomic-descriptors>`_). 
 Each of them needs some additional parameters to be defined as follows.
@@ -37,14 +37,14 @@ Each of them needs some additional parameters to be defined as follows.
 
 The ``wACSF`` is also supported. In this case, the number of descriptors will linearly dependent on the number of atoms in the system.
 
-- ``EAMD``
+- ``EAD``
 
 .. code-block:: Python
 
     parameters = {'L': 2, 'eta': [0.36],
                   'Rs': [0.  , 0.75, 1.5 , 2.25, 3.  , 3.75, 4.5]}
     
-    descriptor = {'type': 'EAMD',
+    descriptor = {'type': 'EAD',
                   'parameters': parameters,
                   'Rc': 5.0,
                   }

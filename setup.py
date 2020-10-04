@@ -43,6 +43,6 @@ setup(
         'monty>=3.0.2',
         'seekpath>=1.9.5',
         'numba>=0.44.1'],
-    python_requires='>=3.6.1',
+    python_requires='>=3.7',
     license='MIT',
 )

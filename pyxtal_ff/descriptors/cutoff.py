@@ -1,7 +1,8 @@
 import numpy as np
 
 class Cutoff:
-    """ A class for computing cutoff functions (including derivatives) for 
+    """ 
+    A class for computing cutoff functions (including derivatives) for 
     atom-centered descriptors. The existing cutoff functions in PyXtal_FF 
     can be found in:
         Singraber, A. (2019). J. Chem. Theory Comput., 15, 1827-1840.

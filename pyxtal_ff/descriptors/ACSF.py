@@ -80,7 +80,8 @@ class ACSF:
         
        
     def calculate(self, crystal, system=None, ids=None):
-        """The symmetry functions are obtained through this `calculate` method.
+        """
+        The symmetry functions are obtained through this `calculate` method.
         
         Parameters
         ----------

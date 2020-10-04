@@ -4,14 +4,14 @@ Background and Theory
 Overall Framework
 ------------------
 
-PyXtalFF involves two important components: **descriptors** and **force field training**. Four types of descriptors are supported in the code, including, 
+PyXtalFF involves two important components: **descriptors** and **force field training**. Four types of descriptors are supported in the code, including,
 
 - (Weighted) Behler-Parrinello Symmetry Functions,
-- Embedded Atom Descriptors, 
+- Embedded Atom Descriptors,
 - SO(4) Bispectrum Components,
-- Smooth SO(3) power spectrum. 
-  
-For the force field training, the code consists of 
+- Smooth SO(3) power spectrum.
+
+For the force field training, the code consists of
 
 - Artificial neural network,
 - Generalized linear regressions.
@@ -27,12 +27,14 @@ In an atomic structure, Cartesian coordinates poorly describe the structural env
         0              & r > R_c
     \end{cases}
 
+In addition to the cosine function, we also support other types of functions (see `cutoff functions <https://github.com/qzhu2017/PyXtal_FF/blob/master/pyxtal_ff/descriptors/cutoff.py>`_)
+
 In the following, the types of descriptors will be explained in details.
 
 Atom Centered Symmetry Function (ACSF)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Behler-Parrinello method---atom-centered descriptors---utilizes a set of symmetry functions [2]_. The symmetry functions map two atomic Cartesian coordinates to a distribution of distances between atom (radial functions) or three atomic Cartesian coordinates to a distribution of bond angles (angular functions). These mappings are invariant with respect to translation, rotation, and permutation of atoms of the system. Therefore, the energy of the system will remain unchanged under these mapping of symmetry functions.
- 
+
 PyXtal_FF supports three types of symmetry functions:
 
 .. math::
@@ -75,7 +77,7 @@ where :math:`Z_j` represents the atomic number of neighbor atom :math:`j`. :math
 
 According to quantum mechanics, :math:`\rho` follows the similar procedure in determining the probability density of the states, i.e. the Born rule.
 
-Furthermore, EAMD can be regarded as the improved Gaussian symmetry functions. EAMD has no classification between the radial and angular term. The angular or three-body term is implicitly incorporated in when :math:`L>0`. By definition, the computation cost for calculating EAMD is cheaper than angular symmetry functions by avoiding the extra sum of the :math:`k` neighbors. In term of usage, the parameters :math:`\eta` and :math:`\mu` are similar to the strategy used in the Gaussian symmetry functions, and the maximum value for :math:`L` is 3, i.e. up to :math:`f` orbital.
+Furthermore, EAD can be regarded as the improved Gaussian symmetry functions. EAD has no classification between the radial and angular term. The angular or three-body term is implicitly incorporated in when :math:`L>0`. By definition, the computation cost for calculating EAD is cheaper than angular symmetry functions by avoiding the extra sum of the :math:`k` neighbors. In term of usage, the parameters :math:`\eta` and :math:`\mu` are similar to the strategy used in the Gaussian symmetry functions, and the maximum value for :math:`L` is 3, i.e. up to :math:`f` orbital.
 
 SO(4) Bispectrum Components
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -89,32 +91,32 @@ Then this function can mapped to the 3 sphere by mapping the atomic coordinates 
 
 .. math::
     \theta = \arccos\left(\frac{z}{r}\right)
-    
+
 .. math::
     \phi = \arctan\left(\frac{y}{x}\right)
-    
+
 .. math::
     \omega = \pi \frac{r}{r_{cut}}
-    
+
 Using this mapping, the Atomic Neighbor Density Function is then expanded on the 3-sphere using the Wigner-D matrix elements, the harmonic functions on the 3-sphere.  The resulting expansion coefficients are given by:
 
 .. math::
     c^j_{m',m} = D^{j}_{m',m}(\boldsymbol{0}) + \sum_i D^{j}_{m',m}(\boldsymbol{r}_i)
-    
+
 The triple correlation of the Atomic Neighbor Density Function on the 3-sphere is then given by a third order product of the expansion coefficients by the Fourier theorem.
 
 .. math::
     B_{j_1,j_2,j} = \sum_{m',m = -j}^{j}c^{j}_{m',m}\sum_{m_1',m_1 = -j_1}^{j_1}c^{j_1}_{m_1',m_1}\times \sum_{m_2',m_2 = -j_2}^{j_2}c^{j_2}_{m_2',m_2}C^{jj_1j_2}_{mm_1m_2}C^{jj_1j_2}_{m'm_1'm_2'},
-    
+
 Where C is a Clebsch-Gordan coefficient.
-    
+
 Smooth SO(3) Power Spectrum
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Now instead of considering a hyperdimensional space, we can derive a similar descriptor by taking the auto correlation of the atomic neighbor density function through expansions on the 2-sphere and a radial basis on a smoothened atomic neighbor density function [6]_.
 
 .. math::
    \rho ' = \sum_i e^{- \alpha |\boldsymbol{r}-\boldsymbol{r}_i|^2}
-   
+
 This function is then expanded on the 2-sphere using Spherical Harmonics and a radial basis :math:`g_n(r)` orthonormalized on the interval :math:`(0, r_\textrm{cut})`.
 
 .. math::
@@ -124,7 +126,7 @@ Where :math:`I_l` is a modified spherical bessel function of the first kind.  Th
 
 .. math::
     p_{n_1 n_2 l} = \sum_{m=-l}^{+l}c_{n_1lm} c^*_{n_2 l m}
-    
+
 
 Expression of Target Properties
 --------------------------------
@@ -138,15 +140,15 @@ For all of the regression techniques, the force field training involves fitting 
 Since neural network and generalized linear regressions have well-defined functional forms, analytic derivatives can be derived by applying the chain rule to obtain the force at each atomic coordinate, :math:`\boldsymbol{r}_m`:
 
 .. math::
-   
+
    \boldsymbol{F}_m=-\sum_{i=1}^{N}\frac{\partial \mathscr{F}_i(\boldsymbol{X}_{i})}{\partial \boldsymbol{X}_{i}} \cdot \frac{\partial\boldsymbol{X}_{i}}{\partial \boldsymbol{r}_m}
 
 Finally, the stress tensor is acquired through the virial stress relation:
-   
+
 .. math::
 
    \boldsymbol{S}=-\sum_{m=1}^N \boldsymbol{r}_m \otimes \sum_{i=1}^{N} \frac{\partial \mathscr{F}_i(\boldsymbol{X}_{i})}{\partial \boldsymbol{X}_{i}} \cdot \frac{\partial \boldsymbol{X}_{i}}{\partial \boldsymbol{r}_m}
- 
+
 
 
 Force Field Training
@@ -203,4 +205,4 @@ The value of a neuron (:math:`X_{n_i}^l`) at layer :math:`l` can determined by t
 .. [3] M. Gastegger, L. Schwiedrzik, M. Bittermann, F. Berzsenyi and P. Marquetand, J. Chem. Phys. 148, 241709 (2018)
 .. [4] Zhang, C. Hu, B. Jiang, "Embedded atom neural network potentials: Efficient and accurate machine learning with a physically inspired representation," The Journal of Physical Chemistry Letters 10 (17) (2019) 4962–4967 (2019).
 .. [5] Albert P Bartok, Mike C Payne, Risi Kondor and Gabor Csanyi, “Gaussian approximation potentials: The accuracy of quantum mechan-ics, without the electrons,” Phys. Rev. Lett. 104, 136403 (2010)
-.. [6] A.P. Thompson, L.P. Swiler, C.R. Trott, S.M. Foiles and G.J. Tucker, “Spectral neighbor analysis method for automated generation ofquantum-accurate interatomic potentials,” J. Comput. Phys. 285, 316–330 (2015)  
+.. [6] A.P. Thompson, L.P. Swiler, C.R. Trott, S.M. Foiles and G.J. Tucker, “Spectral neighbor analysis method for automated generation ofquantum-accurate interatomic potentials,” J. Comput. Phys. 285, 316–330 (2015)
