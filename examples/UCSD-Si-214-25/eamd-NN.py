@@ -14,7 +14,7 @@ if not os.path.exists(TrainData):
 parameters = {'L': 2, 'eta': [0.36],
               'Rs': [0.  , 0.75, 1.5 , 2.25, 3.  , 3.75, 4.5]}
 
-descriptor = {'type': 'EAMD',
+descriptor = {'type': 'EAD',
               'parameters': parameters,
               'Rc': 5.0,
               'ncpu': 4,
