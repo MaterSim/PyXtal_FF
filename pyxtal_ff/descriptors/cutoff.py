@@ -170,10 +170,11 @@ def Poly4Prime(Rij, Rc):
 
 
 def Exponent(Rij, Rc):
-    ids = (Rij > Rc)
-    x = Rij/Rc
-    result = np.exp(1 - 1/(1-x**2))
-    result[ids] = 0
+    result = np.zeros_like(Rij)
+    ids = (Rij < Rc)
+    x = Rij[ids]/Rc
+    result[ids] = np.exp(1 - 1/(1-x**2))
+    #result[ids] = 0
     return result
 
 
