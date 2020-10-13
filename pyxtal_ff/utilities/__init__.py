@@ -245,7 +245,7 @@ def compute_descriptor(function, structure):
                 function['Rc'],
                 derivative=True,
                 stress=True).calculate(structure)
-    elif function['type'] == ['EAD', 'ead']:
+    elif function['type'] in ['EAD', 'ead']:
             from pyxtal_ff.descriptors.EAD import EAD
             d = EAMD(function['parameters'],
                      function['Rc'],
