@@ -223,14 +223,14 @@ def compute_descriptor(function, structure):
                  function['Rc'], 
                  function['force'],
                  function['stress'],
-                 function['cutoff'], True).calculate(structure)
+                 function['cutoff'], False).calculate(structure)
     elif function['type'] in ['wACSF', 'wacsf']:
         from pyxtal_ff.descriptors.ACSF import ACSF
         d = ACSF(function['parameters'],
                  function['Rc'], 
                  function['force'],
                  function['stress'],
-                 function['cutoff'], False).calculate(structure)
+                 function['cutoff'], True).calculate(structure)
     elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
         from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
         d = SO4_Bispectrum(function['parameters']['lmax'],
