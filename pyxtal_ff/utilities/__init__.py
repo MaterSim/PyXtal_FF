@@ -74,6 +74,8 @@ class Database():#MutableSequence):
                 fmt = 'xyz'
             elif structure_file.find('db') > 0:
                 fmt = 'db'
+            elif structure_file.find('traj') > 0:
+                fmt = 'traj'
             else:
                 fmt = 'vasp-out'
         
@@ -86,6 +88,8 @@ class Database():#MutableSequence):
                 data = parse_xyz(structure_file)
             elif fmt == 'db':
                 data = parse_ase_db(structure_file)
+            elif fmt == 'traj':
+                data = parse_traj(structure_file)
             else:
                 raise NotImplementedError('PyXtal_FF supports only json, vasp-out, and xyz formats')
             print("{:d} structures have been loaded.".format(len(data)))
@@ -576,3 +580,19 @@ def parse_ase_db(db_path, N=None, Random=False):
 
     return data
 
+def parse_traj(structure_file):
+    from ase.build import sort
+    from ase.io.trajectory import Trajectory
+    data = []
+    out_traj = Trajectory(structure_file)
+    for traj in out_traj:
+        structure = sort(traj)
+        energy = traj.get_potential_energy()
+        force = traj.get_forces()
+        xjson = {'structure':structure,
+                 'energy':energy,
+                 'force':force,
+                 'stress':None,
+                 'group':'random'}
+        data.append(xjson)
+    return data
