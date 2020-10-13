@@ -77,8 +77,65 @@ class ACSF:
         self.Rc = Rc
         self.derivative = derivative
         self.stress = stress
-        
-       
+
+    def __str__(self):
+        s = "ACSF descriptor with Cutoff: {:6.3f}\n".format(self.Rc)
+        if self.G2_parameters is not None:
+            s += "G2 "
+            for key in self.G2_parameters.keys():
+                s += "  {:s}: ".format(key)
+                vals = self.G2_parameters[key]
+                for val in vals:
+                    s += "  {:6.3f}".format(val)
+            s += "\n"
+                
+        if self.G4_parameters is not None:
+            s += "G4 "
+            for key in self.G4_parameters.keys():
+                s += "  {:s}: ".format(key)
+                vals = self.G4_parameters[key]
+                for val in vals:
+                    s += "{:6.3f}".format(val)
+            s += "\n"
+ 
+        if self.G5_parameters is not None: 
+            s += "G5 "
+            for key in self.G5_parameters.keys():
+                s += "   {:s}: ".format(key)
+                vals = self.G5_parameters[key]
+                for val in vals:
+                    s += "{:6.3f}".format(val)
+            s += "\n"
+ 
+        return s
+
+    def __repr__(self):
+        return str(self)
+
+    def load_from_dict(self, dict0):
+        self.G2_parameters = dict0["G2_parameters"]
+        self.G4_parameters = dict0["G4_parameters"]
+        self.G5_parameters = dict0["G5_parameters"]
+        self.Rc = dict0["Rc"]
+        self.derivative = dict0["derivative"]
+        self.stress = dict0["stress"]
+        self._type = dict0["_type"]
+
+    def save_dict(self):
+        """
+        save the model as a dictionary in json
+        """
+        dict = {
+                "G2_parameters": self.G2_parameters,
+                "G4_parameters": self.G4_parameters,
+                "G5_parameters": self.G5_parameters,
+                "rcut": self.rcut,
+                "derivative": self.derivative,
+                "stress": self.stress,
+                "_type": self._type,
+               }
+        return dict
+ 
     def calculate(self, crystal, system=None, ids=None):
         """
         The symmetry functions are obtained through this `calculate` method.

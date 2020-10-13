@@ -31,8 +31,35 @@ class SO3:
         self.stress = stress
         return
 
+    def __str__(self):
+        s = "SO3 descriptor with Cutoff: {:6.3f}".format(self.rcut)
+        s += " lmax: {:d}, nmax: {:d}, alpha: {:.3f}\n".format(self.lmax, self.nmax, self.alpha)
+        return s
+
     def __repr__(self):
-        return """SO3 smooth power spectrum calculator"""
+        return str(self)
+
+    def load_from_dict(self, dict0):
+        self.nmax = dict0["nmax"]
+        self.lmax = dict0["lmax"]
+        self.rcut = dict0["rcut"]
+        self.alpha = dict0["alpha"]
+        self.derivative = dict0["derivative"]
+        self.stress = dict0["stress"]
+
+    def save_dict(self):
+        """
+        save the model as a dictionary in json
+        """
+        dict = {"nmax": self.nmax,
+                "lmax": self.lmax,
+                "rcut": self.rcut,
+                "alpha": self.alpha,
+                "derivative": self.derivative,
+                "stress": self.stress,
+               }
+        return dict
+
 
     @property
     def nmax(self):

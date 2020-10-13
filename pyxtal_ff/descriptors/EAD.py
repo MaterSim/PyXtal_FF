@@ -49,6 +49,43 @@ class EAD:
         self.derivative = derivative
         self.stress = stress
 
+    def __str__(self):
+        s = "EAMD descriptor with Cutoff: {:6.3f}\n".format(self.Rc)
+        for key in self.parameters.keys():
+            s += "  {:s}: ".format(key)
+            vals = self.parameters[key]
+            if key in ['eta']:
+                for val in vals:
+                    s += "{:8.3f}, ".format(val)
+            elif key in ['Rs']:
+                for val in vals:
+                    s += "{:6.3f}".format(val)
+            else:
+                s += "{:2d}".format(vals)
+        s += "\n"
+
+        return s
+
+    def __repr__(self):
+        return str(self)
+
+    def load_from_dict(self, dict0):
+        self.parameters = dict0["parameters"]
+        self.Rc = dict0["Rc"]
+        self.derivative = dict0["derivative"]
+        self.stress = dict0["stress"]
+
+    def save_dict(self):
+        """
+        save the model as a dictionary in json
+        """
+        dict = {
+                "parameters": self.parameters,
+                "rcut": self.rcut,
+                "derivative": self.derivative,
+                "stress": self.stress,
+               }
+        return dict
     
     def calculate(self, crystal, ids=None):
         """Calculate and return the EAD.

@@ -28,11 +28,35 @@ class SO4_Bispectrum:
         self.normalize_U = normalize_U
         self.cutoff_function = cutoff_function
 
+    def __str__(self):
+        s = "SO4 bispectrum descriptor with Cutoff: {:6.3f}".format(self.rcut)
+        s += " lmax: {:d}\n".format(self.lmax)
+        return s
+
     def __repr__(self):
-        return """S04 bispectrum coefficient calculator for the
-    atomic neighbor density function for a Wigner-D
-    expansion of order {} and cutoff
-    radius {}""".format(self.lmax, self.rcut)
+        return str(self)
+
+    def load_from_dict(self, dict0):
+        self.lmax = dict0["lmax"]
+        self.rcut = dict0["rcut"]
+        self.normalize_U = dict0["normalize_U"]
+        self.cutoff_function = dict0["cutoff_function"]
+        self.derivative = dict0["derivative"]
+        self.stress = dict0["stress"]
+
+    def save_dict(self):
+        """
+        save the model as a dictionary in json
+        """
+        dict = {
+                "lmax": self.lmax,
+                "rcut": self.rcut,
+                "normalize_U": self.normalize_U,
+                "cutoff_function", self.cutoff_function,
+                "derivative": self.derivative,
+                "stress": self.stress,
+               }
+        return dict
 
     @property
     def lmax(self):
