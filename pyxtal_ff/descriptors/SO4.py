@@ -52,7 +52,7 @@ class SO4_Bispectrum:
                 "lmax": self.lmax,
                 "rcut": self.rcut,
                 "normalize_U": self.normalize_U,
-                "cutoff_function", self.cutoff_function,
+            "cutoff_function": self.cutoff_function,
                 "derivative": self.derivative,
                 "stress": self.stress,
                }
