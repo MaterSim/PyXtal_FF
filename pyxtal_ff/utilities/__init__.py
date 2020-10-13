@@ -217,7 +217,7 @@ class Database():#MutableSequence):
 def compute_descriptor(function, structure):
     """ Compute descriptor for one structure. """
 
-    if function['type'] == ['BehlerParrinello', 'ACSF']:
+    if function['type'] in ['BehlerParrinello', 'ACSF']:
         from pyxtal_ff.descriptors.ACSF import ACSF
         d = ACSF(function['parameters'],
                  function['Rc'], 
