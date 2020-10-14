@@ -19,7 +19,7 @@ class SO4_Bispectrum:
     U-functions using horner form
     '''
 
-    def __init__(self, lmax, rcut, derivative=True, stress=False, normalize_U=False, cutoff_function='cosine'):
+    def __init__(self, lmax=3, rcut=3.5, derivative=True, stress=False, normalize_U=False, cutoff_function='cosine'):
         # populate attributes
         self.lmax = lmax
         self.rcut = rcut
@@ -27,6 +27,7 @@ class SO4_Bispectrum:
         self.stress = stress
         self.normalize_U = normalize_U
         self.cutoff_function = cutoff_function
+        self._type = "SO4"
 
     def __str__(self):
         s = "SO4 bispectrum descriptor with Cutoff: {:6.3f}".format(self.rcut)
@@ -52,9 +53,10 @@ class SO4_Bispectrum:
                 "lmax": self.lmax,
                 "rcut": self.rcut,
                 "normalize_U": self.normalize_U,
-                "cutoff_function", self.cutoff_function,
+                "cutoff_function": self.cutoff_function,
                 "derivative": self.derivative,
                 "stress": self.stress,
+                "_type": "SO4",
                }
         return dict
 

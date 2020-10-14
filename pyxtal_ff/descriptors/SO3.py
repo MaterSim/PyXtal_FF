@@ -21,7 +21,7 @@ class SO3:
         derivative: bool, whether to calculate the gradient of not
     '''
 
-    def __init__(self, nmax, lmax, rcut, alpha=2.0, derivative=True, stress=False):
+    def __init__(self, nmax=3, lmax=3, rcut=3.5, alpha=2.0, derivative=True, stress=False):
         # populate attributes
         self.nmax = nmax
         self.lmax = lmax
@@ -29,6 +29,7 @@ class SO3:
         self.alpha = alpha
         self.derivative = derivative
         self.stress = stress
+        self._type = "SO3"
         return
 
     def __str__(self):
@@ -57,6 +58,7 @@ class SO3:
                 "alpha": self.alpha,
                 "derivative": self.derivative,
                 "stress": self.stress,
+                "_type": "SO3", 
                }
         return dict
 
