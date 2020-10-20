@@ -284,8 +284,9 @@ class SO3:
 
 
         for i in range(len(Neighbors)):
-            neighborlist[i, :len(Neighbors[i]), :] = Neighbors[i]
-            atm_nums[i, :len(Neighbors[i])] = Atomic_numbers[i]
+            if len(Neighbors[i]) > 0:
+                neighborlist[i, :len(Neighbors[i]), :] = Neighbors[i]
+                atm_nums[i, :len(Neighbors[i])] = Atomic_numbers[i]
 
 
 
