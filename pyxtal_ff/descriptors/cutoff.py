@@ -182,6 +182,6 @@ def Exponent(Rij, Rc):
 def ExponentPrime(Rij, Rc):
     ids = (Rij > Rc)
     x = Rij/Rc
-    result = -2*x * np.exp(1 - 1/(1-x**2)) / (1+x**2)**2
+    result = -2*x * np.exp(1 - 1/(1-x**2)) / (1-x**2)**2
     result[ids] = 0
     return result
