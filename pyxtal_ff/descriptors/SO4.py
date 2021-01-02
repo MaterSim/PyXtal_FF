@@ -19,14 +19,16 @@ class SO4_Bispectrum:
     U-functions using horner form
     '''
 
-    def __init__(self, lmax=3, rcut=3.5, derivative=True, stress=False, normalize_U=False, cutoff_function='cosine'):
+    def __init__(self, weights, lmax=3, rcut=3.5, derivative=True, stress=False, normalize_U=False, cutoff_function='cosine', rfac0=1.0):
         # populate attributes
+        self.weights = weights
         self.lmax = lmax
         self.rcut = rcut
         self.derivative = derivative
         self.stress = stress
         self.normalize_U = normalize_U
         self.cutoff_function = cutoff_function
+        self.rfac0 = rfac0
         self._type = "SO4"
 
     def __str__(self):
@@ -61,19 +63,31 @@ class SO4_Bispectrum:
         return dict
 
     @property
+    def weights(self):
+        return self._weights
+
+    @weights.setter
+    def weights(self, w):
+
+        if isinstance(w, dict) is True:
+            self._weights = w
+        else:
+            raise TypeError('weights must be a dictionary')
+
+    @property
     def lmax(self):
         return self._twol//2
 
     @lmax.setter
     def lmax(self, lmax):
-        if isinstance(lmax, int) is True:
+        if isinstance(lmax, int) is True or isinstance(lmax, float) is True:
             if lmax < 0:
                 raise ValueError('lmax must be greater than or equal to zero')
             elif lmax > 32:
                 raise NotImplementedError('''Currently we only support Wigner-D matrices and spherical harmonics
                                           for arguments up to l=32.  If you need higher functionality, raise an issue
                                           in our github and we will expand the set of supported functions''')
-            self._twol = 2*lmax
+            self._twol = round(2*lmax)
         else:
             raise ValueError('lmax must be an integer')
 
@@ -157,6 +171,21 @@ class SO4_Bispectrum:
         else:
             raise ValueError('You must specify the cutoff function as a string')
 
+    @property
+    def rfac0(self):
+        return self._rfac0
+
+    @rfac0.setter
+    def rfac0(self, rfac0):
+        if isinstance(rfac0, float) is True or isinstance(rfac0, int) is True:
+            if rfac0 <= 0:
+                raise ValueError('rfac0 must be greater than zero')
+            elif rfac0 > 1:
+                raise ValueError('rfac0 must be less than or equal to one')
+            self._rfac0 = rfac0
+        else:
+            raise ValueError('rfac0 must be a float')
+
     def clear_memory(self):
         '''
         Clears all memory that isn't an essential attribute for the calculator
@@ -185,7 +214,7 @@ class SO4_Bispectrum:
         get_bispectrum_components(self.center_atoms,self.neighborlist, self.seq,
                                   self.atomic_numbers, self.site_atomic_numbers,
                                   self._twol, self.rcut, self._norm, self.derivative,
-                                  self.stress, self._blist, self._dblist, self._bstress, self._cutoff_id)
+                                  self.stress, self._blist, self._dblist, self._bstress, self._cutoff_id, self.rfac0)
 
         if self.derivative is True:
 
@@ -241,7 +270,7 @@ class SO4_Bispectrum:
                 # compute separation vector
                 pos = atoms.positions[j] + np.dot(offset, atoms.get_cell()) - center_atom
                 neighbors[i].append(pos)
-                atomic_numbers[i].append(atoms[j].number)
+                atomic_numbers[i].append(self.weights[atoms[j].symbol])
 
         Neighbors = []
         Atomic_numbers = []
@@ -269,6 +298,7 @@ class SO4_Bispectrum:
         Seq = np.array(Seq, dtype=np.int64)
         atm_nums = np.zeros((len(Neighbors), max_len), dtype=np.int64)
         site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.int64)
+        site_atomic_numbers = np.ones_like(site_atomic_numbers)
 
 
         for i in range(len(Neighbors)):
@@ -1096,10 +1126,10 @@ def zero_3d(arr):
     return
 
 @nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8[:], nb.i8, nb.f8,
-                 nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:], nb.i8),
+                 nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:], nb.i8, nb.f8),
          cache=True, fastmath=True, nogil=True)
 def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, site_ANs,
-                              twolmax, rcut, norm, derivative, stress, blist, dblist, bstress, cutoff_id):
+                              twolmax, rcut, norm, derivative, stress, blist, dblist, bstress, cutoff_id, rfac0):
     '''
     Calculate the bispectrum components, and their derivatives (if specified)
     for a given neighbor list.  This is the main work function.
@@ -1282,7 +1312,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                             r = np.sqrt(x*x + y*y + z*z)
                             if r < 10**(-8):
                                 continue
-                            psi = np.pi*r/rcut
+                            psi = rfac0*np.pi*r/rcut
                             zero_1d(ulist)
                             compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
                                                          dulist[neighbor], idxu_block)
@@ -1329,7 +1359,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     if r < 10**(-8):
                         continue
                     # angle of rotation
-                    psi = np.pi*r/rcut
+                    psi = rfac0*np.pi*r/rcut
                     # populate ulist and dulist with Wigner U functions
                     # and derivatives
                     zero_1d(ulist)
@@ -1362,7 +1392,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     r = np.sqrt(x*x + y*y + z*z)
                     if r < 10**(-8):
                         continue
-                    psi = np.pi*r/rcut
+                    psi = rfac0*np.pi*r/rcut
                     zero_1d(ulist)
                     compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
                                                  dulist[neighbor], idxu_block)
@@ -1419,7 +1449,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                             r = np.sqrt(x*x + y*y + z*z)
                             if r < 10**(-8):
                                 continue
-                            psi = np.pi*r/rcut
+                            psi = rfac0*np.pi*r/rcut
                             zero_1d(ulist)
                             compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
                                                          dulist[neighbor], idxu_block)
@@ -1459,7 +1489,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     if r < 10**(-8):
                         continue
                     # angle of rotation
-                    psi = np.pi*r/rcut
+                    psi = rfac0*np.pi*r/rcut
                     # populate ulist and dulist with Wigner U functions
                     # and derivatives
                     zero_1d(ulist)
@@ -1491,7 +1521,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     r = np.sqrt(x*x + y*y + z*z)
                     if r < 10**(-8):
                         continue
-                    psi = np.pi*r/rcut
+                    psi = rfac0*np.pi*r/rcut
                     zero_1d(ulist)
                     compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
                                                  dulist[neighbor], idxu_block)
@@ -1549,7 +1579,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                 if r < 10**(-8):
                     continue
                 # angle of rotation
-                psi = np.pi*r/rcut
+                psi = rfac0*np.pi*r/rcut
                 # populate ulist and dulist with Wigner U functions
                 # and derivatives
                 zero_1d(ulist)
@@ -1614,7 +1644,8 @@ if  __name__ == "__main__":
     stress = options.stress
 
     #import time
-    f = SO4_Bispectrum(lmax, rcut, derivative=False, stress=False, normalize_U=False, cutoff_function='tanh')
+    w = {'C':2.0}
+    f = SO4_Bispectrum(w, lmax=lmax, rcut=rcut, derivative=False, stress=False, normalize_U=False, cutoff_function='cosine', rfac0=0.99363)
     x = f.calculate(test)
     #start2 = time.time()
     #for key, item in x.items():
