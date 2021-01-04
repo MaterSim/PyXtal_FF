@@ -710,10 +710,45 @@ class NeuralNetwork():
                       'des_info': des_info}
                       
         torch.save(checkpoint, _filename)
+        self.save_weights_to_txt()
         print("The Neural Network Potential is exported to {:s}".format(_filename))
         print("\n")
 
 
+    def save_weights_to_txt(self, vector=False):
+        """ Saving the model weights to txt file. 
+        if vector is False, save the weights in matrix form. """
+        with open(self.path+"weights.txt", "w") as f:
+            for element in self.elements:
+                f.write("NET {len(elements)} ")
+                model = self.models[element]
+
+                _PARAMETERS = []
+                for parameters in model.parameters():
+                    _PARAMETERS.append(parameters)
+
+                _parameters = []
+                for i, hl in enumerate(self.hiddenlayers[element]):
+                    f.write(f"{hl} ")
+                    _parameters.append(torch.cat([_PARAMETERS[2*i], _PARAMETERS[2*i+1][:,None]], dim=1))
+                f.write("\n")
+
+                for q, parameter in enumerate(_parameters):
+                    shp = parameter.shape[1] - 1
+                    f.write(f"LAYER {q} {self.activation[element][q]} \n")
+
+                    for i, param in enumerate(parameter):
+                        f.write(f"w{i} ")
+                        for j, p in enumerate(param):
+                            if j != shp:
+                                f.write(f"{float(p)} ")
+                            else:
+                                f.write("\n")
+                                f.write(f"b{i} ")
+                                f.write(f"{float(p)}\n")
+                f.write("\n")
+
+    
     def load_checkpoint(self, filename=None, method=None, args=None):
         """ Load PyTorch Neural Network models at previously saved checkpoint. """
         checkpoint = torch.load(filename)
