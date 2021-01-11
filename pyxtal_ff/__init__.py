@@ -22,8 +22,11 @@ class PyXtal_FF():
                 + EAD (embeded atom density)
                 + SO4 (bispectrum)
                 + SO3 (smoothed powerspectrum)
-            - Rc: float
-                The radial cutoff of the descriptors.
+                + SNAP (similar to SO4 but the weighting and Rc schemes are adopted from LAMMPS)
+            - Rc: float/dictionary
+                The radial cutoff of the descriptors. Dictionary form is particularly for SNAP.
+            - weights: dictionary
+                The relative species weights.
             - N_train: int
                 The number of crystal structures in training data set 
                 to be converted into descriptors.
@@ -50,6 +53,9 @@ class PyXtal_FF():
                     {'lmax': 3}
                 + SO3
                     {'nmax': 1, 'lmax': 3}
+                + SNAP
+                    {'weights': {'Si': 1.0, 'O': 2.0},
+                     'Rc': {'Si': 4.0, 'O': 5.0}
 
         model: dict
             Machine learning parameters are defined here.
@@ -130,7 +136,7 @@ class PyXtal_FF():
             self.print_logo()
         
         # Checking the keys in descriptors
-        descriptors_keywords = ['type', 'Rc', 'N_train', 'N_test', 'cutoff',
+        descriptors_keywords = ['type', 'Rc', 'weights', 'N_train', 'N_test', 'cutoff',
                                 'force', 'stress', 'ncpu', 'parameters']
         if descriptors is not None:
             for key in descriptors.keys():
@@ -143,6 +149,7 @@ class PyXtal_FF():
         self._descriptors = {'system': model['system'],
                              'type': 'Bispectrum',
                              'Rc': 5.0,
+                             'weights': None,
                              'N': None,
                              'N_train': None,
                              'N_test': None,
@@ -162,6 +169,15 @@ class PyXtal_FF():
             if 'parameters' in descriptors:
                 _parameters.update(descriptors['parameters'])
                 self._descriptors['parameters'] = _parameters
+
+            # Check for the SNAP type
+            if self._descriptors['type'] in ['SNAP', 'snap']:
+                if not isinstance(self._descriptors['weights'], dict):
+                    msg = "The weights for SNAP type must be defined as a dictionary."
+                    raise ValueError(msg)
+                #if not isinstance(self._descriptors['Rc'], dict):
+                #    msg = "The Rc for SNAP type must be defined as a dictionary."
+                #    raise ValueError(msg)
 
         # Create new directory to dump all the results.
         # E.g. for default 'Si-O-Bispectrum/'
@@ -393,6 +409,8 @@ class PyXtal_FF():
             key_params = ['lmax', 'normalize_U']
         elif _descriptors['type'] in ['SO3', 'SOAP']:
             key_params = ['nmax', 'lmax']
+        elif _descriptors['type'] in ['SNAP', 'snap']:
+            key_params = ['lmax']
         elif _descriptors['type'] == 'EAD':
             key_params = ['L', 'eta', 'Rs']
         else:

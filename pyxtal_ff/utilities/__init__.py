@@ -175,7 +175,8 @@ class Database():#MutableSequence):
                                function['Rc'],
                                derivative=function['force'],
                                stress=function['stress'],
-                               normalize_U=function['parameters']['normalize_U']).calculate(data['structure'])
+                               normalize_U=function['parameters']['normalize_U'],
+                               cutoff_function=function['cutoff']).calculate(data['structure'])
         
         elif function['type'] in ['SO3', 'SOAP', 'soap']:
             from pyxtal_ff.descriptors.SO3 import SO3
@@ -191,6 +192,16 @@ class Database():#MutableSequence):
                      function['Rc'],
                      function['force'], function['stress'],
                      function['cutoff']).calculate(data['structure'])
+        
+        elif function['type'] in ['SNAP', 'snap']:
+            from pyxtal_ff.descriptors.SNAP import SO4_Bispectrum
+            d = SO4_Bispectrum(function['weights'],
+                               function['parameters']['lmax'],
+                               function['Rc'],
+                               derivative=function['force'],
+                               stress=function['stress'],
+                               normalize_U=function['parameters']['normalize_U'],
+                               cutoff_function=function['cutoff']).calculate(data['structure'])
 
         else:
             msg = f"{function['type']} is not implemented"
@@ -228,6 +239,7 @@ def compute_descriptor(function, structure):
                  function['force'],
                  function['stress'],
                  function['cutoff'], False).calculate(structure)
+
     elif function['type'] in ['wACSF', 'wacsf']:
         from pyxtal_ff.descriptors.ACSF import ACSF
         d = ACSF(function['parameters'],
@@ -235,13 +247,16 @@ def compute_descriptor(function, structure):
                  function['force'],
                  function['stress'],
                  function['cutoff'], True).calculate(structure)
+
     elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
         from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
         d = SO4_Bispectrum(function['parameters']['lmax'],
                            function['Rc'],
                            derivative=True,
                            stress=True,
-                           normalize_U=function['parameters']['normalize_U']).calculate(structure)
+                           normalize_U=function['parameters']['normalize_U'],
+                           cutoff_function=function['cutoff']).calculate(structure)
+
     elif function['type'] in ['SO3', 'SOAP', 'soap']:
         from pyxtal_ff.descriptors.SO3 import SO3
         d = SO3(function['parameters']['nmax'],
@@ -249,12 +264,24 @@ def compute_descriptor(function, structure):
                 function['Rc'],
                 derivative=True,
                 stress=True).calculate(structure)
+
     elif function['type'] in ['EAD', 'ead']:
             from pyxtal_ff.descriptors.EAD import EAD
             d = EAMD(function['parameters'],
                      function['Rc'],
                      True, True,
                      function['cutoff']).calculate(structure)
+
+    elif function['type'] in ['SNAP', 'snap']:
+        from pyxtal_ff.descriptors.SNAP import SO4_Bispectrum
+        d = SO4_Bispectrum(function['weights'],
+                           function['parameters']['lmax'],
+                           function['Rc'],
+                           derivative=True,
+                           stress=True,
+                           normalize_U=function['parameters']['normalize_U'],
+                           cutoff_function=function['cutoff']).calculate(structure)
+
     else:
         msg = f"{function['type']} is not implemented"
         raise NotImplementedError(msg)
