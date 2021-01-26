@@ -19,7 +19,7 @@ class SO4_Bispectrum:
     U-functions using horner form
     '''
 
-    def __init__(self, weights, lmax=3, rcut=3.5, derivative=True, stress=False, normalize_U=False, cutoff_function='cosine', rfac0=1.0):
+    def __init__(self, weights, lmax=3, rcut=3.5, derivative=True, stress=False, normalize_U=False, cutoff_function='cosine', rfac0=0.99363):
         # populate attributes
         self.weights = weights
         self.lmax = lmax
