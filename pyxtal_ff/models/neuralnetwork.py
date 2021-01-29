@@ -720,13 +720,20 @@ class NeuralNetwork():
         if vector is False, save the weights in matrix form. """
         if vector:
             with open(self.path+"weights.txt", "w") as f:
-                for element in self.elements:
-                    f.write(f"NET {len(self.elements)} {self.no_of_descriptors} ")
+                f.write(f"{len(self.elements)} {self.no_of_descriptors} \n")
+                for e, element in enumerate(self.elements):
+                    f.write(f"NET {e+1} {len(self.hiddenlayers[element])} ")
                     model = self.models[element]
 
-                    _PARAMETERS = []
+                    count, _PARAMETERS = 0, []
                     for parameters in model.parameters():
                         _PARAMETERS.append(parameters)
+                        if len(parameters.shape) == 1:
+                            count += len(parameters)
+                        else:
+                            for param in parameters:
+                                count += len(param)
+                    f.write(f"{count} ")
 
                     _parameters = []
                     for i, hl in enumerate(self.hiddenlayers[element]):
@@ -734,6 +741,11 @@ class NeuralNetwork():
                         f.write(f"{hl} ")
                         _parameters.append(torch.cat([_PARAMETERS[2*i+1][:,None], _PARAMETERS[2*i]], dim=1))
                     f.write("\n")
+
+                    drange = self.drange[element]
+                    str_drange_min = " ".join(map(str, drange[:,0]))
+                    str_drange_max =" ".join(map(str, drange[:,1]))
+                    f.write("{}\n{}\n".format(str_drange_min, str_drange_max))
 
                     for parameter in _parameters:
                         for param in parameter:
