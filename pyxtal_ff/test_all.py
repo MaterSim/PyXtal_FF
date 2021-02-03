@@ -142,7 +142,32 @@ class TestSO4(unittest.TestCase):
     def test_dBdr_poly_vs_numerical(self):
         array1 = (self.b2_poly['x'][0] - self.b0_poly['x'][0]).flatten()/eps
         array2 = self.b0_poly['dxdr'][0, :, 0].flatten()
-        self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
+        self.assertTrue(np.allclose(array1, array2))#, rtol=1e-2, atol=1e-2))
+
+class TestSNAP(unittest.TestCase):
+    from pyxtal_ff.descriptors.SNAP import SO4_Bispectrum as SNAP
+    struc = get_rotated_struc(cu)
+    b0_poly = SNAP(weights={'Cu':1.0}, lmax=1, rcut=rcut, stress=True, derivative=True).calculate(struc)#, backend='pymatgen')
+    struc = get_rotated_struc(cu, 20, 'x')
+    b1_poly = SNAP(weights={'Cu':1.0}, lmax=1, rcut=rcut, stress=True, derivative=True).calculate(struc)#, backend='pymatgen')
+    struc = get_perturbed_struc(cu, eps)
+    b2_poly = SNAP(weights={'Cu':1.0}, lmax=1, rcut=rcut, derivative=False).calculate(struc)#, backend='pymatgen')
+
+    def test_B_poly_rotation_variance(self):
+        array1 = self.b0_poly['x'].flatten()
+        array2 = self.b1_poly['x'].flatten()
+        self.assertTrue(np.allclose(array1, array2))
+
+    def test_dBdr_poly_rotation_variance(self):
+        array1 = np.linalg.norm(self.b0_poly['dxdr'][0,:,:], axis=1)
+        array2 = np.linalg.norm(self.b1_poly['dxdr'][0,:,:], axis=1)
+        self.assertTrue(np.allclose(array1, array2))
+
+    def test_dBdr_poly_vs_numerical(self):
+        array1 = (self.b2_poly['x'][0] - self.b0_poly['x'][0]).flatten()/eps
+        array2 = self.b0_poly['dxdr'][0, :, 0].flatten()
+        #print(array1-array2)
+        self.assertTrue(np.allclose(array1, array2))#, rtol=1e-2, atol=1e-2))
 
 class TestSO3(unittest.TestCase):
     from pyxtal_ff.descriptors.SO3 import SO3
@@ -166,7 +191,7 @@ class TestSO3(unittest.TestCase):
     def test_dpdr_vs_numerical(self):
         array1 = (self.p2['x'][0] - self.p0['x'][0])/eps
         array2 = self.p0['dxdr'][0, :, 0]
-        self.assertTrue(np.allclose(array1, array2, rtol=1e-2, atol=1e-2))
+        self.assertTrue(np.allclose(array1, array2))#, rtol=1e-2, atol=1e-2))
 
 class TestRegression(unittest.TestCase):
 
