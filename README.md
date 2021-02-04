@@ -1,4 +1,5 @@
-[![Build Status](https://travis-ci.org/qzhu2017/PyXtal_FF.svg?branch=master)](https://travis-ci.org/qzhu2017/PyXtal_FF) 
+<!--- [![Build Status](https://travis-ci.org/qzhu2017/PyXtal_FF.svg?branch=master)](https://travis-ci.org/qzhu2017/PyXtal_FF) --->
+[![Test Status](https://github.com/qzhu2017/PyXtal_FF/workflows/tests/badge.svg)](https://github.com/qzhu2017/PyXtal_FF/actions)
 [![Documentation Status](https://readthedocs.org/projects/pyxtal-ff/badge/?version=latest)](https://pyxtal-ff.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/pyxtal-ff.svg)](https://badge.fury.io/py/pyxtal-ff)
 [![Downloads](https://pepy.tech/badge/pyxtal-ff)](https://pepy.tech/project/pyxtal-ff)
@@ -18,11 +19,12 @@
 A Python package for Machine learning of interatomic force field.
 PyXtal FF is an open-source Python library for developing machine learning interatomic potential of materials. 
 
-The aim of PyXtal_FF is to promote the application of atomistic simulations by providing several choices of structural descriptors and machine learning regressions in one platform. Based on the given choice of structural descriptors including 
-- atom-centered symmetry functions, 
-- embedded atom density, 
-- SO4 bispectrum, 
-- smooth SO3 power spectrum. 
+The aim of PyXtal\_FF is to promote the application of atomistic simulations by providing several choices of structural descriptors and machine learning regressions in one platform. Based on the given choice of structural descriptors including 
+- atom-centered symmetry functions 
+- embedded atom density
+- SNAP
+- SO4 bispectrum
+- smooth SO3 power spectrum 
 
 PyXtal\_FF can train the MLPs with either the linear regression or neural networks model, by simultaneously minimizing the errors of energy/forces/stress tensors in comparison with the data from the ab-initio simulation.
 
