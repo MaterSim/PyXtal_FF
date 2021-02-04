@@ -33,7 +33,7 @@ class PyXtalFFCalculator(Calculator):
         self.results['forces'] = forces
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
-        self.results['stress']  = stress[[0, 1, 2, 5, 4, 3]]*units.GPa
+        self.results['stress']  = stress[[0, 1, 2, 5, 4, 3]]*units.GPa # from GPa to eV/A^3
 
 def elastic_tensor(atoms, calc):
     # Compute elastic constants
@@ -47,7 +47,7 @@ def elastic_tensor(atoms, calc):
         system.set_calculator(calc)
         dyn = BFGS(system)
         dyn.run(fmax=0.01)
-        print(system.get_potential_energy().item(), system.get_stress()/units.GPa)
+        print(system.get_potential_energy().item(), system.get_stress()/units.GPa) # from eV/A^3 to GPa
     # Elastic tensor by internal routine
     Cijs, Bij, names, matrix = get_elastic_tensor(atoms, systems)
     return Cijs, names, matrix
