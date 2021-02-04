@@ -19,13 +19,13 @@ sys.path.insert(0, os.path.abspath('../'))
 # -- Project information -----------------------------------------------------
 
 project = 'PyXtal_FF'
-copyright = '2019, Qiang Zhu, Howard Yanxon, David Zagaceta'
+copyright = '2019-2021, Qiang Zhu, Howard Yanxon, David Zagaceta'
 author = 'Qiang Zhu, Howard Yanxon, David Zagaceta'
 
 # The short X.Y version
-version = '0.1.2'
+version = '0.1.4'
 # The full version, including alpha/beta/rc tags
-release = 'Oct 2020'
+release = 'Feb 2021'
 
 
 # -- General configuration ---------------------------------------------------
