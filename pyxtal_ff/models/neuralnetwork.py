@@ -719,7 +719,8 @@ class NeuralNetwork():
     def save_weights_to_txt(self, des_info):
         """ Saving the model weights to txt file. """
         with open(self.path+"NN_weights.txt", "w") as f:
-            f.write("# Neural networks weights generated in PyXtal_FF \n\n")
+            f.write("# Neural networks weights generated in PyXtal_FF \n")
+            f.write("nn \n\n")
             f.write("# total_species nparams \n")
             f.write(f"{len(self.elements)} ")
             for e, element in enumerate(self.elements):
@@ -750,9 +751,25 @@ class NeuralNetwork():
                 f.write("\n\n")
 
                 drange = self.drange[element]
-                str_drange_min = "scale0 " + " ".join(map(str, drange[:,0]))
-                str_drange_max ="scale1 " + " ".join(map(str,(drange[:,1]-drange[:,0])))
-                f.write("{}\n\n{}\n\n".format(str_drange_min, str_drange_max))
+                dmins = drange[:,0]
+                dmaxs = drange[:,1] - drange[:,0]
+                str_min, str_max = "", ""
+                
+                cnt = 1
+                for dmin, dmax in zip(dmins, dmaxs):
+                    str_min += "{:20.13f} ".format(dmin)
+                    str_max += "{:20.13f} ".format(dmax)
+                    if cnt%5==0 or cnt==len(dmins):
+                        str_min += "\n"
+                        str_max += "\n"
+                    cnt += 1
+
+                f.write("# Scale0 \n")
+                f.write(str_min)
+                f.write("\n")
+                f.write("# Scale1 \n")
+                f.write(str_max)
+                f.write("\n")
 
                 cnt = 1
                 f.write("# Coefficients\n")
@@ -760,9 +777,9 @@ class NeuralNetwork():
                     for param in parameter:
                         for p in param:
                             if cnt%5==0:
-                                f.write(f"{float(p)} \n")
+                                f.write("{:18.13f} \n".format(p))
                             else:
-                                f.write(f"{float(p)} ")
+                                f.write("{:18.13f} ".format(p))
                             cnt += 1
                 f.write("\n")
 
