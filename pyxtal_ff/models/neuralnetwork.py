@@ -710,81 +710,100 @@ class NeuralNetwork():
                       'des_info': des_info}
                       
         torch.save(checkpoint, _filename)
-        self.save_weights_to_txt()
+        if des_info['type'] in ['SNAP', 'snap', 'SO3', 'SOAP']:
+            self.save_weights_to_txt(des_info)
         print("The Neural Network Potential is exported to {:s}".format(_filename))
         print("\n")
 
 
-    def save_weights_to_txt(self, vector=True):
-        """ Saving the model weights to txt file. 
-        if vector is False, save the weights in matrix form. """
-        if vector:
-            with open(self.path+"weights.txt", "w") as f:
-                f.write(f"{len(self.elements)} {self.no_of_descriptors} \n")
-                for e, element in enumerate(self.elements):
-                    f.write(f"NET {e+1} {len(self.hiddenlayers[element])} ")
-                    model = self.models[element]
+    def save_weights_to_txt(self, des_info):
+        """ Saving the model weights to txt file. """
+        with open(self.path+"NN_weights.txt", "w") as f:
+            f.write("# Neural networks weights generated in PyXtal_FF \n\n")
+            f.write("# total_species nparams \n")
+            f.write(f"{len(self.elements)} ")
+            for e, element in enumerate(self.elements):
+                model = self.models[element]
+                count = 0
+                for parameters in model.parameters():
+                    if len(parameters.shape) == 1:
+                        count += len(parameters)
+                    else:
+                        for param in parameters:
+                            count += len(param)
+            f.write(f"{count} \n\n")
+            
+            for e, element in enumerate(self.elements):
+                f.write("# NET species# ndescriptors nlayers activation_func for layer 1, number of nodes for layer 1, ..., ..., ...., \n")
+                f.write(f"NET {e+1} {self.no_of_descriptors} {len(self.hiddenlayers[element])} ")
+                model = self.models[element]
 
-                    count, _PARAMETERS = 0, []
-                    for parameters in model.parameters():
-                        _PARAMETERS.append(parameters)
-                        if len(parameters.shape) == 1:
-                            count += len(parameters)
-                        else:
-                            for param in parameters:
-                                count += len(param)
-                    f.write(f"{count} ")
+                _PARAMETERS = []
+                for parameters in model.parameters():
+                    _PARAMETERS.append(parameters)
+                    
+                _parameters = []
+                for i, hl in enumerate(self.hiddenlayers[element]):
+                    f.write(f"{self.activation[element][i]} ".lower())
+                    f.write(f"{hl} ")
+                    _parameters.append(torch.cat([_PARAMETERS[2*i+1][:,None], _PARAMETERS[2*i]], dim=1))
+                f.write("\n\n")
 
-                    _parameters = []
-                    for i, hl in enumerate(self.hiddenlayers[element]):
-                        f.write(f"{self.activation[element][i]} ")
-                        f.write(f"{hl} ")
-                        _parameters.append(torch.cat([_PARAMETERS[2*i+1][:,None], _PARAMETERS[2*i]], dim=1))
-                    f.write("\n")
+                drange = self.drange[element]
+                str_drange_min = "scale0 " + " ".join(map(str, drange[:,0]))
+                str_drange_max ="scale1 " + " ".join(map(str,(drange[:,1]-drange[:,0])))
+                f.write("{}\n\n{}\n\n".format(str_drange_min, str_drange_max))
 
-                    drange = self.drange[element]
-                    str_drange_min = " ".join(map(str, drange[:,0]))
-                    str_drange_max =" ".join(map(str, drange[:,1]))
-                    f.write("{}\n{}\n".format(str_drange_min, str_drange_max))
-
-                    for parameter in _parameters:
-                        for param in parameter:
-                            for p in param:
+                cnt = 1
+                f.write("# Coefficients\n")
+                for parameter in _parameters:
+                    for param in parameter:
+                        for p in param:
+                            if cnt%5==0:
+                                f.write(f"{float(p)} \n")
+                            else:
                                 f.write(f"{float(p)} ")
-                    f.write("\n")
+                            cnt += 1
+                f.write("\n")
 
-        else:
-            with open(self.path+"weights.txt", "w") as f:
+        with open(self.path+"DescriptorParams.txt", "w") as f:
+            f.write("# Descriptor parameters generated in PyXtal_FF \n\n")
+            f.write("# Required \n")
+            f.write(f"rcutfac {des_info['Rc']} \n")
+            
+            if des_info['type'] in ['SO3', 'SOAP']:
+                f.write(f"nmax {des_info['parameters']['nmax']} \n")
+                f.write(f"lmax {des_info['parameters']['lmax']} \n")
+                f.write(f"alpha {des_info['parameters']['alpha']} \n\n")
+            else:
+                f.write(f"twojmax {des_info['parameters']['lmax']*2} \n\n")
+
+            f.write("# Elements \n\n")
+            f.write(f"nelems {len(self.elements)} \n")
+            f.write("elems ")
+            for element in self.elements:
+                f.write(f"{element} ")
+            f.write("\n")
+
+            if des_info['type'] in ['snap', 'SNAP']:
+                f.write("radelems ")
                 for element in self.elements:
-                    f.write("NET {len(elements)} ")
-                    model = self.models[element]
+                    f.write("0.5 ")
+                f.write("\n")
 
-                    _PARAMETERS = []
-                    for parameters in model.parameters():
-                        _PARAMETERS.append(parameters)
+                f.write("welems ")
+                for element in self.elements:
+                    f.write(f"{des_info['weights'][element]} ")
+                f.write("\n\n")
 
-                    _parameters = []
-                    for i, hl in enumerate(self.hiddenlayers[element]):
-                        f.write(f"{hl} ")
-                        _parameters.append(torch.cat([_PARAMETERS[2*i], _PARAMETERS[2*i+1][:,None]], dim=1))
-                    f.write("\n")
+                f.write(f"rfac0 {des_info['parameters']['rfac']} \n")
+                f.write(f"rmin0 0 ")
+            
+            f.write("\n")
+            f.write("switchflag 1 \n")
+            f.write("bzeroflag 0 \n")
 
-                    for q, parameter in enumerate(_parameters):
-                        shp = parameter.shape[1] - 1
-                        f.write(f"LAYER {q} {self.activation[element][q]} \n")
 
-                        for i, param in enumerate(parameter):
-                            f.write(f"w{i} ")
-                            for j, p in enumerate(param):
-                                if j != shp:
-                                    f.write(f"{float(p)} ")
-                                else:
-                                    f.write("\n")
-                                    f.write(f"b{i} ")
-                                    f.write(f"{float(p)}\n")
-                    f.write("\n")
-
-    
     def load_checkpoint(self, filename=None, method=None, args=None):
         """ Load PyTorch Neural Network models at previously saved checkpoint. """
         checkpoint = torch.load(filename)

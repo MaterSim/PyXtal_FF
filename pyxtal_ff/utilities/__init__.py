@@ -183,6 +183,7 @@ class Database():#MutableSequence):
             d = SO3(function['parameters']['nmax'],
                     function['parameters']['lmax'],
                     function['Rc'],
+                    alpha=function['parameters']['alpha'],
                     derivative=function['force'],
                     stress=function['stress']).calculate(data['structure'])
 
@@ -201,7 +202,8 @@ class Database():#MutableSequence):
                                derivative=function['force'],
                                stress=function['stress'],
                                normalize_U=function['parameters']['normalize_U'],
-                               cutoff_function=function['cutoff']).calculate(data['structure'])
+                               cutoff_function=function['cutoff'],
+                               rfac0=function['parameters']['rfac']).calculate(data['structure'])
 
         else:
             msg = f"{function['type']} is not implemented"

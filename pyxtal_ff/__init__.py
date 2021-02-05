@@ -52,7 +52,7 @@ class PyXtal_FF():
                 + SO4/Bispectrum
                     {'lmax': 3}
                 + SO3
-                    {'nmax': 1, 'lmax': 3}
+                    {'nmax': 1, 'lmax': 3, 'alpha': 2.0}
                 + SNAP
                     {'weights': {'Si': 1.0, 'O': 2.0},
                      'Rc': {'Si': 4.0, 'O': 5.0}
@@ -162,10 +162,12 @@ class PyXtal_FF():
         # Update the default based on user-defined descriptors
         if descriptors is not None:
             self._descriptors.update(descriptors)
-            if 'type' in descriptors and descriptors['type'] == 'EAD':
+            if 'type' in descriptors and descriptors['type'] in ['EAD', 'ead']:
                 _parameters = {'L': 3, 'eta': [0.1], 'Rs': [1.]}
+            elif 'type' in descriptors and descriptors['type'] in ['SO3', 'SOAP']:
+                _parameters = {'nmax': 3, 'lmax': 3, 'alpha': 2.0}
             else:
-                _parameters = {'lmax': 3, 'rfac': 1.0, 'normalize_U': False}
+                _parameters = {'lmax': 3, 'rfac': 0.99363, 'normalize_U': False}
             if 'parameters' in descriptors:
                 _parameters.update(descriptors['parameters'])
                 self._descriptors['parameters'] = _parameters
@@ -408,9 +410,9 @@ class PyXtal_FF():
         if _descriptors['type'] in ['SO4', 'Bispectrum']:
             key_params = ['lmax', 'normalize_U']
         elif _descriptors['type'] in ['SO3', 'SOAP']:
-            key_params = ['nmax', 'lmax']
+            key_params = ['nmax', 'lmax', 'alpha']
         elif _descriptors['type'] in ['SNAP', 'snap']:
-            key_params = ['lmax']
+            key_params = ['lmax', 'rfac']
         elif _descriptors['type'] == 'EAD':
             key_params = ['L', 'eta', 'Rs']
         else:
