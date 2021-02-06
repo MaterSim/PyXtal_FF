@@ -14,15 +14,16 @@ np.set_printoptions(formatter={'float': '{: 12.4f}'.format})
 def get_rotated_struc(struc, angle=0, axis='x'):
     s_new = struc.copy()
     s_new.rotate(angle, axis)
-    print("rotation", s_new.positions)
-    p_struc = Atoms(s_new.symbols.numbers, positions=s_new.positions, cell=struc.cell, pbc=True)
+    cell = 17.22*np.eye(3)
+    p_struc = Atoms(s_new.symbols.numbers, positions=s_new.positions, cell=cell, pbc=True)
     return p_struc
 
 def get_perturbed_struc(struc, eps):
     s_new = struc.copy()
     pos = s_new.positions
     pos[0,0] += eps
-    p_struc = Atoms(s_new.symbols.numbers, positions=pos, cell=struc.cell, pbc=True)
+    cell = 17.22*np.eye(3)
+    p_struc = Atoms(s_new.symbols.numbers, positions=pos, cell=cell, pbc=True)
     return p_struc
 
 surfaces = [(1, 0, 0), (1, 1, 0), (1, 1, 1)]
@@ -53,8 +54,6 @@ class TestEAD(unittest.TestCase):
     from pyxtal_ff.descriptors.EAD import EAD
     symmetry = {'L': 2, 'eta': [0.36], 'Rs': [1.]}
     struc = get_rotated_struc(cu)
-    print(struc)
-    print(struc.get_volume())
     rho0 = EAD(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
     struc = get_rotated_struc(cu, 10, 'x')
     rho1 = EAD(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
