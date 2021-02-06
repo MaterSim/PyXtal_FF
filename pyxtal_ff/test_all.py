@@ -14,15 +14,15 @@ np.set_printoptions(formatter={'float': '{: 12.4f}'.format})
 def get_rotated_struc(struc, angle=0, axis='x'):
     s_new = struc.copy()
     s_new.rotate(angle, axis)
-    pbc = Atoms(s_new.symbols.numbers, positions=s_new.positions, cell=s_new.cell)
-    return pbc #p_struc
+    p_struc = Atoms(s_new.symbols.numbers, positions=s_new.positions, cell=s_new.cell, pbc=True)
+    return p_struc
 
 def get_perturbed_struc(struc, eps):
     s_new = struc.copy()
     pos = s_new.positions
     pos[0,0] += eps
-    pbc = Atoms(s_new.symbols.numbers, positions=pos, cell=s_new.cell)
-    return pbc #p_struc
+    p_struc = Atoms(s_new.symbols.numbers, positions=pos, cell=s_new.cell, pbc=True)
+    return p_struc
 
 surfaces = [(1, 0, 0), (1, 1, 0), (1, 1, 1)]
 layers = [2, 2, 2]
