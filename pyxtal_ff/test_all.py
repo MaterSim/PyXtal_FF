@@ -52,6 +52,8 @@ class TestEAD(unittest.TestCase):
     from pyxtal_ff.descriptors.EAD import EAD
     symmetry = {'L': 2, 'eta': [0.36], 'Rs': [1.]}
     struc = get_rotated_struc(cu)
+    print(struc)
+    print(struc.get_volume())
     rho0 = EAD(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
     struc = get_rotated_struc(cu, 10, 'x')
     rho1 = EAD(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
