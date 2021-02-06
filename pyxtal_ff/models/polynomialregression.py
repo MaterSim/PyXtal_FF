@@ -237,6 +237,7 @@ class PR():
 
     def LinearRegression(self, X, y, w, alpha, norm=2):
         """ Perform linear regression. """
+        
         m = X.shape[1] # The shape of the descriptors
 
         _X = X * np.sqrt(np.expand_dims(w, axis=1))
@@ -274,9 +275,66 @@ class PR():
                       'des_info': des_info}
 
         save(checkpoint, _filename)
+        if des_info['type'] in ['SNAP', 'snap', 'SO3', 'SOAP']:
+            self.save_weights_to_txt(des_info)
         print("The Linear Regression Potential is exported to {:s}".format(_filename))
         print("\n")
-    
+
+
+    def save_weights_to_txt(self, des_info):
+        """ Saving the model weights to txt file. """
+        with open(self.path+"PR_weights.txt", "w") as f:
+            f.write("# Polynomial Regression weights generated in PyXtal_FF \n")
+            f.write("# total_species ncoefficient \n\n")
+            f.write(f"{len(self.elements)} {self.d_max+1} \n")
+            count = 0
+            for element in self.elements:
+                if des_info['type'] in ['SNAP', 'snap']:
+                    f.write(f"{element} 0.5 {des_info['weights'][element]} \n")
+                else:
+                    f.write(f"{element} \n")
+                for _ in range(self.d_max+1):
+                    f.write(f"{self.coef_[count]} \n")
+                    count += 1
+
+        with open(self.path+"DescriptorParam.txt", "w") as f:
+            f.write("# Descriptor parameters generated in PyXtal_FF \n\n")
+            f.write("# Required \n")
+            f.write(f"rcutfac {des_info['Rc']} \n")
+            
+            if des_info['type'] in ['SO3', 'SOAP']:
+                f.write(f"nmax {des_info['parameters']['nmax']} \n")
+                f.write(f"lmax {des_info['parameters']['lmax']} \n")
+                f.write(f"alpha {des_info['parameters']['alpha']} \n\n")
+            else:
+                f.write(f"twojmax {des_info['parameters']['lmax']*2} \n\n")
+
+            f.write("# Elements \n\n")
+            f.write(f"nelems {len(self.elements)} \n")
+            f.write("elems ")
+            for element in self.elements:
+                f.write(f"{element} ")
+            f.write("\n")
+
+            if des_info['type'] in ['snap', 'SNAP']:
+                f.write("radelems ")
+                for element in self.elements:
+                    f.write("0.5 ")
+                f.write("\n")
+
+                f.write("welems ")
+                for element in self.elements:
+                    f.write(f"{des_info['weights'][element]} ")
+                f.write("\n\n")
+
+                f.write(f"rfac0 {des_info['parameters']['rfac']} \n")
+                f.write(f"rmin0 0 ")
+            
+            f.write("\n")
+            f.write("switchflag 1 \n")
+            f.write("bzeroflag 0 \n")
+            f.write(f"quadraticflag {self.order-1} \n")
+
 
     def load_checkpoint(self, filename=None):
         """ Load Polynomial Regression file from PyTorch. """
