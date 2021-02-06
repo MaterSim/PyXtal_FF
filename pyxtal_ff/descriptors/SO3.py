@@ -722,8 +722,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                             compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
                                            tempdp)
 
-                            dplist[N] += tempdp
                             if I != J:
+                                dplist[N] += tempdp
                                 dplist[nsite] -= tempdp
 
                             Rj[0] = x + Ri[0]
@@ -785,8 +785,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
                                    tempdp)
 
-                    dplist[N] += tempdp
                     if I != J:
+                        dplist[N] += tempdp
                         dplist[nsite] -= tempdp
 
                     Rj[0] = x + Ri[0]
@@ -837,8 +837,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                             compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
                                            tempdp)
 
-                            dplist[N] += tempdp
                             if I != J:
+                                dplist[N] += tempdp
                                 dplist[nsite] -= tempdp
 
                     isite = i
@@ -890,8 +890,8 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
                                    tempdp)
 
-                    dplist[N] += tempdp
                     if I != J:
+                        dplist[N] += tempdp
                         dplist[nsite] -= tempdp
 
     else:

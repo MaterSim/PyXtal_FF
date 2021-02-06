@@ -1297,9 +1297,9 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                             compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
                                            zlist, tempdb)
 
-                            dblist[N] += tempdb
                             if I != J:
                                 dblist[nsite] -= tempdb
+                                dblist[N] += tempdb
 
                             Rj[0] = x + Ri[0]
                             Rj[1] = y + Ri[1]
@@ -1377,8 +1377,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
                                    zlist, tempdb)
 
-                    dblist[N] += tempdb
                     if I != J:
+                        dblist[N] += tempdb
                         dblist[nsite] -= tempdb
 
                     Rj[0] = x + Ri[0]
@@ -1434,8 +1434,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                             compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
                                            zlist, tempdb)
 
-                            dblist[N] += tempdb
                             if I != J:
+                                dblist[N] += tempdb
                                 dblist[nsite] -= tempdb
 
 
@@ -1506,8 +1506,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     compute_dbidrj(ncoefs, idxb, idxz_block, idxu_block, dulist[neighbor],
                                    zlist, tempdb)
 
-                    dblist[N] += tempdb
                     if I != J:
+                        dblist[N] += tempdb
                         dblist[nsite] -= tempdb
 
 
