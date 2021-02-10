@@ -296,8 +296,8 @@ class SO4_Bispectrum:
 
         neighborlist = np.zeros((len(Neighbors), max_len, 3), dtype=np.float64)
         Seq = np.array(Seq, dtype=np.int64)
-        atm_nums = np.zeros((len(Neighbors), max_len), dtype=np.int64)
-        site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.int64)
+        atm_nums = np.zeros((len(Neighbors), max_len), dtype=np.float64)
+        site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.float64)
         site_atomic_numbers = np.ones_like(site_atomic_numbers)
 
 
@@ -1125,7 +1125,7 @@ def zero_3d(arr):
                 arr[i,j,k] = 0
     return
 
-@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8[:], nb.i8, nb.f8,
+@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.f8[:,:], nb.f8[:], nb.i8, nb.f8,
                  nb.b1, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:], nb.i8, nb.f8),
          cache=True, fastmath=True, nogil=True)
 def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, site_ANs,
@@ -1643,7 +1643,7 @@ if  __name__ == "__main__":
     stress = options.stress
 
     #import time
-    w = {'Si':2.0}
+    w = {'C':2.0}
     f = SO4_Bispectrum(w, lmax=lmax, rcut=rcut, derivative=False, stress=False, normalize_U=False, cutoff_function='cosine', rfac0=0.99363)
     x = f.calculate(test)
     #start2 = time.time()
