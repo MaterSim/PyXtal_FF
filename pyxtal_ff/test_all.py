@@ -1,14 +1,19 @@
 #python -m unittest pyxtal_ff/test_all.py
-import unittest
 import shutil
-from ase.cluster.cubic import FaceCenteredCubic
-from ase import Atoms
+import unittest
 import numpy as np
+from ase import Atoms
+from ase.build import bulk, sort
+from ase.cluster.cubic import FaceCenteredCubic
+
 from pkg_resources import resource_filename
 from pyxtal_ff import PyXtal_FF
 from pyxtal_ff.calculator import PyXtalFFCalculator
-from ase.build import bulk
-
+from pyxtal_ff.descriptors.SO3 import SO3
+from pyxtal_ff.descriptors.EAD import EAD
+from pyxtal_ff.descriptors.ACSF import ACSF
+from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum as SO42
+from pyxtal_ff.descriptors.SNAP import SO4_Bispectrum as SO41
 np.set_printoptions(formatter={'float': '{: 12.4f}'.format})
 
 def get_rotated_struc(struc, angle=0, axis='x'):
@@ -18,22 +23,39 @@ def get_rotated_struc(struc, angle=0, axis='x'):
     p_struc = Atoms(s_new.symbols.numbers, positions=s_new.positions, cell=cell, pbc=True)
     return p_struc
 
-def get_perturbed_struc(struc, eps):
+def get_perturbed_struc(struc, p0, p1, eps):
     s_new = struc.copy()
     pos = s_new.positions
-    pos[0,0] += eps
+    pos[p0, p1] += eps
     cell = 17.22*np.eye(3)
     p_struc = Atoms(s_new.symbols.numbers, positions=pos, cell=cell, pbc=True)
     return p_struc
 
-surfaces = [(1, 0, 0), (1, 1, 0), (1, 1, 1)]
-layers = [2, 2, 2]
-lc = 3.61000
-cu = FaceCenteredCubic('Cu', surfaces, layers, latticeconstant=lc, vacuum=10)
-rcut = 3.0
-eps = 1e-8
+# NaCl Cluster
+nacl = bulk('NaCl', crystalstructure='rocksalt', a=5.691694, cubic=True)
+nacl = sort(nacl, tags=[0,4,1,5,2,6,3,7])
+nacl.set_pbc((0,0,0))
+nacl = get_rotated_struc(nacl, angle=1)
 
-#TrainData = resource_filename("pyxtal_ff", "datasets/Si/UCSD/test.json")
+# Descriptors Parameters
+eps = 1e-8
+rc = 6.00
+nmax, lmax = 2, 2
+ead_params = {'L': lmax,
+              'eta': [0.36, 0.036],
+              'Rs': [1.2, 2.1]}
+acsf_params = {'G2': {'eta': [0.36, 0.036],
+                      'Rs': [1.2, 2.1]},
+               'G4': {'eta': [0.36, 0.036],
+                      'Rs': [1.2, 2.1],
+                      'lambda': [-1, 1],
+                      'zeta': [1.0, 1.5]},
+               'G5': {'eta': [0.18, 0.018],
+                      'Rs': [1.1, 2.3],
+                      'lambda': [-1, 1],
+                      'zeta': [1.0, 1.7]}}
+
+# Neural Network Parameters
 TrainData = resource_filename("pyxtal_ff", "datasets/Si/PyXtal/Si4.json")
 parameters = {'lmax': 2}
 system = ['Si']
@@ -45,158 +67,198 @@ descriptor = {'type': 'Bispectrum',
               }
 
 descriptor_comp = {'type': 'Bispectrum',
-              'parameters': parameters,
-              'Rc': 3.0,
-              'N_train': 10,
-              }
+                   'parameters': parameters,
+                   'Rc': 3.0,
+                   'N_train': 10,
+                  }
 
 class TestEAD(unittest.TestCase):
-    from pyxtal_ff.descriptors.EAD import EAD
-    symmetry = {'L': 2, 'eta': [0.36], 'Rs': [1.]}
-    struc = get_rotated_struc(cu)
-    rho0 = EAD(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
-    struc = get_rotated_struc(cu, 10, 'x')
-    rho1 = EAD(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
-    struc = get_perturbed_struc(cu, eps)
-    rho2 = EAD(symmetry, rcut, derivative=False, cutoff='cosine').calculate(struc)
-
-    def test_rho_value(self):
-        self.assertAlmostEqual(self.rho0['x'][0,0], 21.07766448405431)
+    struc = get_rotated_struc(nacl)
+    rho0 = EAD(parameters=ead_params, Rc=rc, derivative=True).calculate(struc)
+    struc = get_rotated_struc(nacl, 10, 'x')
+    rho1 = EAD(parameters=ead_params, Rc=rc, derivative=True).calculate(struc)
 
     def test_rho_rotation_variance(self):
-        array1 = self.rho0['x'].flatten()
-        array2 = self.rho1['x'].flatten()
+        array1 = self.rho0['x']
+        array2 = self.rho1['x']
         self.assertTrue(np.allclose(array1, array2))
 
     def test_drhodR_rotation_variance(self):
-        array1 = np.linalg.norm(self.rho0['dxdr'][0,:,:], axis=1)
-        array2 = np.linalg.norm(self.rho1['dxdr'][0,:,:], axis=1)
-        self.assertTrue(np.allclose(array1, array2))
+        for i in range(len(self.rho0['x'])):
+            array1 = np.linalg.norm(self.rho0['dxdr'][i,:,:], axis=1)
+            array2 = np.linalg.norm(self.rho1['dxdr'][i,:,:], axis=1)
+            self.assertTrue(np.allclose(array1, array2))
 
     def test_drhodR_vs_numerical(self):
-        array1 = (self.rho2['x'][0] - self.rho0['x'][0]).flatten()/eps
-        array2 = self.rho0['dxdr'][0, :, 0].flatten()
-        if not np.allclose(array1, array2):
-            print('\n Numerical dGdR')
-            print((self.rho2['x'][0] - self.rho0['x'][0])/eps)
-            print('\n precompute')
-            print(array2)
-        self.assertTrue(np.allclose(array1, array2))
+        shp = self.rho0['x'].shape
+        array1 = np.zeros([shp[0], shp[0], shp[1], 3])
+        for _m in range(shp[0]):
+            ids = np.where(self.rho0['seq'][:,1]==_m)[0]
+            array1[self.rho0['seq'][ids, 0], _m, :, :] += self.rho0['dxdr'][ids,:,:]
+        for j in range(shp[0]):
+            for k in range(3):
+                struc = get_perturbed_struc(nacl, j, k, eps)
+                rho2 = EAD(parameters=ead_params, Rc=rc, derivative=False).calculate(struc)
+                array2 = (rho2['x'] - self.rho0['x'])/eps
+                self.assertTrue(np.allclose(array1[:,j,:,k], array2, atol=1e-4))
 
 class TestACSF(unittest.TestCase):
-    from pyxtal_ff.descriptors.ACSF import ACSF
-    symmetry = {'G2': {'eta': [0.003214], 'Rs': [0]},
-                'G4': {'lambda': [1], 'zeta':[1], 'eta': [0.000357]},
-                'G5': {'lambda': [-1], 'zeta':[1], 'eta': [0.004]},
-                }
-    struc = get_rotated_struc(cu)
-    g0 = ACSF(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
-    struc = get_rotated_struc(cu, 10, 'x')
-    g1 = ACSF(symmetry, rcut, derivative=True, cutoff='cosine').calculate(struc)
-    struc = get_perturbed_struc(cu, eps)
-    g2 = ACSF(symmetry, rcut, derivative=False, cutoff='cosine').calculate(struc)
+    struc = get_rotated_struc(nacl)
+    ACSF0 = ACSF(symmetry_parameters=acsf_params, Rc=rc, derivative=True).calculate(struc)
+    struc = get_rotated_struc(nacl, 10, 'x')
+    ACSF1 = ACSF(symmetry_parameters=acsf_params, Rc=rc, derivative=True).calculate(struc)
 
-    def test_G2_value(self):
-        self.assertAlmostEqual(self.g0['x'][0,0], 0.36925589)
-
-    def test_G4_value(self):
-        self.assertAlmostEqual(self.g0['x'][0,1], 0.00232827)
-
-    def test_G_rotation_variance(self):
-        array1 = self.g0['x'].flatten()
-        array2 = self.g1['x'].flatten()
+    def test_ACSF_rotation_variance(self):
+        array1 = self.ACSF0['x']
+        array2 = self.ACSF1['x']
         self.assertTrue(np.allclose(array1, array2))
 
-    def test_dGdR_rotation_variance(self):
-        array1 = np.linalg.norm(self.g0['dxdr'][0,:,:], axis=1)
-        array2 = np.linalg.norm(self.g1['dxdr'][0,:,:], axis=1)
+    def test_dACSFdR_rotation_variance(self):
+        for i in range(len(self.ACSF0['x'])):
+            array1 = np.linalg.norm(self.ACSF0['dxdr'][i,:,:], axis=1)
+            array2 = np.linalg.norm(self.ACSF1['dxdr'][i,:,:], axis=1)
+            self.assertTrue(np.allclose(array1, array2))
+
+    def test_dACSFdR_vs_numerical(self):
+        shp = self.ACSF0['x'].shape
+        array1 = np.zeros([shp[0], shp[0], shp[1], 3])
+        for _m in range(shp[0]):
+            ids = np.where(self.ACSF0['seq'][:,1]==_m)[0]
+            array1[self.ACSF0['seq'][ids, 0], _m, :, :] += self.ACSF0['dxdr'][ids,:,:]
+        
+        for j in range(shp[0]):
+            for k in range(3):
+                struc = get_perturbed_struc(nacl, j, k, eps)
+                ACSF2 = ACSF(symmetry_parameters=acsf_params, Rc=rc, derivative=False).calculate(struc)
+                array2 = (ACSF2['x'] - self.ACSF0['x'])/eps
+                self.assertTrue(np.allclose(array1[:,j,:,k], array2, atol=1e-6))
+
+class TestwACSF(unittest.TestCase):
+    struc = get_rotated_struc(nacl)
+    wACSF0 = ACSF(symmetry_parameters=acsf_params, Rc=rc, derivative=True, atom_weighted=True).calculate(struc)
+    struc = get_rotated_struc(nacl, 10, 'x')
+    wACSF1 = ACSF(symmetry_parameters=acsf_params, Rc=rc, derivative=True, atom_weighted=True).calculate(struc)
+
+    def test_wACSF_rotation_variance(self):
+        array1 = self.wACSF0['x']
+        array2 = self.wACSF1['x']
         self.assertTrue(np.allclose(array1, array2))
 
-    def test_dGdR_vs_numerical(self):
-        array1 = (self.g2['x'][0] - self.g0['x'][0]).flatten()/eps
-        array2 = self.g0['dxdr'][0, :, 0].flatten()
-        if not np.allclose(array1, array2):
-            print('\n Numerical dGdR')
-            print((self.g2['x'][0] - self.g0['x'][0])/eps)
-            print('\n precompute')
-            print(array2)
-        self.assertTrue(np.allclose(array1, array2))
+    def test_dwACSFdR_rotation_variance(self):
+        for i in range(len(self.wACSF0['x'])):
+            array1 = np.linalg.norm(self.wACSF0['dxdr'][i,:,:], axis=1)
+            array2 = np.linalg.norm(self.wACSF1['dxdr'][i,:,:], axis=1)
+            self.assertTrue(np.allclose(array1, array2))
 
-class TestSO4(unittest.TestCase):
-    from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
-    struc = get_rotated_struc(cu)
-    b0_poly = SO4_Bispectrum(lmax=1, rcut=rcut, stress=True, derivative=True).calculate(struc)#, backend='pymatgen')
-    struc = get_rotated_struc(cu, 20, 'x')
-    b1_poly = SO4_Bispectrum(lmax=1, rcut=rcut, stress=True, derivative=True).calculate(struc)#, backend='pymatgen')
-    struc = get_perturbed_struc(cu, eps)
-    b2_poly = SO4_Bispectrum(lmax=1, rcut=rcut, derivative=False).calculate(struc)#, backend='pymatgen')
-
-    def test_B_poly_rotation_variance(self):
-        array1 = self.b0_poly['x'].flatten()
-        array2 = self.b1_poly['x'].flatten()
-        self.assertTrue(np.allclose(array1, array2))
-
-    def test_dBdr_poly_rotation_variance(self):
-        array1 = np.linalg.norm(self.b0_poly['dxdr'][0,:,:], axis=1)
-        array2 = np.linalg.norm(self.b1_poly['dxdr'][0,:,:], axis=1)
-        self.assertTrue(np.allclose(array1, array2))
-
-    def test_dBdr_poly_vs_numerical(self):
-        array1 = (self.b2_poly['x'][0] - self.b0_poly['x'][0]).flatten()/eps
-        array2 = self.b0_poly['dxdr'][0, :, 0].flatten()
-        self.assertTrue(np.allclose(array1, array2))#, rtol=1e-2, atol=1e-2))
-
-class TestSNAP(unittest.TestCase):
-    from pyxtal_ff.descriptors.SNAP import SO4_Bispectrum as SNAP
-    struc = get_rotated_struc(cu)
-    b0_poly = SNAP(weights={'Cu':1.0}, lmax=1, rcut=rcut, stress=True, derivative=True).calculate(struc)#, backend='pymatgen')
-    struc = get_rotated_struc(cu, 20, 'x')
-    b1_poly = SNAP(weights={'Cu':1.0}, lmax=1, rcut=rcut, stress=True, derivative=True).calculate(struc)#, backend='pymatgen')
-    struc = get_perturbed_struc(cu, eps)
-    b2_poly = SNAP(weights={'Cu':1.0}, lmax=1, rcut=rcut, derivative=False).calculate(struc)#, backend='pymatgen')
-
-    def test_B_poly_rotation_variance(self):
-        array1 = self.b0_poly['x'].flatten()
-        array2 = self.b1_poly['x'].flatten()
-        self.assertTrue(np.allclose(array1, array2))
-
-    def test_dBdr_poly_rotation_variance(self):
-        array1 = np.linalg.norm(self.b0_poly['dxdr'][0,:,:], axis=1)
-        array2 = np.linalg.norm(self.b1_poly['dxdr'][0,:,:], axis=1)
-        self.assertTrue(np.allclose(array1, array2))
-
-    def test_dBdr_poly_vs_numerical(self):
-        array1 = (self.b2_poly['x'][0] - self.b0_poly['x'][0]).flatten()/eps
-        array2 = self.b0_poly['dxdr'][0, :, 0].flatten()
-        #print(array1-array2)
-        self.assertTrue(np.allclose(array1, array2))#, rtol=1e-2, atol=1e-2))
+    def test_dwACSFdR_vs_numerical(self):
+        shp = self.wACSF0['x'].shape
+        array1 = np.zeros([shp[0], shp[0], shp[1], 3])
+        for _m in range(shp[0]):
+            ids = np.where(self.wACSF0['seq'][:,1]==_m)[0]
+            array1[self.wACSF0['seq'][ids, 0], _m, :, :] += self.wACSF0['dxdr'][ids,:,:]
+        
+        for j in range(shp[0]):
+            for k in range(3):
+                struc = get_perturbed_struc(nacl, j, k, eps)
+                wACSF2 = ACSF(symmetry_parameters=acsf_params, Rc=rc, derivative=False, atom_weighted=True).calculate(struc)
+                array2 = (wACSF2['x'] - self.wACSF0['x'])/eps
+                self.assertTrue(np.allclose(array1[:,j,:,k], array2, atol=1e-6))
 
 class TestSO3(unittest.TestCase):
-    from pyxtal_ff.descriptors.SO3 import SO3
-    struc = get_rotated_struc(cu)
-    p0 = SO3(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc) #, backend='ase')
-    struc = get_rotated_struc(cu, 20, 'x')
-    p1 = SO3(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc) #, backend='ase')
-    struc = get_perturbed_struc(cu, eps)
-    p2 = SO3(nmax=1, lmax=1, rcut=rcut, derivative=True, stress=True).calculate(struc) #, backend='ase')
+    struc = get_rotated_struc(nacl)
+    p0 = SO3(nmax=nmax, lmax=lmax, rcut=rc, derivative=True).calculate(struc)
+    struc = get_rotated_struc(nacl, 10, 'x')
+    p1 = SO3(nmax=nmax, lmax=lmax, rcut=rc, derivative=True).calculate(struc)
 
     def test_SO3_rotation_variance(self):
-        array1 = self.p0['x'].flatten()
-        array2 = self.p1['x'].flatten()
+        array1 = self.p0['x']
+        array2 = self.p1['x']
         self.assertTrue(np.allclose(array1, array2))
 
-    def test_dpdr_rotation_variance(self):
-        array1 = np.linalg.norm(self.p0['dxdr'][0,:,:], axis=1)
-        array2 = np.linalg.norm(self.p1['dxdr'][0,:,:], axis=1)
+    def test_dPdR_rotation_variance(self):
+        for i in range(len(self.p0['x'])):
+            array1 = np.linalg.norm(self.p0['dxdr'][i,:,:], axis=1)
+            array2 = np.linalg.norm(self.p1['dxdr'][i,:,:], axis=1)
+            self.assertTrue(np.allclose(array1, array2))
+
+    def test_dPdR_vs_numerical(self):
+        shp = self.p0['x'].shape
+        array1 = np.zeros([shp[0], shp[0], shp[1], 3])
+        for _m in range(shp[0]):
+            ids = np.where(self.p0['seq'][:,1]==_m)[0]
+            array1[self.p0['seq'][ids, 0], _m, :, :] += self.p0['dxdr'][ids,:,:]
+        
+        for j in range(shp[0]):
+            for k in range(3):
+                struc = get_perturbed_struc(nacl, j, k, eps)
+                p2 = SO3(nmax=nmax, lmax=lmax, rcut=rc, derivative=False).calculate(struc)
+                array2 = (p2['x'] - self.p0['x'])/eps
+                self.assertTrue(np.allclose(array1[:,j,:,k], array2, atol=1e-4))
+
+class TestSNAP(unittest.TestCase):
+    struc = get_rotated_struc(nacl)
+    SNAP0 = SO41(weights={'Na':0.3,'Cl':0.7}, lmax=lmax, rcut=rc, rfac0=0.99363).calculate(struc)
+    struc = get_rotated_struc(nacl, 10, 'x')
+    SNAP1 = SO41(weights={'Na':0.3,'Cl':0.7}, lmax=lmax, rcut=rc, rfac0=0.99363).calculate(struc)
+
+    def test_SNAP_rotation_variance(self):
+        array1 = self.SNAP0['x']
+        array2 = self.SNAP1['x']
         self.assertTrue(np.allclose(array1, array2))
 
-    def test_dpdr_vs_numerical(self):
-        array1 = (self.p2['x'][0] - self.p0['x'][0])/eps
-        array2 = self.p0['dxdr'][0, :, 0]
-        self.assertTrue(np.allclose(array1, array2))#, rtol=1e-2, atol=1e-2))
+    def test_dSNAPdR_rotation_variance(self):
+        for i in range(len(self.SNAP0['x'])):
+            array1 = np.linalg.norm(self.SNAP0['dxdr'][i,:,:], axis=1)
+            array2 = np.linalg.norm(self.SNAP1['dxdr'][i,:,:], axis=1)
+            self.assertTrue(np.allclose(array1, array2))
+
+    def test_dSNAPdR_vs_numerical(self):
+        shp = self.SNAP0['x'].shape
+        array1 = np.zeros([shp[0], shp[0], shp[1], 3])
+        for _m in range(shp[0]):
+            ids = np.where(self.SNAP0['seq'][:,1]==_m)[0]
+            array1[self.SNAP0['seq'][ids, 0], _m, :, :] += self.SNAP0['dxdr'][ids,:,:]
+        
+        for j in range(shp[0]):
+            for k in range(3):
+                struc = get_perturbed_struc(nacl, j, k, eps)
+                SNAP2 = SO41(weights={'Na':0.3,'Cl':0.7}, lmax=lmax, rcut=rc, derivative=True, rfac0=0.99363).calculate(struc)
+                array2 = (SNAP2['x'] - self.SNAP0['x'])/eps
+                self.assertTrue(np.allclose(array1[:,j,:,k], array2, atol=1e-6))
+
+class TestSO4(unittest.TestCase):
+    struc = get_rotated_struc(nacl)
+    so40 = SO42(lmax=lmax, rcut=rc, derivative=True).calculate(struc)
+    struc = get_rotated_struc(nacl, 10, 'x')
+    so41 = SO42(lmax=lmax, rcut=rc, derivative=True).calculate(struc)
+
+    def test_so4_rotation_variance(self):
+        array1 = self.so40['x']
+        array2 = self.so41['x']
+        self.assertTrue(np.allclose(array1, array2))
+
+    def test_dso4dR_rotation_variance(self):
+        for i in range(len(self.so40['x'])):
+            array1 = np.linalg.norm(self.so40['dxdr'][i,:,:], axis=1)
+            array2 = np.linalg.norm(self.so41['dxdr'][i,:,:], axis=1)
+            self.assertTrue(np.allclose(array1, array2))
+
+    def test_dso4dR_vs_numerical(self):
+        shp = self.so40['x'].shape
+        array1 = np.zeros([shp[0], shp[0], shp[1], 3])
+        for _m in range(shp[0]):
+            ids = np.where(self.so40['seq'][:,1]==_m)[0]
+            array1[self.so40['seq'][ids, 0], _m, :, :] += self.so40['dxdr'][ids,:,:]
+        
+        for j in range(shp[0]):
+            for k in range(3):
+                struc = get_perturbed_struc(nacl, j, k, eps)
+                so42 = SO42(lmax=lmax, rcut=rc, derivative=False).calculate(struc)
+                array2 = (so42['x'] - self.so40['x'])/eps
+                self.assertTrue(np.allclose(array1[:,j,:,k], array2, atol=1e-2))
+
 
 class TestRegression(unittest.TestCase):
-
     model = {'system' : system,
              'hiddenlayers': [12, 12],
              'epoch': 10,
@@ -252,7 +314,6 @@ class TestRegression(unittest.TestCase):
         ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
         ff.run(mode='predict', mliap='unittest/PolyReg-checkpoint.pth')
         calc = PyXtalFFCalculator(ff=ff)
-
 
         self.struc.set_calculator(calc)
         self.struc.get_potential_energy()
