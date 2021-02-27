@@ -828,6 +828,164 @@ def compute_uarray_polynomial_wD(x, y, z, psi, r, twol, ulist, dulist, idxu_bloc
 
     return
 
+@nb.njit
+def init_rootpqarray(twol):
+    ldim = twol+1
+    rootpqarray = np.zeros((ldim, ldim))
+    for p in range(1, ldim, 1):
+        for q in range(1, ldim, 1):
+            rootpqarray[p,q] = np.sqrt(p/q)
+    return rootpqarray
+
+@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.c16[:,:], nb.i8[:]),
+         cache=True, fastmath=True, nogil=True)
+def compute_uarray_recursive(x, y, z, psi, r, twol, ulist, idxu_block):
+    '''Compute the Wigner-D matrix of order twol given an axis (x,y,z)
+    and rotation angle 2*psi.
+    This function constructs a unit quaternion representating a rotation
+    of 2*psi through an axis defined by x,y,z; then populates an array of
+    Wigner-D matrices of order twol for this rotation.  The Wigner-D matrices
+    are calculated using the recursion relations in LAMMPS.
+    Parameters
+    ----------
+    x: float
+    the x coordinate corresponding to the axis of rotation.
+    y: float
+    the y coordinate corresponding to the axis of rotation.
+    z: float
+    the z coordinate corresponding to the axis of rotation
+    psi: float
+    one half of the rotation angle
+    r: float
+    magnitude of the vector (x,y,z)
+    twol: integer
+    order of hyperspherical expansion
+    ulist: 1-D complex array
+    array to populate with D-matrix elements, mathematically
+    this is a 3-D matrix, although we broadcast this to a 1-D
+    matrix
+    idxu_block: 1-D int array
+    used to index ulist
+    rootpqarray:  2-D float array
+    used for recursion relation
+    Returns
+    -------
+    None
+    '''
+    ldim = twol + 1
+
+    rootpqarray = init_rootpqarray(twol)
+
+    # construct Cayley-Klein parameters for unit quaternion
+    cospsi = np.cos(psi)
+    sinpsi = np.sin(psi)
+    gradr = np.array((x,y,z), np.complex128)/r
+    a = cospsi - 1j * sinpsi / r * z
+    b = sinpsi / r * (y - x * 1j)
+
+    ulist[0] = 1.0 + 0.0j
+
+    for l in range(1, ldim, 1):
+        llu = idxu_block[l]
+        llup = idxu_block[l - 1]
+
+        # fill in left side of matrix layer
+
+        mb = 0
+        while 2 * mb <= l:
+            ulist[llu] = 0
+            for ma in range(0, l, 1):
+                rootpq = rootpqarray[l - ma, l - mb]
+                ulist[llu] += rootpq * np.conj(a) * ulist[llup]
+
+                rootpq = rootpqarray[ma + 1, l - mb]
+                ulist[llu + 1] += -rootpq * np.conj(b) * ulist[llup]
+                llu += 1
+                llup += 1
+            llu += 1
+            mb += 1
+
+        # copy left side to right side using inversion symmetry
+        llu = idxu_block[l]
+        llup = llu + (l + 1) * (l + 1) - 1
+        mbpar = 1
+        mb = 0
+        while 2 * mb <= l:
+            mapar = mbpar
+            for ma in range(0, l + 1, 1):
+                if mapar == 1:
+                    ulist[llup] = np.conj(ulist[llu])
+                else:
+                    ulist[llup] = -np.conj(ulist[llu])
+
+                mapar = -mapar
+                llu += 1
+                llup -= 1
+            mbpar = -mbpar
+            mb += 1
+    return
+
+@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.c16[:,:], nb.c16[:,:], nb.i8[:]),
+         cache=True, fastmath=True, nogil=True)
+def compute_duarray_recursive(x, y, z, psi, r, twol, ulist, dulist, idxu_block):
+    ldim = twol + 1
+
+    rootpqarray = init_rootpqarray(twol)
+
+    # construct Cayley-Klein parameters for unit quaternion
+    cospsi = np.cos(psi)
+    sinpsi = np.sin(psi)
+    gradr = np.array((x,y,z), np.complex128)/r
+    a = cospsi - 1j * sinpsi / r * z
+    b = sinpsi / r * (y - x * 1j)
+
+    da = -sinpsi*psi/r*gradr - 1j*z*cospsi/r/r*psi*gradr + 1j*z*sinpsi/r/r*gradr
+    da[2] += -1j*sinpsi/r
+
+    db = cospsi/r/r*psi*(y-x*1j)*gradr - sinpsi/r/r*(y-x*1j)*gradr
+
+    db[1] += sinpsi/r
+    db[0] += -1j*sinpsi/r
+
+    for l in range(1, ldim, 1):
+        llu = idxu_block[l]
+        llup = idxu_block[l-1]
+        mb = 0
+        while 2 * mb <= l:
+            dulist[llu,0] = 0
+            dulist[llu,1] = 0
+            dulist[llu,2] = 0
+            for ma in range(0,l,1):
+                rootpq = rootpqarray[l - ma, l - mb]
+                dulist[llu, :] += rootpq*(np.conj(da) * ulist[llup] + np.conj(a) * dulist[llup,:])
+
+                rootpq = rootpqarray[ma + 1, l - mb]
+                dulist[llu+1,:] = -rootpq * (np.conj(db) * ulist[llup] + np.conj(b) * dulist[llup, :])
+
+                llu += 1
+                llup += 1
+            llu += 1
+            mb += 1
+
+        llu = idxu_block[l]
+        llup = llu + (l + 1) * (l + 1) - 1
+        mbpar = 1
+        mb = 0
+        while 2*mb <= l:
+            mapar = mbpar
+            for ma in range(0, l + 1, 1):
+                if mapar == 1:
+                    dulist[llup,:] = np.conj(dulist[llu,:])
+                else:
+                    dulist[llup,:] = -1*np.conj(dulist[llu,:])
+
+                mapar = -mapar
+                llu += 1
+                llup -= 1
+            mbpar = -mbpar
+            mb += 1
+    return
+
 @nb.njit(nb.void(nb.f8, nb.f8, nb.c16[:,:], nb.c16[:,:], nb.i8),
          cache=True, fastmath=True, nogil=True)
 def add_uarraytot(r, rcut, ulisttot, ulist, cutoff_id):
@@ -1284,8 +1442,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                 continue
                             psi = np.pi*r/rcut
                             zero_1d(ulist)
-                            compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
-                                                         dulist[neighbor], idxu_block)
+                            compute_uarray_recursive(x, y, z, psi, r, twolmax, ulist, idxu_block)
+                            compute_duarray_recursive(x, y, z, psi, r, twolmax, ulist, dulist[neighbor], idxu_block)
 
                             dudr(x,y,z,r,rcut,ulist,dulist[neighbor],cutoff_id)
 
@@ -1333,8 +1491,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     # populate ulist and dulist with Wigner U functions
                     # and derivatives
                     zero_1d(ulist)
-                    compute_uarray_polynomial(x, y, z, psi, r, twolmax, ulist,
-                                                 idxu_block)
+                    compute_uarray_recursive(x, y, z, psi, r, twolmax, ulist, idxu_block)
 
 
                     ulist *= weight
@@ -1364,8 +1521,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                         continue
                     psi = np.pi*r/rcut
                     zero_1d(ulist)
-                    compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
-                                                 dulist[neighbor], idxu_block)
+                    compute_uarray_recursive(x, y, z, psi, r, twolmax, ulist, idxu_block)
+                    compute_duarray_recursive(x, y, z, psi, r, twolmax, ulist, dulist[neighbor], idxu_block)
 
                     dudr(x,y,z,r,rcut,ulist,dulist[neighbor],cutoff_id)
 
@@ -1421,8 +1578,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                                 continue
                             psi = np.pi*r/rcut
                             zero_1d(ulist)
-                            compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
-                                                         dulist[neighbor], idxu_block)
+                            compute_uarray_recursive(x, y, z, psi, r, twolmax, ulist, idxu_block)
+                            compute_duarray_recursive(x, y, z, psi, r, twolmax, ulist, dulist[neighbor], idxu_block)
 
                             dudr(x,y,z,r,rcut,ulist,dulist[neighbor], cutoff_id)
 
@@ -1463,8 +1620,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                     # populate ulist and dulist with Wigner U functions
                     # and derivatives
                     zero_1d(ulist)
-                    compute_uarray_polynomial(x, y, z, psi, r, twolmax, ulist,
-                                                 idxu_block)
+                    compute_uarray_recursive(x, y, z, psi, r, twolmax, ulist, idxu_block)
+                    compute_duarray_recursive(x, y, z, psi, r, twolmax, ulist, dulist[neighbor], idxu_block)
 
 
                     ulist *= weight
@@ -1493,8 +1650,8 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                         continue
                     psi = np.pi*r/rcut
                     zero_1d(ulist)
-                    compute_uarray_polynomial_wD(x, y, z, psi, r, twolmax, ulist,
-                                                 dulist[neighbor], idxu_block)
+                    compute_uarray_recursive(x, y, z, psi, r, twolmax, ulist, idxu_block)
+                    compute_duarray_recursive(x, y, z, psi, r, twolmax, ulist, dulist[neighbor], idxu_block)
 
                     dudr(x,y,z,r,rcut,ulist,dulist[neighbor], cutoff_id)
 
@@ -1553,8 +1710,7 @@ def get_bispectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, sit
                 # populate ulist and dulist with Wigner U functions
                 # and derivatives
                 zero_1d(ulist)
-                compute_uarray_polynomial(x, y, z, psi, r, twolmax, ulist,
-                                             idxu_block)
+                compute_uarray_recursive(x, y, z, psi, r, twolmax, ulist, idxu_block)
 
 
                 ulist *= weight
