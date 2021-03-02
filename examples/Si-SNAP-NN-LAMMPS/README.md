@@ -9,9 +9,13 @@ python snap_train.py
 ```
 
 ## LAMMPS calculation
-After training, you expect to find the trained weights in `weight.txt`. This file can be used by lammps to conduct a large scale MD simulation by following the steps below.
+After training is complete, you expect to find 
+- `DescriptorParams.txt`: parameters to compute the descriptor
+- `NN_weights.txt`: weight parameters of the model
 
-### Install the LAMMPS-MLIAP
+These file can be used by `LAMMPS` to conduct a large scale MD simulation by following the steps below.
+
+### 00. Installation of LAMMPS-MLIAP
 ```
 git clone https://github.com/pedroantoniosantosf/lammps.git
 cd lammps/src
@@ -20,7 +24,11 @@ make yes-snap
 make mpi
 ```
 
-### Run LAMMPS through unix file
+After the installation, you can run LAMMPS via two ways
+- one time run through LAMMPS command
+- more complicated workflow though LAMMPS-Python wrapper
+
+### 01. Run LAMMPS through unix file
 Create an input file by specifying 
 
 ```
@@ -32,4 +40,4 @@ Below is an input lammps file for NPT MD simulation at 500 K.
 lmp_mpi < in.md > out.md
 ```
 
-### Run LAMMPS through Python wrapper
+### 02. Run LAMMPS through Python wrapper
