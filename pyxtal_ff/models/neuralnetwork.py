@@ -720,7 +720,6 @@ class NeuralNetwork():
         """ Saving the model weights to txt file. """
         with open(self.path+"NN_weights.txt", "w") as f:
             f.write("# Neural networks weights generated in PyXtal_FF \n")
-            f.write("nn \n\n")
             f.write("# total_species nparams \n")
             f.write(f"{len(self.elements)} ")
             for e, element in enumerate(self.elements):
@@ -735,8 +734,8 @@ class NeuralNetwork():
             f.write(f"{count} \n\n")
             
             for e, element in enumerate(self.elements):
-                f.write("# NET species# ndescriptors nlayers activation_func for layer 1, number of nodes for layer 1, ..., ..., ...., \n")
-                f.write(f"NET {e+1} {self.no_of_descriptors} {len(self.hiddenlayers[element])} ")
+                f.write("# NET ndescriptors nlayers activation_func for layer 1, number of nodes for layer 1, ..., ..., ...., \n")
+                f.write(f"NET {self.no_of_descriptors} {len(self.hiddenlayers[element])} ")
                 model = self.models[element]
 
                 _PARAMETERS = []
@@ -961,8 +960,11 @@ class NeuralNetwork():
                     _drange = drange[element]
                     scale = (norm[1] - norm[0]) / (_drange[:, 1] - _drange[:, 0])
                     e = np.where(np.array(descriptor['elements'])==element)[0]
-                    ee0 = np.where(descriptor['seq'][:,0]==e[0])[0][0]
-                    ee1 = np.where(descriptor['seq'][:,0]==e[-1])[0][-1]
+                    try:
+                        ee0 = np.where(descriptor['seq'][:,0]==e[0])[0][0]
+                        ee1 = np.where(descriptor['seq'][:,0]==e[-1])[0][-1]
+                    except:
+                        ee0, ee1 = 0, 1
                     
                     i_size = list(descriptor['elements']).count(element) #number of atoms in type i
                     m_size = ee1-ee0+1# number of pairs
@@ -971,6 +973,7 @@ class NeuralNetwork():
                     #d['dxdr'][element] = torch.zeros([m_size, self.no_of_descriptors, 3], dtype=torch.float64) ####
                     d['dxdr'][element] = np.zeros([m_size, self.no_of_descriptors, 3]) ####
                     d['rdxdr'][element] = torch.zeros([i_size, self.no_of_descriptors, 6], dtype=torch.float64)
+                    d['seq'][element] = None
 
                     if e.size > 0:
                         des = norm[0] + np.einsum('j,ij->ij', scale, (descriptor['x'][e[0]:e[-1]+1] - np.expand_dims(_drange[:, 0], 0)))
@@ -989,7 +992,7 @@ class NeuralNetwork():
                             d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
                             d['rdxdr'][element] += torch.from_numpy(0.529177 * dess)
                     #d['seq'][element][:, 0] -= torch.min(d['seq'][element][:, 0]) #adjust the initial position
-                    d['seq'][element][:, 0] -= np.min(d['seq'][element][:, 0]) #adjust the initial position
+                        d['seq'][element][:, 0] -= np.min(d['seq'][element][:, 0]) #adjust the initial position
                 
                 db2[str(i)] = d
                 
