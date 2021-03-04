@@ -12,6 +12,7 @@ After training is complete, you expect to find a folder called `Si-snap` with se
 - `DescriptorParams.txt`: parameters to compute the descriptor in LAMMPS format
 - `NN_weights.txt`: weight parameters of the model in LAMMPS format
 
+The training takes about 20-30 minutes. If you cannot wait, please skip this step and use the existing files for the following steps.
 
 ## Atomistic simulation via ASE 
 PyXtal\_FF provides a built in `ASE` calculator. You can simply use it for some light weight calculations.
