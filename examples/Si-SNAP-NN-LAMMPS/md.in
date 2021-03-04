@@ -1,5 +1,5 @@
 # Run NPT MD simulation for Si at 500 K.
-variable nsteps index 100
+variable nsteps index 1000
 
 # NOTE: These are not intended to represent real materials
 
@@ -9,13 +9,17 @@ atom_style      atomic
 atom_modify     map array
 boundary        p p p
 atom_modify     sort 0 0.0
-read_data Si.data
+
+#read_data Si.data
+lattice  	diamond 5.43
+region		box block 0 5 0 5 0 5
+create_box	1 box
+create_atoms	1 box
+mass		1 29.0
 
 # temperature
-
 variable t equal 500.
 
-mass            *       28.06
 
 # Potential
 pair_style mliap model nn Si-snap/NN_weights.txt descriptor sna Si-snap/DescriptorParams.txt

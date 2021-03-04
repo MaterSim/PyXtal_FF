@@ -36,7 +36,7 @@ setup(
     ],
     install_requires=[
         'numpy>=1.13.3', 
-        'scipy<=1.5.4',
+        'scipy>=1.6.1',
         'matplotlib>=2.0.0',
         'ase>=3.20.1',
         'torch>=1.1.0',
