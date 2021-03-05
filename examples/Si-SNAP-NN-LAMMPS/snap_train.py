@@ -11,7 +11,9 @@ if not os.path.exists(TrainData):
     os.system('wget ' + url + TrainData)
     os.system('wget ' + url + TestData)
 
-descriptor = {'Rc': 5.0,
+descriptor = {'type': 'SNAP',
+              'weights': {'Si': 1.0},
+              'Rc': 5.0,
               'parameters': {'lmax': 3},
               'ncpu': 1,
              }

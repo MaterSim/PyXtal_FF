@@ -24,11 +24,13 @@ The aim of PyXtal\_FF is to promote the application of atomistic simulations by 
 - embedded atom density
 - SNAP
 - SO4 bispectrum
-- smooth SO3 power spectrum 
+- SO3 power spectrum 
 
 PyXtal\_FF can train the MLPs with either the linear regression or neural networks model, by simultaneously minimizing the errors of energy/forces/stress tensors in comparison with the data from the ab-initio simulation.
 
-See the [documentation page](https://pyxtal-ff.readthedocs.io/en/latest/) for more details.
+See the [documentation page](https://pyxtal-ff.readthedocs.io/en/latest/) for more background materials.
+
+One can also quickly checkout the [example](https://github.com/qzhu2017/PyXtal_FF/tree/master/examples) section to see how to train and apply the force fields for productive simulations.
 
 **This is an ongoing project.**
 
