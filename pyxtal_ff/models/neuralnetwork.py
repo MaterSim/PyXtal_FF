@@ -734,20 +734,21 @@ class NeuralNetwork():
             f.write(f"{count} \n\n")
             
             for e, element in enumerate(self.elements):
-                f.write("# NET ndescriptors nlayers activation_func for layer 1, number of nodes for layer 1, ..., ..., ...., \n")
-                f.write(f"NET {self.no_of_descriptors} {len(self.hiddenlayers[element])} ")
-                model = self.models[element]
+                if e == 0:
+                    f.write("# NET ndescriptors nlayers activation_func for layer 1, number of nodes for layer 1, ..., ..., ...., \n")
+                    f.write(f"NET {self.no_of_descriptors} {len(self.hiddenlayers[element])} ")
+                    model = self.models[element]
 
-                _PARAMETERS = []
-                for parameters in model.parameters():
-                    _PARAMETERS.append(parameters)
-                    
-                _parameters = []
-                for i, hl in enumerate(self.hiddenlayers[element]):
-                    f.write(f"{self.activation[element][i]} ".lower())
-                    f.write(f"{hl} ")
-                    _parameters.append(torch.cat([_PARAMETERS[2*i+1][:,None], _PARAMETERS[2*i]], dim=1))
-                f.write("\n\n")
+                    _PARAMETERS = []
+                    for parameters in model.parameters():
+                        _PARAMETERS.append(parameters)
+                        
+                    _parameters = []
+                    for i, hl in enumerate(self.hiddenlayers[element]):
+                        f.write(f"{self.activation[element][i]} ".lower())
+                        f.write(f"{hl} ")
+                        _parameters.append(torch.cat([_PARAMETERS[2*i+1][:,None], _PARAMETERS[2*i]], dim=1))
+                    f.write("\n\n")
 
                 drange = self.drange[element]
                 dmins = drange[:,0]
@@ -780,7 +781,11 @@ class NeuralNetwork():
                             else:
                                 f.write("{:18.13f} ".format(p))
                             cnt += 1
-                f.write("\n")
+                
+                if (cnt-1)%5==0:
+                    f.write("\n")
+                else:
+                    f.write("\n\n")
 
         with open(self.path+"DescriptorParams.txt", "w") as f:
             f.write("# Descriptor parameters generated in PyXtal_FF \n\n")
