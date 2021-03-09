@@ -12,7 +12,8 @@ After training is complete, you expect to find a folder called `Si-snap` with se
 - `DescriptorParams.txt`: parameters to compute the descriptor in LAMMPS format
 - `NN_weights.txt`: weight parameters of the model in LAMMPS format
 
-The training takes about 20-30 minutes. If you cannot wait, please skip this step and use the existing files for the following steps.
+The training takes about 20-30 minutes. 
+**If you cannot wait, please skip this step and use the existing files for the following steps.**
 
 ## Atomistic simulation via ASE 
 PyXtal\_FF provides a built in `ASE` calculator. You can simply use it for some light weight calculations.
@@ -37,7 +38,7 @@ For more types of simulations based on `Python-ASE`, checkout [this example](htt
 ## LAMMPS Installation
 Run the simulation with `Python` is not recommended for large scale systems. For practical simulation, you can plug in the force field to `LAMMPS` as follows.
 
-First, follow the steps below to install LAMMPS-MLIAP and the python wrapper
+First, follow the steps below to install LAMMPS-MLIAP and python wrapper
 
 ```
 $ git clone https://github.com/pedroantoniosantosf/lammps.git
@@ -51,8 +52,9 @@ $ make mpi mode=shlib
 At the end, you expect to get an executable called `lmp_mpi` and `liblammps_mpi.so` in the src directory, as well as a soft link liblammps.so, which is what the Python wrapper will load by default.
 Then one just need to add the path of src to the `.bashrc` file as follows,
 ```
-export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/scratch/qzhu/soft/lammps/src #please modify the path if necessary
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/scratch/qzhu/soft/lammps/src 
 ```
+**Note that you need to modify the path**
 
 then in lammps/src
 
@@ -62,9 +64,11 @@ $ make install-python
 
 ## Validation between python-ASE and lammps results
 
-The `validate.py` will create a randomly perturbed silicon diamond structure. Then it will perform a single point energy calculation from both `Python-ASE` and `LAMMPS` calcuato
+The `validate.py` will create a randomly perturbed silicon diamond structure. Then it will perform a single point energy calculation from both `Python-ASE` and `LAMMPS` calcuator.
+
 ```
 $ python validate.py 
+
 ASE calculator with pyxtal_ff force field
 
 Energy:  -37.879 eV/atom
@@ -79,6 +83,7 @@ Forces (eV/A)
  [ -1.6857  -2.2228   2.2228]]
 Stresses (GPa)
 [ -0.3004  -0.3308  -0.3308   0.0495   0.0000   0.0000]
+
 LAMMPS calculator with pyxtal_ff force field
 
 Energy:  -37.879 eV/atom
@@ -102,7 +107,6 @@ If you cannot get the similar results, please check your `LAMMPS` installation.
 Finally, you can run LAMMPS directly. 
 It will work as any usual `LAMMPS` calculation, except that you need to specify a new `pair style`
 ```
-## Potential
 pair_style mliap model nn Si-snap/NN_weights.txt descriptor sna Si-snap/DescriptorParams.txt
 pair_coeff * * Si Si
 ```
@@ -111,5 +115,5 @@ The `md.in` file gives an example to run NPT MD simulation at 500 K for 1000 Si 
 ```
 lmp_mpi < md.in > md.out
 ```
-On a single CPU, it needs ~120 seconds to complete 1000 steps, which is abouot 120x faster than the `ASE` caculator.
+On a single CPU, it needs ~120 seconds to complete 1000 steps, which is abouot **120x** faster than the `ASE` caculator.
 
