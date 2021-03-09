@@ -15,17 +15,17 @@ if not os.path.exists(TrainData):
     os.system('wget ' + url + TestData.split('/')[-1])
     os.chdir('..')
 
-descriptor = {'type': 'SNAP',
-              'weights': {'Si': 1.0},
+descriptor = {'type': 'SO3',
+              #'weights': {'Si': 1.0},
               'Rc': 5.0,
-              'parameters': {'lmax': 3},
+              'parameters': {'lmax': 4, 'nmax': 3},
               'ncpu': 1,
              }
 
 model = {'system' : ['Si'],
          'hiddenlayers': [16, 16],
-         'path': 'Si-snap/',
-         'restart': 'Si-snap/16-16-checkpoint.pth',
+         'path': 'Si-so3/',
+         #'restart': 'Si-so3/16-16-checkpoint.pth',
          'optimizer': {'method': 'lbfgs'},
          'force_coefficient': 2e-2,
          'stress_coefficient': 2e-3,
