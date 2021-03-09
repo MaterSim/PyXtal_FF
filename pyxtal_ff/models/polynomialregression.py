@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.ticker as mticker
 plt.style.use("ggplot")
+
+from pyxtal_ff.utilities.elements import Element
 eV2GPa = 160.21766
 
 class PR():
@@ -289,10 +291,10 @@ class PR():
             f.write(f"{len(self.elements)} {self.d_max+1} \n")
             count = 0
             for element in self.elements:
-                if des_info['type'] in ['SNAP', 'snap']:
-                    f.write(f"{element} 0.5 {des_info['weights'][element]} \n")
-                else:
-                    f.write(f"{element} \n")
+                #if des_info['type'] in ['SNAP', 'snap']:
+                #    f.write(f"{element} 0.5 {des_info['weights'][element]} \n")
+                #else:
+                #    f.write(f"{element} \n")
                 for _ in range(self.d_max+1):
                     f.write(f"{self.coef_[count]} \n")
                     count += 1
@@ -316,24 +318,31 @@ class PR():
                 f.write(f"{element} ")
             f.write("\n")
 
-            if des_info['type'] in ['snap', 'SNAP']:
+            if des_info['type'] in ['snap', 'SNAP', 'SO3', 'SOAP']:
                 f.write("radelems ")
                 for element in self.elements:
                     f.write("0.5 ")
                 f.write("\n")
 
-                f.write("welems ")
-                for element in self.elements:
-                    f.write(f"{des_info['weights'][element]} ")
-                f.write("\n\n")
+                if des_info['type'] in ['snap', 'SNAP']:
+                    f.write("welems ")
+                    for element in self.elements:
+                        f.write(f"{des_info['weights'][element]} ")
+                    f.write("\n\n")
+                else:
+                    f.write("welems ")
+                    ele = Element(self.elements)
+                    atomic_numbers = ele.get_Z()
+                    for num in atomic_numbers:
+                        f.write(f"{num} ")
+                    f.write("\n\n")
 
+            if des_info['type'] in ['snap', 'SNAP']:
                 f.write(f"rfac0 {des_info['parameters']['rfac']} \n")
                 f.write(f"rmin0 0 ")
-            
-            f.write("\n")
-            f.write("switchflag 1 \n")
-            f.write("bzeroflag 0 \n")
-            f.write(f"quadraticflag {self.order-1} \n")
+                f.write("\n")
+                f.write("switchflag 1 \n")
+                f.write("bzeroflag 0 \n")
 
 
     def load_checkpoint(self, filename=None):

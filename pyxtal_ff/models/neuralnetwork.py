@@ -5,13 +5,15 @@ import gc
 import time
 import shelve
 import numpy as np
+from copy import deepcopy
+from random import randint
+
 import torch
 import torch.nn as nn
 from torch.utils import data
 import torch.nn.functional as F
 torch.set_default_tensor_type(torch.DoubleTensor)
-from random import randint
-from copy import deepcopy
+
 import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
@@ -20,6 +22,8 @@ import matplotlib.ticker as mticker
 plt.style.use("ggplot")
 
 from pyxtal_ff.models.optimizers.regressor import Regressor
+from pyxtal_ff.utilities.elements import Element
+
 eV2GPa = 160.21766
 
 class NeuralNetwork():
@@ -787,7 +791,7 @@ class NeuralNetwork():
                 else:
                     f.write("\n\n")
 
-        with open(self.path+"DescriptorParams.txt", "w") as f:
+        with open(self.path+"DescriptorParam.txt", "w") as f:
             f.write("# Descriptor parameters generated in PyXtal_FF \n\n")
             f.write("# Required \n")
             f.write(f"rcutfac {des_info['Rc']} \n")
@@ -806,23 +810,31 @@ class NeuralNetwork():
                 f.write(f"{element} ")
             f.write("\n")
 
-            if des_info['type'] in ['snap', 'SNAP']:
+            if des_info['type'] in ['snap', 'SNAP', 'SO3', 'SOAP']:
                 f.write("radelems ")
                 for element in self.elements:
                     f.write("0.5 ")
                 f.write("\n")
 
-                f.write("welems ")
-                for element in self.elements:
-                    f.write(f"{des_info['weights'][element]} ")
-                f.write("\n\n")
+                if des_info['type'] in ['snap', 'SNAP']:
+                    f.write("welems ")
+                    for element in self.elements:
+                        f.write(f"{des_info['weights'][element]} ")
+                    f.write("\n\n")
+                else:
+                    f.write("welems ")
+                    ele = Element(self.elements)
+                    atomic_numbers = ele.get_Z()
+                    for num in atomic_numbers:
+                        f.write(f"{num} ")
+                    f.write("\n\n")
 
+            if des_info['type'] in ['snap', 'SNAP']:
                 f.write(f"rfac0 {des_info['parameters']['rfac']} \n")
                 f.write(f"rmin0 0 ")
-            
-            f.write("\n")
-            f.write("switchflag 1 \n")
-            f.write("bzeroflag 0 \n")
+                f.write("\n")
+                f.write("switchflag 1 \n")
+                f.write("bzeroflag 0 \n")
 
 
     def load_checkpoint(self, filename=None, method=None, args=None):
