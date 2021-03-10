@@ -220,10 +220,13 @@ def Wigner_D(Ra, Rb, twol, twomp, twom):
             return 0.0j
         else:
             Prefactor = cmath.rect(
-                _coeff(twol, -twomp, twom)
-                * rb **(twol - (twom+twomp)/2)
+                rb **(twol - (twom+twomp)/2)
                 * ra ** ((twom+twomp)/2),
                 phib * (twom - twomp)/2 + phia * (twom + twomp)/2)
+            Prefactor *= np.sqrt(factorial(round(twol/2+twom/2))*
+                                 factorial(round(twol/2-twom/2))*
+                                 factorial(round(twol/2-twomp/2))*
+                                 factorial(round(twol/2-twomp/2)))
 
             if Prefactor == 0.0j:
                 return 0.0j
@@ -250,10 +253,14 @@ def Wigner_D(Ra, Rb, twol, twomp, twom):
             return 0.0j
 
         else:
-            Prefactor = cmath.rect(_coeff(twol, twomp, twom)
-                                   * ra **(twol - twom/2 + twomp/2)
+            Prefactor = cmath.rect(
+                                   ra **(twol - twom/2 + twomp/2)
                                    * rb **(twom/2 - twomp/2),
                                    phia * (twom + twomp)/2 + phib * (twom - twomp)/2)
+            Prefactor *= np.sqrt(factorial(round(twol/2+twom/2))*
+                                 factorial(round(twol/2-twom/2))*
+                                 factorial(round(twol/2-twomp/2))*
+                                 factorial(round(twol/2-twomp/2)))
 
             if Prefactor == 0.0j:
                 return 0.0j
@@ -309,10 +316,13 @@ def Wigner_D_wDerivative(Ra, Rb, twol, twomp, twom, gradRa, gradRb, gradArr):
             return 0.0j
         else:
             Prefactor = cmath.rect(
-                _coeff(twol, -twomp, twom)
-                * rb **(twol - (twom+twomp)/2)
+                rb **(twol - (twom+twomp)/2)
                 * ra ** ((twom+twomp)/2),
                 phib * (twom - twomp)/2 + phia * (twom + twomp)/2)
+            Prefactor *= np.sqrt(factorial(round(twol/2+twom/2))*
+                                 factorial(round(twol/2-twom/2))*
+                                 factorial(round(twol/2-twomp/2))*
+                                 factorial(round(twol/2-twomp/2)))
 
             if Prefactor == 0.0j:
                 return 0.0j
@@ -350,10 +360,14 @@ def Wigner_D_wDerivative(Ra, Rb, twol, twomp, twom, gradRa, gradRb, gradArr):
             return 0.0j
 
         else:
-            Prefactor = cmath.rect(_coeff(twol, twomp, twom)
-                                   * ra **(twol - twom/2 + twomp/2)
+            Prefactor = cmath.rect(
+                                   ra **(twol - twom/2 + twomp/2)
                                    * rb **(twom/2 - twomp/2),
                                    phia * (twom + twomp)/2 + phib * (twom - twomp)/2)
+            Prefactor *= np.sqrt(factorial(round(twol/2+twom/2))*
+                                 factorial(round(twol/2-twom/2))*
+                                 factorial(round(twol/2-twomp/2))*
+                                 factorial(round(twol/2-twomp/2)))
 
             if Prefactor == 0.0j:
                 return 0.0j
