@@ -556,7 +556,7 @@ class PR():
             elements = data['elements']
             
             # Arranging x and dxdr for energy and forces.
-            bias_weights = 1.0/len(self.elements)
+            bias_weights = 1.0
             
             sna = np.zeros([len(self.elements), 1+d_max])
             if fc:
