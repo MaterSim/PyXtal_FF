@@ -749,9 +749,11 @@ class NeuralNetwork():
                     
                 _parameters = []
                 for i, hl in enumerate(self.hiddenlayers[element]):
-                    f.write(f"{self.activation[element][i]} ".lower())
-                    f.write(f"{hl} ")
+                    if e == 0:
+                        f.write(f"{self.activation[element][i]} ".lower())
+                        f.write(f"{hl} ")
                     _parameters.append(torch.cat([_PARAMETERS[2*i+1][:,None], _PARAMETERS[2*i]], dim=1))
+
                 f.write("\n\n")
 
                 drange = self.drange[element]
@@ -776,7 +778,7 @@ class NeuralNetwork():
                 f.write("\n")
 
                 cnt = 1
-                f.write("# Coefficients\n")
+                f.write("# Coefficients ({:s})\n".format(element))
                 for parameter in _parameters:
                     for param in parameter:
                         for p in param:

@@ -589,7 +589,7 @@ def parse_ase_db(db_path, N=None, Random=False):
         for i, row in enumerate(db.select()):
             structure = db.get_atoms(row.id)
             if "stress" in row.data:
-                stress = row.stress
+                stress = row.data["stress"]
             else:
                 stress = None
 
@@ -598,9 +598,18 @@ def parse_ase_db(db_path, N=None, Random=False):
             else:
                 group = None
 
+            if "dft_energy" in row.data:
+                eng = row.data["dft_energy"]
+            else:
+                eng = row.data["energy"]
+
+            if "dft_force" in row.data:
+                force = row.data["dft_force"]
+            else:
+                force = row.data["force"]
             data.append({'structure': structure,
-                         'energy': row.data["dft_energy"], 
-                         'force': row.data["dft_force"],
+                         'energy': eng,
+                         'force': force,
                          'group': group,
                          'stress': stress})
 
