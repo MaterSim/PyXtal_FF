@@ -8,7 +8,6 @@ from ase.optimize import LBFGS
 from ase.optimize.fire import FIRE
 from ase.constraints import ExpCellFilter
 from ase.spacegroup.symmetrize import FixSymmetry, check_symmetry
-from pyxtal_ff.calculator.elastic import get_elementary_deformations, get_elastic_tensor
 
 class PyXtalFFCalculator(Calculator):
     implemented_properties = ['energy', 'forces', 'stress']
@@ -44,23 +43,6 @@ class PyXtalFFCalculator(Calculator):
 
     def __repr__(self):
         return str(self)
-
-def elastic_tensor(atoms, calc):
-    # Compute elastic constants
-    # print("\n--------Calculating the Elastic constants")
-    # Create elementary deformations
-    systems = get_elementary_deformations(atoms, d=1)
-    
-    # Run the stress calculations on deformed cells
-    for i, system in enumerate(systems):
-        print(system.get_cell())
-        system.set_calculator(calc)
-        dyn = BFGS(system)
-        dyn.run(fmax=0.01)
-        print(system.get_potential_energy().item(), system.get_stress()/units.GPa) # from eV/A^3 to GPa
-    # Elastic tensor by internal routine
-    Cijs, Bij, names, matrix = get_elastic_tensor(atoms, systems)
-    return Cijs, names, matrix
 
 def elastic_properties(C):
     Kv = C[:3,:3].mean()
