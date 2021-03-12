@@ -19,7 +19,7 @@ lmpdes = folder + "/DescriptorParam.txt"
 si = read('lt_quartz.cif')
 # set the ordering
 si.set_tags([2]*3+[1]*6) 
-#si.positions[0,0] += (random() - 0.5)
+si.positions[0,0] += (random() - 0.5)
 
 # ase pyxtal_ff calculator
 ff = PyXtal_FF(model={'system': ["Si", "O"]}, logo=False)
@@ -45,7 +45,7 @@ calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
 for calc in [calc_pff, calc_lmp]:
     si.set_calculator(calc)
     print(calc)
-    print("Energy: {:8.3f} eV/atom".format(si.get_potential_energy()))
+    print("Energy: {:8.3f} eV".format(si.get_potential_energy()))
     print("Forces (eV/A)")
     print(si.get_forces())
     print("Stresses (GPa)")
