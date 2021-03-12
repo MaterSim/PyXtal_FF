@@ -4,8 +4,10 @@ np.set_printoptions(formatter={'float': '{: 8.4f}'.format})
 from ase import units
 from pyxtal_ff.utilities import compute_descriptor
 from ase.calculators.calculator import Calculator, all_changes#, PropertyNotImplementedError
-from ase.optimize import BFGS
-from pyxtal_ff.calculator.mushybox import mushybox
+from ase.optimize import LBFGS
+from ase.optimize.fire import FIRE
+from ase.constraints import ExpCellFilter
+from ase.spacegroup.symmetrize import FixSymmetry, check_symmetry
 from pyxtal_ff.calculator.elastic import get_elementary_deformations, get_elastic_tensor
 
 class PyXtalFFCalculator(Calculator):
@@ -79,14 +81,23 @@ def elastic_properties(C):
     return Kv, Gv, Ev, vv, Kr, Gr, Er, vr, Kh, Gh, Eh, vh
 
 
-def optimize(atoms, box=False, fmax=0.01, steps=1000):
+def optimize(atoms, sym=True, box=False, method='FIRE', fmax=0.01, steps=1000, logfile='ase.log'):
+    if sym:
+        atoms.set_constraint(FixSymmetry(atoms))
     if box:
-        box = mushybox(atoms)
-        dyn = BFGS(box)
+        ecf = ExpCellFilter(atoms)
+        if method == 'FIRE':
+            dyn = FIRE(ecf, logfile=logfile)
+        else:
+            dyn = LBFGS(ecf, logfile=logfile)
     else:
-        dyn = BFGS(atoms)
+        if method == 'FIRE':
+            dyn = FIRE(atoms, logfile=logfile)
+        else:
+            dyn = FIRE(atoms, logfile=logfile)
 
     dyn.run(fmax=fmax, steps=steps)
+    atoms.set_constraint()
     return atoms
 
 if  __name__ == "__main__":
