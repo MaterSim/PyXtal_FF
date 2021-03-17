@@ -43,11 +43,12 @@ First, follow the steps below to install LAMMPS-MLIAP and python wrapper
 ```
 $ git clone https://github.com/pedroantoniosantosf/lammps.git
 $ cd lammps/src
-$ make yes-mliap
 $ make yes-snap
+$ make yes-so3  #experimental
+$ make yes-mliap
 $ make yes-python
-$ make mpi
-$ make mpi mode=shlib
+$ make mpi -j 8 mode=shlib  #speed up the compilation
+$ make install-python
 ```
 At the end, you expect to get an executable called `lmp_mpi` and `liblammps_mpi.so` in the src directory, as well as a soft link liblammps.so, which is what the Python wrapper will load by default.
 Then one just need to add the path of src to the `.bashrc` file as follows,
@@ -56,11 +57,6 @@ export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/scratch/qzhu/soft/lammps/src
 ```
 **Note that you need to modify the path**
 
-then in lammps/src
-
-```
-$ make install-python
-```
 
 ## Validation between python-ASE and lammps results
 
