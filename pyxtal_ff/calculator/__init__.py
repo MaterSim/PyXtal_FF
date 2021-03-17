@@ -29,6 +29,7 @@ class PyXtalFFCalculator(Calculator):
         desp = compute_descriptor(self.parameters.ff._descriptors, atoms)
         energy, forces, stress = self.parameters.ff.model.calculate_properties(desp, bforce=True, bstress=True)
 
+        self.desp = desp
         self.results['energy'] = energy*len(atoms)
         self.results['free_energy'] = energy*len(atoms)
         self.results['forces'] = forces

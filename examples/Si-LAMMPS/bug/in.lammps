@@ -1,0 +1,17 @@
+clear
+box  tilt large
+units metal
+boundary p p p 
+atom_modify sort 0 0.0
+read_data data.lammps
+
+### interactions
+mass * 1.0
+pair_style mliap model nn ../Si-so3/NN_weights.txt descriptor so3 ../Si-so3/DescriptorParam.txt
+pair_coeff * * Si Si
+neighbor 1.0 bin
+neigh_modify  every 1  delay 1  check yes
+thermo_style custom pe pxx pyy pzz pyz pxz pxy
+thermo_modify flush yes
+thermo 1
+run 1

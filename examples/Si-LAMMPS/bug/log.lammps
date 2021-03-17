@@ -1,0 +1,78 @@
+LAMMPS (10 Feb 2021)
+clear
+box  tilt large
+units metal
+boundary p p p
+atom_modify sort 0 0.0
+read_data data.lammps
+Reading data file ...
+  triclinic box = (0.0000000 0.0000000 0.0000000) to (5.0000000 5.0000000 5.0000000) with tilt (0.0000000 0.0000000 0.0000000)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  8 atoms
+  read_data CPU = 0.001 seconds
+
+### interactions
+mass * 1.0
+pair_style mliap model nn ../Si-so3/NN_weights.txt descriptor so3 ../Si-so3/DescriptorParam.txt
+SO3 keyword rcutfac 5.0 
+SO3 keyword nmax 3 
+SO3 keyword lmax 4 
+SO3 keyword alpha 2.0 
+SO3 keyword nelems 1 
+SO3 keyword elems Si 
+SO3 keyword radelems 0.5 
+SO3 keyword welems 14 
+pair_coeff * * Si Si
+neighbor 1.0 bin
+neigh_modify  every 1  delay 1  check yes
+thermo_style custom pe pxx pyy pzz pyz pxz pxy
+thermo_modify flush yes
+thermo 1
+run 1
+WARNING: No fixes defined, atoms won't move (../verlet.cpp:54)
+Neighbor list info ...
+  update every 1 steps, delay 1 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 6
+  ghost atom cutoff = 6
+  binsize = 3, bins = 2 2 2
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair mliap, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 297.4 | 297.4 | 297.4 Mbytes
+PotEng Pxx Pyy Pzz Pyz Pxz Pxy 
+  -38.789078    515794.74     521852.7     521852.7   -35805.968 3.4152446e-11 -1.1384149e-10 
+  -38.789078    515794.74     521852.7     521852.7   -35805.968 2.2768297e-11 -4.5536595e-11 
+Loop time of 0.32426 on 1 procs for 1 steps with 8 atoms
+
+Performance: 0.266 ns/day, 90.072 hours/ns, 3.084 timesteps/s
+99.9% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0.32423    | 0.32423    | 0.32423    |   0.0 | 99.99
+Neigh   | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 2.7269e-06 | 2.7269e-06 | 2.7269e-06 |   0.0 |  0.00
+Output  | 2.0396e-05 | 2.0396e-05 | 2.0396e-05 |   0.0 |  0.01
+Modify  | 4.8801e-07 | 4.8801e-07 | 4.8801e-07 |   0.0 |  0.00
+Other   |            | 3.893e-06  |            |       |  0.00
+
+Nlocal:        8.00000 ave           8 max           8 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:        272.000 ave         272 max         272 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:         0.00000 ave           0 max           0 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+FullNghs:      368.000 ave         368 max         368 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 368
+Ave neighs/atom = 46.000000
+Neighbor list builds = 0
+Dangerous builds = 0
+Total wall time: 0:00:00

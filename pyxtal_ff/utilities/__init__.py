@@ -360,8 +360,7 @@ def parse_json(path, N=None, Random=False):
                 group = 'NoElastic'
             elif 'virial_stress' in d[key]: #kB to GPa
                 s = [-1*s/10 for s in d[key]['virial_stress']] 
-
-                if d['group'] == 'Ni3Mo': #to fix the issue
+                if d['group'] == 'Ni3Mo' or d['element'] == 'Cu': #just tentative fix
                     stress = [s[0], s[1], s[2], s[3], s[4], s[5]]
                 else:
                     stress = [s[0], s[1], s[2], s[3], s[5], s[4]]
