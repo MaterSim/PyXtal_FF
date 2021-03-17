@@ -1,5 +1,5 @@
 # Run NPT MD simulation for Si at 500 K.
-variable nsteps index 1000
+variable nsteps index 100 #0
 
 # NOTE: These are not intended to represent real materials
 
@@ -22,7 +22,8 @@ variable t equal 500.
 
 
 # Potential
-pair_style mliap model nn Si-snap/NN_weights.txt descriptor sna Si-snap/DescriptorParams.txt
+#pair_style mliap model nn Si-snap/NN_weights.txt descriptor sna Si-snap/DescriptorParam.txt
+pair_style mliap model nn Si-so3/NN_weights.txt descriptor so3 Si-so3/DescriptorParam.txt
 pair_coeff * * Si Si
 
 # Set-up output
