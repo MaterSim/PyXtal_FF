@@ -40,7 +40,7 @@ setup(
         'matplotlib>=2.0.0',
         'ase>=3.20.1',
         'torch>=1.1.0',
-        'phonopy>=2.3.2',
+        'phonopy==2.3.2', #tmp fix
         'spglib>=1.12.1',
         'monty>=3.0.2',
         'seekpath>=1.9.5',
