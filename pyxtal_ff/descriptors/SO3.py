@@ -227,7 +227,7 @@ class SO3:
         atoms = self._atoms
         if atom_ids is None:
             atom_ids = range(len(atoms))
- 
+
         cutoffs = [self.rcut/2]*len(atoms)
         nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
         nl.update(atoms)
@@ -236,7 +236,7 @@ class SO3:
         neighbors = []
         neighbor_indices = []
         atomic_numbers = []
-           
+
         for i in atom_ids: #range(len(atoms)):
             # get center atom position
             center_atom = atoms.positions[i]
@@ -298,6 +298,105 @@ class SO3:
         self.site_atomic_numbers = site_atomic_numbers
 
         return
+
+@nb.njit
+def init_rootpqarray(twol):
+    ldim = twol+1
+    rootpqarray = np.zeros((ldim, ldim))
+    for p in range(1, ldim, 1):
+        for q in range(1, ldim, 1):
+            rootpqarray[p,q] = np.sqrt(p/q)
+    return rootpqarray
+
+@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.c16[:], nb.i8[:], nb.f8[:,:]),
+         cache=True, fastmath=True, nogil=True)
+def compute_uarray_recursive(x, y, z, r, twol, ulist, idxu_block, rootpqarray):
+    '''Compute the Wigner-D matrix of order twol given an axis (x,y,z)
+    and rotation angle 2*psi.
+    This function constructs a unit quaternion representating a rotation
+    of 2*psi through an axis defined by x,y,z; then populates an array of
+    Wigner-D matrices of order twol for this rotation.  The Wigner-D matrices
+    are calculated using the recursion relations in LAMMPS.
+    Parameters
+    ----------
+    x: float
+    the x coordinate corresponding to the axis of rotation.
+    y: float
+    the y coordinate corresponding to the axis of rotation.
+    z: float
+    the z coordinate corresponding to the axis of rotation
+    psi: float
+    one half of the rotation angle
+    r: float
+    magnitude of the vector (x,y,z)
+    twol: integer
+    order of hyperspherical expansion
+    ulist: 1-D complex array
+    array to populate with D-matrix elements, mathematically
+    this is a 3-D matrix, although we broadcast this to a 1-D
+    matrix
+    idxu_block: 1-D int array
+    used to index ulist
+    rootpqarray:  2-D float array
+    used for recursion relation
+    Returns
+    -------
+    None
+    '''
+    ldim = twol + 1
+
+    theta = np.arccos(z/r)
+    phi = np.arctan2(y,x)
+
+    atheta = np.cos(theta/2)
+    btheta = np.sin(theta/2)
+
+    aphi = np.cos(phi/2) + 1j*np.sin(phi/2)
+
+    a = atheta*aphi
+    b = btheta*aphi
+
+    ulist[0] = 1.0 + 0.0j
+
+    for l in range(1, ldim, 1):
+        llu = idxu_block[l]
+        llup = idxu_block[l - 1]
+
+        # fill in left side of matrix layer
+
+        mb = 0
+        while 2 * mb <= l:
+            ulist[llu] = 0
+            for ma in range(0, l, 1):
+                rootpq = rootpqarray[l - ma, l - mb]
+                ulist[llu] += rootpq * np.conj(a) * ulist[llup]
+
+                rootpq = rootpqarray[ma + 1, l - mb]
+                ulist[llu + 1] += -rootpq * np.conj(b) * ulist[llup]
+                llu += 1
+                llup += 1
+            llu += 1
+            mb += 1
+
+        # copy left side to right side using inversion symmetry
+        llu = idxu_block[l]
+        llup = llu + (l + 1) * (l + 1) - 1
+        mbpar = 1
+        mb = 0
+        while 2 * mb <= l:
+            mapar = mbpar
+            for ma in range(0, l + 1, 1):
+                if mapar == 1:
+                    ulist[llup] = np.conj(ulist[llu])
+                else:
+                    ulist[llup] = -np.conj(ulist[llu])
+
+                mapar = -mapar
+                llu += 1
+                llup -= 1
+            mbpar = -mbpar
+            mb += 1
+    return
 
 @nb.njit(nb.c16(nb.c16, nb.c16, nb.i8, nb.i8), cache=True,
          fastmath=True, nogil=True)
@@ -437,14 +536,16 @@ def get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, derivative):
     integral *= rcut/2*np.pi/N
     return integral
 
-@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:]),
+@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:],
+                 nb.c16[:], nb.i8[:]),
          cache=True, fastmath=True, nogil=True)
-def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist):
+def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm):
     '''
     Get expansion coefficient for one neighbor.  Then add
     to the whole expansion coefficient
     '''
 
+    '''
     # construct Cayley-Klein parameters of the unit quaternion
     # for one neighbor for spherical harmonic
     # calculation
@@ -466,7 +567,7 @@ def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist):
     # compose the rotations
     Ra = atheta*aphi
     Rb = btheta*aphi
-
+    '''
 
     # gaussian factor for this neighbor for the inner product
     expfac = 4*np.pi*np.exp(-alpha*ri**2)
@@ -478,14 +579,16 @@ def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist):
             # analytically, hence we calculate the inner product numerically
             r_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, False)
             for m in range(-l, l+1, 1):
-                Ylm = sph_harm(Ra, Rb, l, m)
+                #Ylm = sph_harm(Ra, Rb, l, m)
+                Ylm = ulist[idxylm[i]].conjugate()*np.sqrt((2*l+1)/4/np.pi)*(-1)**m
                 clist[n-1, i] += r_int*Ylm*expfac
                 i += 1
     return
 
-@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:], nb.c16[:,:,:]),
+@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:],
+                 nb.c16[:,:,:], nb.c16[:], nb.i8[:]),
          cache=True, fastmath=True, nogil=True)
-def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist):
+def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ulist, idxylm):
     '''
     Get expansion coefficient for one neighbor.  Then add
     to the whole expansion coefficient
@@ -493,7 +596,7 @@ def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist):
 
     # keep x,y,z instead of array for GPU support
     rvec = np.array((x,y,z), dtype=np.float64)
-
+    '''
     # construct Cayley-Klein parameters of the unit quaternion
     # for one neighbor for spherical harmonic
     # calculation
@@ -515,14 +618,15 @@ def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist):
     # compose the rotations
     Ra = atheta*aphi
     Rb = btheta*aphi
-
+    '''
     Ylms = np.zeros((lmax+2)**2, dtype=np.complex128)
 
     # get spherical harmonics up to l+1
     i = 0
     for l in range(0, lmax+2, 1):
         for m in range(-l, l+1, 1):
-            Ylms[i] = sph_harm(Ra, Rb, l, m)
+            #Ylms[i] = sph_harm(Ra, Rb, l, m)
+            Ylms[i] = ulist[idxylm[i]].conjugate()*np.sqrt((2*l+1)/4/np.pi)*(-1)**m
             i += 1
 
     dYlm = np.zeros(((lmax+1)**2,3), dtype=np.complex128)
@@ -636,6 +740,14 @@ def compute_dpidrj(nmax, lmax, clisttot, dclist, dplist):
                 i += 1
     return
 
+@nb.njit(nb.void(nb.c16[:]),
+         cache=True, fastmath=True, nogil=True)
+def zero_1d(arr):
+    # zero a generic 1-d array
+    for i in range(arr.shape[0]):
+        arr[i] = 0
+    return
+
 @nb.njit(nb.void(nb.c16[:,:]), cache=True, fastmath=True, nogil=True)
 def zero_2D_array(arr):
     '''
@@ -680,6 +792,28 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
     w = np.zeros((nmax, nmax), np.float64)
     W(nmax, w)
 
+    # index list for u array
+    twolmax = 2*(lmax+1)
+    rootpq = init_rootpqarray(twolmax)
+    ldim = twolmax+1
+    idxu_block = np.zeros(ldim, dtype=np.int64)
+    idxylm = np.zeros((lmax+2)**2, dtype=np.int64)
+
+    # populate the index list for u arrays and count
+    # the number of u arrays
+    idxu_count = 0
+    idxy_count = 0
+    for l in range(0, ldim, 1):
+        idxu_block[l] = idxu_count
+        for mb in range(0, l + 1, 1):
+            for ma in range(0, l + 1, 1):
+                if l%2 == 0 and ma == l/2:
+                    idxylm[idxy_count] = idxu_count
+                    idxy_count += 1
+                idxu_count += 1
+
+    ulist = np.zeros((idxu_count), dtype=np.complex128)
+
     if derivative == True:
         if stress == True:
             numps = nmax*(nmax+1)*(lmax+1)//2
@@ -713,8 +847,11 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                 continue
                             zero_2D_array(clist)
 
+                            zero_1d(ulist)
+                            compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
+
                             compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor])
+                                              clist, dclist[neighbor], ulist, idxylm)
 
                             dclist[neighbor] *= Weight
 
@@ -751,9 +888,10 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     if r < 10**(-8):
                         continue
                     zero_2D_array(clist)
-
+                    zero_1d(ulist)
+                    compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
                     compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist)
+                                      clist, ulist, idxylm)
 
                     clist *= weight
 
@@ -776,8 +914,10 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                         continue
                     zero_2D_array(clist)
 
+                    zero_1d(ulist)
+                    compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
                     compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor])
+                                      clist, dclist[neighbor], ulist, idxylm)
 
                     dclist[neighbor] *= Weight
 
@@ -828,8 +968,10 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                                 continue
                             zero_2D_array(clist)
 
+                            zero_1d(ulist)
+                            compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
                             compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor])
+                                              clist, dclist[neighbor], ulist, idxylm)
 
                             dclist[neighbor] *= Weight
 
@@ -856,9 +998,10 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     if r < 10**(-8):
                         continue
                     zero_2D_array(clist)
+                    zero_1d(ulist)
 
                     compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist)
+                                      clist,ulist,idxylm)
 
                     clist *= weight
 
@@ -880,9 +1023,10 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     if r < 10**(-8):
                         continue
                     zero_2D_array(clist)
+                    zero_1d(ulist)
 
                     compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor])
+                                      clist, dclist[neighbor], ulist, idxylm)
 
                     dclist[neighbor] *= Weight
 
@@ -925,9 +1069,10 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     if r < 10**(-8):
                         continue
                     zero_2D_array(clist)
+                    zero_1d(ulist)
 
                     compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist)
+                                      clist, ulist, idxylm)
 
                     clist *= weight
 
@@ -951,7 +1096,7 @@ if  __name__ == "__main__":
                       help="cutoff for neighbor calcs, default: 3.0"
                       )
 
-    parser.add_option("-l", "--lmax", dest="lmax", default=1, type=int,
+    parser.add_option("-l", "--lmax", dest="lmax", default=2, type=int,
                       help="lmax, default: 1"
                       )
 
@@ -991,7 +1136,7 @@ if  __name__ == "__main__":
     start1 = time.time()
     f = SO3(nmax, lmax, rcut, alpha, derivative=der, stress=stress)
     x = f.calculate(test, atom_ids=[0, 1])
-    print(x)
+    print(x['x'])
     start2 = time.time()
     '''
     for key, item in x.items():
