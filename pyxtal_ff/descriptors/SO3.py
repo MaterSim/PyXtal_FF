@@ -299,7 +299,7 @@ class SO3:
 
         return
 
-@nb.njit
+@nb.njit(cache=True, nogil=True, fastmath=True)
 def init_rootpqarray(twol):
     ldim = twol+1
     rootpqarray = np.zeros((ldim, ldim))
@@ -504,42 +504,53 @@ def g(r, n, nmax, rcut, w):
 
     return Sum
 
-@nb.njit(nb.c16(nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.i8, nb.f8[:,:], nb.b1),
+@nb.njit(nb.c16(nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.i8, nb.f8[:,:], nb.b1, nb.f8),
          cache=True, fastmath=True, nogil=True)
-def integrand(r, ri, alpha, rcut, n, l, nmax, w, derivative):
+def integrand(r, ri, alpha, rcut, n, l, nmax, w, derivative, g_elem):
     '''
     The integrand of the radial inner product as in
     *cite our paper later*
     '''
     if derivative == False:
-        return r**2*g(r, n, nmax, rcut, w)*np.exp(-alpha*r**2)*modifiedSphericalBessel1(2*alpha*r*ri, l, False)
+        return g_elem*modifiedSphericalBessel1(2*alpha*r*ri, l, False)
     else:
-        return r**3*g(r, n, nmax, rcut, w)*np.exp(-alpha*r**2)*modifiedSphericalBessel1(2*alpha*r*ri, l, True)
+        return r*g_elem*modifiedSphericalBessel1(2*alpha*r*ri, l, True)
 
-@nb.njit(nb.c16(nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.i8, nb.f8[:,:], nb.b1),
+@nb.njit(nb.void(nb.i8, nb.i8, nb.f8, nb.f8, nb.f8[:,:], nb.f8[:,:]), cache=True, nogil=True, fastmath=True)
+def init_garray(nmax, lmax, rcut, alpha, w, g_array):
+    Nmax = (nmax+lmax+1)*10
+    for i in range(1, Nmax+1):
+        # roots of Chebyshev polynomial of degree N
+        x = np.cos((2*i-1)*np.pi/2/Nmax)
+        # transform the interval [-1,1] to [0, rcut]
+        xi = rcut/2*(x+1)
+        for n in range(1,nmax+1):
+            # r**2*g(n)(r)*e^(-alpha*r**2)
+            g_array[n-1, i-1] = (rcut/2*np.pi/Nmax*np.sqrt(1-x**2)*xi**2*g(xi, n, nmax, rcut, w)*np.exp(-alpha*xi**2)).real
+
+
+@nb.njit(nb.c16(nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.i8, nb.f8[:,:], nb.b1, nb.f8[:,:], nb.i8),
          cache=True, fastmath=True, nogil=True)
-def get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, derivative):
+def get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, derivative, g_array, Nmax):
     '''
     Chebyshev-Gauss quadrature integral calculator
     for the radial inner product as in *cite our paper later*
     '''
     integral = 0.0
     # heuristic rule for how many points to include in the quadrature
-    N = (n+l+1)*10
-    for i in range(1, N+1, 1):
+    for i in range(1, Nmax+1, 1):
         # roots of Chebyshev polynomial of degree N
-        x = np.cos((2*i-1)*np.pi/2/N)
+        x = np.cos((2*i-1)*np.pi/2/Nmax)
         # transforming the root from the interval [-1,1] to the interval [0, rcut]
         xi = rcut/2*(x+1)
-        integral += np.sqrt(1-x**2)*integrand(xi, ri, alpha, rcut, n, l, nmax, w, derivative)
+        integral += integrand(xi, ri, alpha, rcut, n, l, nmax, w, derivative, g_array[n-1,i-1])
     # the weight (pi/N) is uniform for Chebyshev-Gauss quadrature
-    integral *= rcut/2*np.pi/N
     return integral
 
 @nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:],
-                 nb.c16[:], nb.i8[:]),
+                 nb.c16[:], nb.i8[:], nb.f8[:,:]),
          cache=True, fastmath=True, nogil=True)
-def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm):
+def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm, g_array):
     '''
     Get expansion coefficient for one neighbor.  Then add
     to the whole expansion coefficient
@@ -569,6 +580,7 @@ def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm
     Rb = btheta*aphi
     '''
 
+    Nmax = (nmax+lmax+1)*10
     # gaussian factor for this neighbor for the inner product
     expfac = 4*np.pi*np.exp(-alpha*ri**2)
 
@@ -577,7 +589,7 @@ def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm
         for l in range(0, lmax+1 ,1):
             # the radial portion of this inner product cannot be calculated
             # analytically, hence we calculate the inner product numerically
-            r_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, False)
+            r_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, False, g_array, Nmax)
             for m in range(-l, l+1, 1):
                 #Ylm = sph_harm(Ra, Rb, l, m)
                 Ylm = ulist[idxylm[i]].conjugate()*np.sqrt((2*l+1)/4/np.pi)*(-1)**m
@@ -586,9 +598,9 @@ def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm
     return
 
 @nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:],
-                 nb.c16[:,:,:], nb.c16[:], nb.i8[:]),
+                 nb.c16[:,:,:], nb.c16[:], nb.i8[:], nb.f8[:,:]),
          cache=True, fastmath=True, nogil=True)
-def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ulist, idxylm):
+def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ulist, idxylm, g_array):
     '''
     Get expansion coefficient for one neighbor.  Then add
     to the whole expansion coefficient
@@ -619,6 +631,7 @@ def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ul
     Ra = atheta*aphi
     Rb = btheta*aphi
     '''
+    Nmax = (nmax+lmax+1)*10
     Ylms = np.zeros((lmax+2)**2, dtype=np.complex128)
 
     # get spherical harmonics up to l+1
@@ -676,8 +689,8 @@ def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ul
         for l in range(0, lmax+1 ,1):
             # the radial portion of this inner product cannot be calculated
             # analytically, hence we calculate the inner product numerically
-            r_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, False)
-            dr_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, True)*2*alpha*rvec/ri
+            r_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, False, g_array, Nmax)
+            dr_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, True, g_array, Nmax)*2*alpha*rvec/ri
             for m in range(-l, l+1, 1):
                 clist[n-1, i] += r_int*Ylms[i]*expfac
                 dclist[n-1,i,:] += r_int*Ylms[i]*dexpfac + dr_int*Ylms[i]*expfac + r_int*expfac*dYlm[i,:]
@@ -792,6 +805,10 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
     w = np.zeros((nmax, nmax), np.float64)
     W(nmax, w)
 
+    Nmax = (nmax+lmax+1)*10
+    g_array = np.zeros((nmax, Nmax), dtype=np.float64)
+    init_garray(nmax, lmax, rcut, alpha, w, g_array)
+
     # index list for u array
     twolmax = 2*(lmax+1)
     rootpq = init_rootpqarray(twolmax)
@@ -851,7 +868,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                             compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
 
                             compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor], ulist, idxylm)
+                                              clist, dclist[neighbor], ulist, idxylm, g_array)
 
                             dclist[neighbor] *= Weight
 
@@ -891,7 +908,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
                     compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
                     compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, ulist, idxylm)
+                                      clist, ulist, idxylm, g_array)
 
                     clist *= weight
 
@@ -917,7 +934,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
                     compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
                     compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor], ulist, idxylm)
+                                      clist, dclist[neighbor], ulist, idxylm, g_array)
 
                     dclist[neighbor] *= Weight
 
@@ -971,7 +988,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                             zero_1d(ulist)
                             compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
                             compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor], ulist, idxylm)
+                                              clist, dclist[neighbor], ulist, idxylm, g_array)
 
                             dclist[neighbor] *= Weight
 
@@ -1001,7 +1018,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
 
                     compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist,ulist,idxylm)
+                                      clist,ulist,idxylm, g_array)
 
                     clist *= weight
 
@@ -1026,7 +1043,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
 
                     compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor], ulist, idxylm)
+                                      clist, dclist[neighbor], ulist, idxylm, g_array)
 
                     dclist[neighbor] *= Weight
 
@@ -1072,7 +1089,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
 
                     compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, ulist, idxylm)
+                                      clist, ulist, idxylm, g_array)
 
                     clist *= weight
 
@@ -1136,7 +1153,7 @@ if  __name__ == "__main__":
     start1 = time.time()
     f = SO3(nmax, lmax, rcut, alpha, derivative=der, stress=stress)
     x = f.calculate(test, atom_ids=[0, 1])
-    print(x['x'])
+    print(x['dxdr'])
     start2 = time.time()
     '''
     for key, item in x.items():
