@@ -89,11 +89,11 @@ class NeuralNetwork():
         if isinstance(hiddenlayers, list):
             hl = {}
             for element in self.elements:
-                hl[element] = hiddenlayers + [1]
+                hl[element] = hiddenlayers + [4]
             self.hiddenlayers = hl
         elif isinstance(hiddenlayers, dict):
             for key, value in hiddenlayers.items():
-                hiddenlayers[key] = value + [1]
+                hiddenlayers[key] = value + [4]
             self.hiddenlayers = hl
         else:
             msg = f"Don't recognize {type(hiddenlayers)}. " +\
@@ -173,7 +173,7 @@ class NeuralNetwork():
                 db.close()
 
         self.preprocess(TrainData)
-        
+
         # Calculate total number of parameters.
         self.total_parameters = 0
         for element in self.elements:
@@ -182,7 +182,7 @@ class NeuralNetwork():
                     self.total_parameters += (self.no_of_descriptors+1)*hl
                 else:
                     self.total_parameters += (self.hiddenlayers[element][i-1]+1)*hl
-        
+
         if self.restart is None:
             # Creating Neural Network architectures.
             self.models = {}
@@ -195,15 +195,15 @@ class NeuralNetwork():
                     else:
                         m += f'nn.Linear({self.hiddenlayers[element][i-1]}, \
                                {self.hiddenlayers[element][i]}), '
-                                   
+
                     if act == 'Linear':
                         continue
                     else:
                         m += f'nn.{act}(), '
                 m += f')'
-
+                
                 self.models[element] = eval(m).double().to(self.device)
-
+                
             self.regressor = Regressor(optimizer['method'], optimizer['parameters'])
             self.optimizer = self.regressor.regress(models=self.models)
 
@@ -229,8 +229,9 @@ class NeuralNetwork():
                 if self.batch_size is None: #Full batch
                     print("Initial state : ")
                     def closure(): # LBFGS gets loss and its gradient here.
-                        train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, self.data)
-                        print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
+                        #train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, self.data)
+                        train_loss, E_mae, F_mae, S_mae = self.calculate_Evidential_loss(self.models, self.data)
+                        print("             Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}      Stress MAE: {:10.4f}".\
                                 format(train_loss, E_mae, F_mae, S_mae))
                         self.optimizer.zero_grad()
                         train_loss.backward()
@@ -241,7 +242,7 @@ class NeuralNetwork():
                         if i == 0:
                             def closure(): # LBFGS gets loss and its gradient here.
                                 train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, batch)
-                                print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
+                                print("             Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}      Stress MAE: {:10.4f}".\
                                     format(train_loss, E_mae, F_mae, S_mae))
                                 self.optimizer.zero_grad()
                                 train_loss.backward() 
@@ -249,17 +250,14 @@ class NeuralNetwork():
                             self.optimizer.step(closure)
                             break
 
-
-
             elif optimizer['method'] in ['sgd', 'SGD', 'Adam', 'adam', 'ADAM']:
                 for batch in self.data:
                     train_loss, E_mae, F_mae, S_mae = self.calculate_loss(self.models, batch)
                     self.optimizer.zero_grad()
                     train_loss.backward()
                     self.optimizer.step()
-                    print("    Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
+                    print("             Loss: {:10.6f}     Energy MAE: {:10.4f}     Force MAE: {:10.4f}     Stress MAE: {:10.4f}".\
                             format(train_loss, E_mae, F_mae, S_mae))
-                                        
         t1 = time.time()
 
         self.data.dataset.close()
@@ -284,6 +282,7 @@ class NeuralNetwork():
 
         # Predicting the data set
         _energy, _force, _stress = [], [], [] # Predicted energy and forces
+        _aleatoric, _epistemic = [], []
         energy, force, stress = [], [] ,[]
         formulas = []
         for item, value in db.items():
@@ -291,7 +290,7 @@ class NeuralNetwork():
 
             dedx = None
             n_atoms = sum(len(value) for value in value['x'].values())
-            _Energy = 0.
+            _Energy, _Nu, _Alpha, _Beta = 0., 0., 0., 0.
             _Force = torch.zeros([n_atoms, 3], dtype=torch.float64)
             if self.stress_coefficient and (data2['group'] in self.stress_group):
                 _Stress = torch.zeros([6], dtype=torch.float64)
@@ -304,48 +303,51 @@ class NeuralNetwork():
 
                 if value['x'][element].nelement() > 0:
                     _x = value['x'][element].requires_grad_()
-                    _e = model(_x).sum()
-                    _Energy += _e
-                    if self.force_coefficient:
-                        dedx = torch.autograd.grad(_e, _x)[0]
-                        _dxdr = value['dxdr'][element]
+                    agamma, lognu, logalpha, logbeta = torch.split(model(_x), 1, dim=1)
+                    gamma = torch.sum(agamma)
+                    _Energy += gamma
+                    _Nu += torch.sum(F.softplus(lognu))
+                    _Alpha += torch.sum(F.softplus(logalpha) + 1)
+                    _Beta += torch.sum(F.softplus(logbeta))
 
+                    if self.force_coefficient:
+                        dedx = torch.autograd.grad(gamma, _x)[0]
+                        _dxdr = value['dxdr'][element]
                         tmp = np.zeros([len(value['x'][element]), n_atoms, value['x'][element].shape[1], 3])
                         for _m in range(n_atoms):
                             rows = np.where(value['seq'][element][:,1]==_m)[0]
                             tmp[value['seq'][element][rows, 0], _m, :, :] += _dxdr[rows, :, :]
-                        _Force -= torch.einsum("ik, ijkl->jl", dedx, torch.from_numpy(tmp)) 
+                        _Force -= torch.einsum("ik, ijkl->jl", dedx, torch.from_numpy(tmp))
 
                     if self.stress_coefficient and (data2['group'] in self.stress_group):
                         if self.force_coefficient is None:
-                            dedx = torch.autograd.grad(_e, _x)[0]
+                            dedx = torch.autograd.grad(gamma, _x)[0]
                         _rdxdr = value['rdxdr'][element]
-                        _Stress += -1 * torch.einsum("ik, ikl->l", dedx, _rdxdr)
-            
+                        _Stress -= torch.einsum("ik, ikl->l", dedx, _rdxdr)
+                                
             formulas.append(formula)
             energy.append(data2["energy"]/len(data2["elements"]))
             force.append(np.ravel(data2["force"]))
             
             _energy.append(_Energy.item()/n_atoms)
+            _aleatoric.append(( _Beta.item() / (_Alpha.item()-1) ) ** 0.5 / n_atoms)
+            _epistemic.append(( _Beta.item() / (_Alpha.item()-1) / _Nu.item() ) ** 0.5 / n_atoms)
             _force.append(np.ravel(_Force.numpy()))
 
             if self.stress_coefficient and (data2['group'] in self.stress_group):
                 _stress.append(np.ravel(_Stress*eV2GPa)) #transform to GPa
                 stress.append(np.array(data2['stress']))
-
                 # print outliers for debug
                 a = np.ravel(_Stress*eV2GPa)
                 b = np.array(data2['stress'])
-                #if self.mean_absolute_error(a[2:], b[2:]) > 1.5:
-                #    print('{:12s} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}'.format(formula, a[0], a[1], a[2], a[3], a[4], a[5]))
-                #    print('{:12s} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}'.format('DFT:',  b[0], b[1], b[2], b[3], b[4], b[5]))
-
 
         db.close()
         db2.close()
 
         energy = np.array(energy)
         _energy = np.array(_energy)
+        _aleatoric = np.array(_aleatoric)
+        _epistemic = np.array(_epistemic)
         if self.force_coefficient:
             force = np.array([x for i in force for x in i])
             _force = np.array([x for i in _force for x in i])
@@ -354,7 +356,7 @@ class NeuralNetwork():
             _stress = np.ravel(_stress)
         
         # Dump the true and predicted values into text file.
-        self.dump_evaluate(_energy, energy, filename=figname[:-4]+'Energy.txt')
+        self.dump_evaluate(_energy, energy, _aleatoric, _epistemic, filename=figname[:-4]+'Energy.txt')
         self.dump_formulas(formulas, filename=figname[:-4]+'formulas.txt')
         if self.force_coefficient:
             self.dump_evaluate(_force, force, filename=figname[:-4]+'Force.txt')
@@ -466,7 +468,117 @@ class NeuralNetwork():
                                     collate_fn=self.collate_fn,)
 
         gc.collect()
-       
+
+
+    def NIG_NLL(self, y, gamma, nu, alpha, beta):
+        twoBlambda = 2*beta*(1+nu)
+        nll = 0.5 * torch.log(np.pi/nu) - alpha * torch.log(twoBlambda) \
+              + (alpha+0.5) * torch.log(nu*(y-gamma)**2 + twoBlambda) \
+              + torch.lgamma(alpha)  \
+              - torch.lgamma(alpha+0.5)
+        return nll
+
+
+    def NIG_Reg(self, y, gamma, nu, alpha):
+        error = (y - gamma).abs()
+        evidence = 2. * nu + alpha
+        return (error * evidence)
+
+
+    def EvidentialRegression(self, y, evidential_output, lmbda=0.01, eps=0.01):
+        gamma = evidential_output[0]
+        nu = evidential_output[1]
+        alpha = evidential_output[2]
+        beta = evidential_output[3]
+
+        loss_nll = self.NIG_NLL(y, gamma, nu, alpha, beta)
+        loss_reg = self.NIG_Reg(y, gamma, nu, alpha)
+        
+        return loss_nll + lmbda * (loss_reg - eps)
+
+
+    def calculate_Evidential_loss(self, models, batch):
+        evidential_loss, force_loss, stress_loss = 0., 0., 0.
+        energy_mae, force_mae, stress_mae = 0., 0., 0.
+        all_atoms, s_count = 0, 0
+
+        for x, dxdr, seq, rdxdr, energy, force, stress, sf, group in batch:
+            n_atoms = sum(len(value) for value in x.values())
+            all_atoms += n_atoms
+            _Gamma, _Nu, _Alpha, _Beta = 0., 0., 0., 0.
+            _Force = torch.zeros([n_atoms, 3], dtype=torch.float64, device=self.device)
+            if self.stress_coefficient and (group in self.stress_group):
+                _Stress = torch.zeros([6], dtype=torch.float64, device=self.device)
+
+            dedx, sdedx = {}, {}
+            for element, model in models.items():
+                if x[element].nelement() > 0:
+                    _x = x[element].requires_grad_()
+                    agamma, lognu, logalpha, logbeta = torch.split(model(_x), 1, dim=1)
+                    gamma = torch.sum(agamma)
+                    _Gamma += gamma
+                    _Nu += torch.sum(F.softplus(lognu))
+                    _Alpha += torch.sum(F.softplus(logalpha) + 1)
+                    _Beta += torch.sum(F.softplus(logbeta))
+
+                    if self.force_coefficient:
+                        dedx[element] = torch.autograd.grad(gamma, _x, create_graph=True)[0]
+                        tmp = np.zeros([len(x[element]), n_atoms, x[element].shape[1], 3])
+                        for _m in range(n_atoms):
+                            rows = np.where(seq[element][:,1]==_m)[0]
+                            tmp[seq[element][rows, 0], _m, :, :] += dxdr[element][rows, :, :]
+                        _Force -= torch.einsum("ik, ijkl->jl", dedx[element], torch.from_numpy(tmp))
+
+                    if self.stress_coefficient and (group in self.stress_group):
+                        if self.force_coefficient is None:
+                            dedx[element] = torch.autograd.grad(gamma, _x, create_graph=True)[0]
+                        _Stress -= torch.einsum("ik, ikl->l", dedx[element], rdxdr[element]) # [6]
+
+            # Accumulate loss
+            evidential_loss += self.EvidentialRegression(energy, (_Gamma, _Nu, _Alpha, _Beta))
+            energy_mae  += sf.item()*F.l1_loss(_Gamma / n_atoms, energy / n_atoms)
+            if self.force_coefficient:
+                force_loss += sf.item()*self.force_coefficient * ((_Force - force) ** 2).sum()
+                force_mae  += sf.item()*F.l1_loss(_Force, force) * n_atoms
+            if self.stress_coefficient and (group in self.stress_group):
+                _Stress *= eV2GPa
+                stress_loss += sf.item()*self.stress_coefficient * ((_Stress - stress) ** 2).sum()
+                stress_mae += sf.item()*F.l1_loss(_Stress, stress) * 6
+                s_count += 6
+        
+        evidential_loss /= (2. * len(batch))
+        energy_mae /= len(batch)
+
+        if self.force_coefficient:
+            force_loss /= (2. * all_atoms)
+            force_mae /= all_atoms
+            if self.stress_coefficient:
+                stress_loss /= (2. * s_count)
+                stress_mae /= s_count
+                loss = evidential_loss + force_loss + stress_loss
+            else:
+                loss = evidential_loss + force_loss
+
+        else:
+            if self.stress_coefficient:
+                loss = evidential_loss + stress_loss
+            else:
+                loss = evidential_loss
+
+        # Add regularization to the total loss.
+        reg = 0.
+        if self.alpha: 
+            for element, model in models.items():
+                for name, params in model.named_parameters():
+                    if 'weight' in name:
+                        reg += self.alpha * params.pow(2).sum()
+            loss += reg
+
+        print("  Evidential_Loss: {:10.6f}     Force_Loss: {:10.6f}   Stress_Loss: {:10.6f}  Regularization: {:10.6f}".format(\
+                    evidential_loss, force_loss, stress_loss, reg))
+
+        return loss, energy_mae, force_mae, stress_mae
+
 
     def calculate_loss(self, models, batch):
         """ Calculate the total loss and MAE for energy and forces
@@ -514,10 +626,8 @@ class NeuralNetwork():
 
             if self.stress_coefficient and (group in self.stress_group):
                 _stress *= eV2GPa
-
                 stress_loss += sf.item()*self.stress_coefficient * ((_stress - stress) ** 2).sum()
                 stress_mae += sf.item()*F.l1_loss(_stress, stress) * 6
-                
                 s_count += 6
 
         energy_loss = energy_loss / (2. * len(batch))
@@ -548,7 +658,7 @@ class NeuralNetwork():
                         reg += self.alpha * params.pow(2).sum()
             loss += reg
 
-        print("eng_loss: {:10.6f}     force_loss: {:10.6f}   stress_loss: {:10.6f}  regularization: {:10.6f}".format(\
+        print("Evi_Loss: {:10.6f}     Force_Loss: {:10.6f}   Stress_Loss: {:10.6f}  Regularization: {:10.6f}".format(\
                     energy_loss, force_loss, stress_loss, reg))
 
         return loss, energy_mae, force_mae, stress_mae
@@ -578,11 +688,15 @@ class NeuralNetwork():
             for formula in formulas:
                 f.write(formula+'\n')
 
-    def dump_evaluate(self, predicted, true, filename):
+    def dump_evaluate(self, predicted, true, aleatoric=None, epistemic=None, filename=None):
         """ Dump the evaluate results to text files. """
         absolute_diff = np.abs(np.subtract(predicted, true))
-        combine = np.vstack((predicted, true, absolute_diff)).T
-        np.savetxt(self.path+filename, combine, header='Predicted True Diff', fmt='%.7e')
+        if aleatoric is not None:
+            combine = np.vstack((predicted, true, absolute_diff, aleatoric, epistemic)).T
+            np.savetxt(self.path+filename, combine, header='Predicted    True           Diff          Aleatoric     Epistemic', fmt='%.7e')
+        else:
+            combine = np.vstack((predicted, true, absolute_diff)).T
+            np.savetxt(self.path+filename, combine, header='Predicted    True           Diff', fmt='%.7e')
 
 
     def calculate_properties(self, descriptor, bforce=True, bstress=False):
@@ -1119,6 +1233,74 @@ class NeuralNetwork():
     def collate_fn(self, batch):
         """ Return user-defined batch. """
         return batch
+
+#class PyXtalFF_Network(torch.nn.Module):
+#    def __init__(self, input_nodes, hiddenlayers, activations):
+#        super(PyXtalFF_Network, self).__init__()
+#        self.__input_nodes__ = input_nodes
+#        self.__hiddenlayers__ = hiddenlayers
+#        self.__activations__ = activations
+#        
+#        print("HERE")
+#
+#
+#    def forward(self, x):
+#        for i, act in enumerate(self.__activations__):
+#            if i == 0:
+#                x = torch.nn.Linear(self.__input_nodes__, self.__hiddenlayers__[i])(x)
+#            else:
+#                x = torch.nn.Linear(self.__hiddenlayers__[i-1], self.__hiddenlayers__[i])(x)
+#
+#            if act == 'Tanh':
+#                x = torch.nn.functional.tanh(x)
+#            elif act == 'Sigmoid':
+#                x = torch.nn.functional.sigmoid(x)
+#            elif act == 'ReLU':
+#                x = torch.nn.functional.relu(x)
+#       
+#        # Normal Gamma Distribution
+#        x[:,1] = F.softplus(x[:,1])         # nu
+#        x[:,2] = F.softplus(x[:,2]) + 1     # alpha
+#        x[:,3] = F.softplus(x[:,3])         # beta
+#        return x
+
+#class PyXtalFF_Network(torch.nn.Module):
+#    def __init__(self, input_nodes, hiddenlayers, activations):
+#        super(PyXtalFF_Network, self).__init__()
+#        self.input_nodes = input_nodes
+#        self.hiddenlayers = hiddenlayers
+#        self.activations = activations
+#
+#        print(self.activations)
+#
+#    def forward(self, x):
+#        print("HERE")
+#        for i, (act, hl) in enumerate(zip(self.activations, self.hiddenlayers)):
+#            if i == 0:
+#                x = torch.nn.Linear(self.input_nodes, self.hiddenlayers[i])(x)
+#            else:
+#                x = torch.nn.Linear(self.hiddenlayers[i-1], self.hiddenlayers[i])(x)
+#
+#            if act == 'Tanh':
+#                x = torch.nn.functional.tanh(x)
+#            elif act == 'Sigmoid':
+#                x = torch.nn.functional.sigmoid(x)
+#            elif act == 'ReLU':
+#                x = torch.nn.functional.relu(x)
+#       
+#        # Normal Gamma Distribution
+#        #gamma, lognu, logalpha, logbeta = torch.split(x, 1, dim=1)
+#        #nu = F.softplus(lognu)
+#        #alpha = F.softplus(logalpha) + 1
+#        #beta = F.softplus(logbeta)
+#        #return torch.stack([gamma, nu, alpha, beta])
+#        
+#        # Normal Gamma Distribution
+#        #x[:,1] = F.softplus(x[:,1])         # nu
+#        #x[:,2] = F.softplus(x[:,2]) + 1     # alpha
+#        #x[:,3] = F.softplus(x[:,3])         # beta
+#        
+#        return x
 
 
 class Dataset(data.Dataset):
