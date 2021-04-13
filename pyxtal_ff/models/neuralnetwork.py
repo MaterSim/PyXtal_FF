@@ -290,7 +290,9 @@ class NeuralNetwork():
 
             dedx = None
             n_atoms = sum(len(value) for value in value['x'].values())
-            _Energy, _Nu, _Alpha, _Beta = 0., 0., 0., 0.
+            #_Energy, _Nu, _Alpha, _Beta = 0., 0., 0., 0.
+            _Energy = 0.
+            _alea, _epis = 0., 0.
             _Force = torch.zeros([n_atoms, 3], dtype=torch.float64)
             if self.stress_coefficient and (data2['group'] in self.stress_group):
                 _Stress = torch.zeros([6], dtype=torch.float64)
@@ -306,9 +308,13 @@ class NeuralNetwork():
                     agamma, lognu, logalpha, logbeta = torch.split(model(_x), 1, dim=1)
                     gamma = torch.sum(agamma)
                     _Energy += gamma
-                    _Nu += torch.sum(F.softplus(lognu))
-                    _Alpha += torch.sum(F.softplus(logalpha) + 1)
-                    _Beta += torch.sum(F.softplus(logbeta))
+                    _Nu = F.softplus(lognu)
+                    _Alpha = F.softplus(logalpha) + 1
+                    _Beta = F.softplus(logbeta)
+
+                    # Uncertainty
+                    _alea += torch.sum(( _Beta / (_Alpha - 1) ) ** 0.5)
+                    _epis += torch.sum(( _Beta / (_Alpha - 1) / _Nu ) ** 0.5)
 
                     if self.force_coefficient:
                         dedx = torch.autograd.grad(gamma, _x)[0]
@@ -330,8 +336,11 @@ class NeuralNetwork():
             force.append(np.ravel(data2["force"]))
             
             _energy.append(_Energy.item()/n_atoms)
-            _aleatoric.append(( _Beta.item() / (_Alpha.item()-1) ) ** 0.5 / n_atoms)
-            _epistemic.append(( _Beta.item() / (_Alpha.item()-1) / _Nu.item() ) ** 0.5 / n_atoms)
+            #_aleatoric.append(( _Beta.item() / (_Alpha.item()-1) ) ** 0.5 / n_atoms)
+            #_epistemic.append(( _Beta.item() / (_Alpha.item()-1) / _Nu.item() ) ** 0.5 / n_atoms)
+            _aleatoric.append(_alea / n_atoms)
+            _epistemic.append(_epis / n_atoms)
+
             _force.append(np.ravel(_Force.numpy()))
 
             if self.stress_coefficient and (data2['group'] in self.stress_group):
@@ -535,7 +544,8 @@ class NeuralNetwork():
                         _Stress -= torch.einsum("ik, ikl->l", dedx[element], rdxdr[element]) # [6]
 
             # Accumulate loss
-            evidential_loss += self.EvidentialRegression(energy, (_Gamma, _Nu, _Alpha, _Beta))
+            evidential_loss += self.EvidentialRegression(energy/n_atoms, (_Gamma/n_atoms, _Nu/n_atoms, _Alpha/n_atoms, _Beta/n_atoms))
+            #evidential_loss += self.EvidentialRegression(energy, (_Gamma, _Nu, _Alpha, _Beta)) / n_atoms
             energy_mae  += sf.item()*F.l1_loss(_Gamma / n_atoms, energy / n_atoms)
             if self.force_coefficient:
                 force_loss += sf.item()*self.force_coefficient * ((_Force - force) ** 2).sum()
@@ -550,7 +560,7 @@ class NeuralNetwork():
         energy_mae /= len(batch)
 
         if self.force_coefficient:
-            force_loss /= (2. * all_atoms)
+            force_loss /= (2. * 3. * all_atoms)
             force_mae /= all_atoms
             if self.stress_coefficient:
                 stress_loss /= (2. * s_count)
@@ -721,6 +731,7 @@ class NeuralNetwork():
         no_of_atoms = len(descriptor['elements'])
         no_of_descriptors = descriptor['x'].shape[1]
         energy, force, stress = 0., np.zeros([no_of_atoms, 3]), np.zeros([6])
+        aleatoric, epistemic = 0., 0.
         
         # Normalizing
         d = {'x': {}, 'dxdr': {}, 'seq': {}, 'rdxdr': {}}
@@ -764,15 +775,21 @@ class NeuralNetwork():
         for element, model in self.models.items():
             if element in x.keys():
                 _x = x[element].requires_grad_()
-                if bforce:
-                    _dxdr = dxdr[element]
-                if bstress:
-                    _rdxdr = rdxdr[element]
-                _e = model(_x).sum()
-                energy += _e.detach().numpy() 
+                _dxdr = dxdr[element] if bforce else None
+                _rdxdr = rdxdr[element] if bstress else None
+                agamma, lognu, logalpha, logbeta = torch.split(model(_x), 1, dim=1)
+                gamma = torch.sum(agamma)
+                energy += gamma.detach().numpy()
+                Nu = F.softplus(lognu)
+                Alpha = F.softplus(logalpha) + 1
+                Beta = F.softplus(logbeta)
+
+                # Uncertainty
+                aleatoric += torch.sum(( Beta / (Alpha - 1) ) ** 0.5)
+                epistemic += torch.sum(( Beta / (Alpha - 1) / Nu ) ** 0.5)
                 
                 if bforce:
-                    dedx = torch.autograd.grad(_e, _x)[0]
+                    dedx = torch.autograd.grad(gamma, _x)[0]
                     shp = dedx.shape
                     #force += -torch.einsum("ik, ijkl->jl", dedx, _dxdr).numpy()
                     if no_of_atoms > 400: 
@@ -790,10 +807,10 @@ class NeuralNetwork():
 
                 if bstress:
                     if bforce == False:
-                        dedx = torch.autograd.grad(_e, _x)[0]
+                        dedx = torch.autograd.grad(gamma, _x)[0]
                     stress += -torch.einsum("ik, ikl->l", dedx, _rdxdr).numpy()
 
-        return energy/no_of_atoms, force, stress*eV2GPa
+        return [energy/no_of_atoms, aleatoric.detach().numpy()/no_of_atoms, epistemic.detach().numpy()/no_of_atoms], force, stress*eV2GPa
 
 
     def save_checkpoint(self, des_info, filename=None):
@@ -1233,74 +1250,6 @@ class NeuralNetwork():
     def collate_fn(self, batch):
         """ Return user-defined batch. """
         return batch
-
-#class PyXtalFF_Network(torch.nn.Module):
-#    def __init__(self, input_nodes, hiddenlayers, activations):
-#        super(PyXtalFF_Network, self).__init__()
-#        self.__input_nodes__ = input_nodes
-#        self.__hiddenlayers__ = hiddenlayers
-#        self.__activations__ = activations
-#        
-#        print("HERE")
-#
-#
-#    def forward(self, x):
-#        for i, act in enumerate(self.__activations__):
-#            if i == 0:
-#                x = torch.nn.Linear(self.__input_nodes__, self.__hiddenlayers__[i])(x)
-#            else:
-#                x = torch.nn.Linear(self.__hiddenlayers__[i-1], self.__hiddenlayers__[i])(x)
-#
-#            if act == 'Tanh':
-#                x = torch.nn.functional.tanh(x)
-#            elif act == 'Sigmoid':
-#                x = torch.nn.functional.sigmoid(x)
-#            elif act == 'ReLU':
-#                x = torch.nn.functional.relu(x)
-#       
-#        # Normal Gamma Distribution
-#        x[:,1] = F.softplus(x[:,1])         # nu
-#        x[:,2] = F.softplus(x[:,2]) + 1     # alpha
-#        x[:,3] = F.softplus(x[:,3])         # beta
-#        return x
-
-#class PyXtalFF_Network(torch.nn.Module):
-#    def __init__(self, input_nodes, hiddenlayers, activations):
-#        super(PyXtalFF_Network, self).__init__()
-#        self.input_nodes = input_nodes
-#        self.hiddenlayers = hiddenlayers
-#        self.activations = activations
-#
-#        print(self.activations)
-#
-#    def forward(self, x):
-#        print("HERE")
-#        for i, (act, hl) in enumerate(zip(self.activations, self.hiddenlayers)):
-#            if i == 0:
-#                x = torch.nn.Linear(self.input_nodes, self.hiddenlayers[i])(x)
-#            else:
-#                x = torch.nn.Linear(self.hiddenlayers[i-1], self.hiddenlayers[i])(x)
-#
-#            if act == 'Tanh':
-#                x = torch.nn.functional.tanh(x)
-#            elif act == 'Sigmoid':
-#                x = torch.nn.functional.sigmoid(x)
-#            elif act == 'ReLU':
-#                x = torch.nn.functional.relu(x)
-#       
-#        # Normal Gamma Distribution
-#        #gamma, lognu, logalpha, logbeta = torch.split(x, 1, dim=1)
-#        #nu = F.softplus(lognu)
-#        #alpha = F.softplus(logalpha) + 1
-#        #beta = F.softplus(logbeta)
-#        #return torch.stack([gamma, nu, alpha, beta])
-#        
-#        # Normal Gamma Distribution
-#        #x[:,1] = F.softplus(x[:,1])         # nu
-#        #x[:,2] = F.softplus(x[:,2]) + 1     # alpha
-#        #x[:,3] = F.softplus(x[:,3])         # beta
-#        
-#        return x
 
 
 class Dataset(data.Dataset):

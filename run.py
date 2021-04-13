@@ -1,6 +1,7 @@
 # a slight modification based on table S5 from https://arxiv.org/pdf/1906.08888.pdf
 from pyxtal_ff import PyXtal_FF
 import os
+import shutil
 
 TrainData = "training.json"
 TestData  = "test.json"
@@ -12,7 +13,7 @@ if not os.path.exists(TrainData):
     os.system('wget ' + url + TestData)
 
 descriptor = {'type': 'SNAP',
-              'Rc': 5.0,
+              'Rc': 4.9,
               'weights': {'Si': 1.0},
               'parameters': {'lmax': 3},
               'ncpu': 1,
@@ -20,15 +21,18 @@ descriptor = {'type': 'SNAP',
 
 model = {'system' : ['Si'],
          'hiddenlayers': [20, 20],
+         'random_seed': 12345,
          'activation': ['Tanh', 'Tanh', 'Linear'],
-         #'path': 'Si-so4/',
          'optimizer': {'method': 'lbfgs'},
-         'random_seed': 15,
-         'force_coefficient': None,
-         #'stress_coefficient': 2e-3,
+         'force_coefficient': 1.,
+         'stress_coefficient': 1.,
          'alpha': 1e-6,
-         'epoch': 1000,
+         'epoch': 1200,
          }
 
-ff = PyXtal_FF(descriptors=descriptor, model=model)
-ff.run(mode='train', TrainData=TrainData, TestData=TestData)
+for i in range(1):
+    ff = PyXtal_FF(descriptors=descriptor, model=model)
+    ff.run(mode='train', TrainData=TrainData, TestData=TestData)
+    if i > 0:
+        model['restart'] = 'Si-SNAP/20-20-checkpoint.pth'
+    shutil.copyfile('Si-SNAP/20-20-checkpoint.pth', f"{i*500}.pth")

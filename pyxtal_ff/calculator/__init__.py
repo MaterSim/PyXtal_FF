@@ -29,9 +29,16 @@ class PyXtalFFCalculator(Calculator):
         desp = compute_descriptor(self.parameters.ff._descriptors, atoms)
         energy, forces, stress = self.parameters.ff.model.calculate_properties(desp, bforce=True, bstress=True)
 
+        if isinstance(energy, list):
+            energy, aleatoric, epistemic = energy
+        else:
+            energy, aleatoric, epistemic = None
+
         self.desp = desp
         self.results['energy'] = energy*len(atoms)
         self.results['free_energy'] = energy*len(atoms)
+        self.results['aleatoric'] = aleatoric*len(atoms)
+        self.results['epistemic'] = epistemic*len(atoms)
         self.results['forces'] = forces
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
