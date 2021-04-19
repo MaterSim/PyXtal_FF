@@ -21,7 +21,7 @@ class SO3:
         derivative: bool, whether to calculate the gradient of not
     '''
 
-    def __init__(self, nmax=3, lmax=3, rcut=3.5, alpha=2.0, derivative=True, stress=False):
+    def __init__(self, nmax=3, lmax=3, rcut=3.5, alpha=2.0, derivative=True, stress=False, cutoff_function='cosine'):
         # populate attributes
         self.nmax = nmax
         self.lmax = lmax
@@ -30,6 +30,7 @@ class SO3:
         self.derivative = derivative
         self.stress = stress
         self._type = "SO3"
+        self.cutoff_function = cutoff_function
         return
 
     def __str__(self):
@@ -143,13 +144,47 @@ class SO3:
         else:
             raise ValueError('stress must be a boolean value')
 
+    @property
+    def cutoff_function(self):
+        return self._cutoff_function
+
+    @cutoff_function.setter
+    def cutoff_function(self, cutoff_function):
+        if isinstance(cutoff_function, str) is True:
+            # more conditions
+            if cutoff_function == 'cosine':
+                self._cutoff_id = 1
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'tanh':
+                self._cutoff_id = 2
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'poly1':
+                self._cutoff_id = 3
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'poly2':
+                self._cutoff_id = 4
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'poly3':
+                self._cutoff_id = 5
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'poly4':
+                self._cutoff_id = 6
+                self._cutoff_function = cutoff_function
+            elif cutoff_function == 'exp':
+                self._cutoff_id = 7
+                self._cutoff_function = cutoff_function
+            else:
+                raise NotImplementedError('The requested cutoff function has not been implemented')
+        else:
+            raise ValueError('You must specify the cutoff function as a string')
+
     def clear_memory(self):
         '''
         Clears all memory that isn't an essential attribute for the calculator
         '''
         attrs = list(vars(self).keys())
         for attr in attrs:
-            if attr not in {'_nmax', '_lmax', '_rcut', '_alpha', '_derivative', '_stress'}:
+            if attr not in {'_nmax', '_lmax', '_rcut', '_alpha', '_derivative', '_stress', 'cutoff_id'}:
                 delattr(self, attr)
         return
 
@@ -175,7 +210,7 @@ class SO3:
                                       self.seq,
                                       self.atomic_numbers, self.nmax, self.lmax,
                                       self.rcut, self.alpha, self.derivative,
-                                      self.stress, self._plist, self._dplist, self._pstress)
+                                      self.stress, self._plist, self._dplist, self._pstress, self._cutoff_id)
         vol = atoms.get_volume()
 
         if self.derivative:
@@ -298,6 +333,110 @@ class SO3:
         self.site_atomic_numbers = site_atomic_numbers
 
         return
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Cosine(Rij, Rc):
+    # Rij is the norm 
+    result = 0.5 * (np.cos(np.pi * Rij / Rc) + 1.)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def CosinePrime(Rij, Rc):
+    # Rij is the norm
+    result = -0.5 * np.pi / Rc * np.sin(np.pi * Rij / Rc)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Tanh(Rij, Rc):
+    result = np.tanh(1-Rij/Rc)**3
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def TanhPrime(Rij, Rc):
+    tanh_square = np.tanh(1-Rij/Rc)**2
+    result = - (3/Rc) * tanh_square * (1-tanh_square)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly1(Rij, Rc):
+    x = Rij/Rc
+    x_square = x**2
+    result = x_square * (2*x-3) + 1
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly1Prime(Rij, Rc):
+    term1 = (6 / Rc**2) * Rij
+    term2 = Rij/Rc - 1
+    result = term1*term2
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly2(Rij, Rc):
+    x = Rij/Rc
+    result = x**3 * (x*(15-6*x)-10) + 1
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly2Prime(Rij, Rc):
+    x = Rij/Rc
+    result = (-30/Rc) * (x**2 * (x-1)**2)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly3(Rij, Rc):
+    x = Rij/Rc
+    result = x**4*(x*(x*(20*x-70)+84)-35)+1
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly3Prime(Rij, Rc):
+    x = Rij/Rc
+    result = (140/Rc) * (x**3 * (x-1)**3)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly4(Rij, Rc):
+    x = Rij/Rc
+    result = x**5*(x*(x*(x*(315-70*x)-540)+420)-126)+1
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Poly4Prime(Rij, Rc):
+    x = Rij/Rc
+    result = (-630/Rc) * (x**4 * (x-1)**4)
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def Exponent(Rij, Rc):
+    x = Rij/Rc
+    try:
+        result = np.exp(1 - 1/(1-x**2))
+    except:
+        result = 0
+    return result
+
+
+@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
+def ExponentPrime(Rij, Rc):
+    x = Rij/Rc
+    try:
+        result = 2*x * np.exp(1 - 1/(1-x**2)) / (1+x**2)**2
+    except:
+        result = 0
+    return result
 
 @nb.njit(cache=True, nogil=True, fastmath=True)
 def init_rootpqarray(twol):
@@ -456,6 +595,84 @@ def modifiedSphericalBessel1(r, n, derivative):
                 temp_arr[i] = temp_arr[i-2] - (2*i-1)/r*temp_arr[i-1]
             return (n*temp_arr[n-1] + (n+1)*temp_arr[n+1]) / (2*n+1)
 
+@nb.njit(nb.f8(nb.f8, nb.f8, nb.i8), cache=True, fastmath=True, nogil=True)
+def compute_sfac(r, rcut, cutoff_id):
+    '''Calculates the cosine cutoff function value given in
+    On Representing Chemical Environments, Batrok, et al.
+
+    The cosine cutoff function ensures that the hyperspherical
+    expansion for the calculation of bispectrum coefficients goes
+    smoothly to zero for atomic neighbors tending to the cutoff
+    radius.
+
+    Parameters
+    ----------
+    r: float
+        The magnitude of the separation vector from
+        an atom in the unit cell to a particular neighbor
+    rcut: float
+        The cutoff radius specified in the SO4_Bispectrum class
+
+    Returns
+    -------
+    cosine_cutoff:  float 0.5 * (cos(pi*r/rcut) + 1.0)
+    '''
+    if r > rcut:
+        return 0
+    else:
+        if cutoff_id == 1:
+            return Cosine(r, rcut)
+        elif cutoff_id == 2:
+            return Tanh(r, rcut)
+        elif cutoff_id == 3:
+            return Poly1(r, rcut)
+        elif cutoff_id == 4:
+            return Poly2(r, rcut)
+        elif cutoff_id == 5:
+            return Poly3(r, rcut)
+        elif cutoff_id == 6:
+            return Poly4(r, rcut)
+        elif cutoff_id == 7:
+            return Exponent(r, rcut)
+        else:
+            raise ValueError('not implemented')
+
+@nb.njit(nb.f8(nb.f8, nb.f8, nb.i8), cache=True, fastmath=True, nogil=True)
+def compute_dsfac(r, rcut, cutoff_id):
+    '''Calculates the derivative of the cosine cutoff for a given radii
+
+    Parameters
+    ----------
+    r: float
+        see compute_sfac
+    rcut: float
+        see compute_sfac
+
+    Returns
+    -------
+    dcosine_cutoff/dr float -0.5*pi/rcut*sin(pi*r/rcut)
+    '''
+    if r > rcut:
+        return 0
+
+    else:
+        if cutoff_id == 1:
+            return CosinePrime(r, rcut)
+        elif cutoff_id == 2:
+            return TanhPrime(r, rcut)
+        elif cutoff_id == 3:
+            return Poly1Prime(r, rcut)
+        elif cutoff_id == 4:
+            return Poly2Prime(r, rcut)
+        elif cutoff_id == 5:
+            return Poly3Prime(r, rcut)
+        elif cutoff_id == 6:
+            return Poly4Prime(r, rcut)
+        elif cutoff_id == 7:
+               return ExponentPrime(r, rcut)
+        else:
+            raise ValueError('not implemented')
+
 '''
 These next three functions are for the evaluation of the orthonormal polynomial basis on [0,rcut]
 proposed in on representing chemical environments
@@ -548,9 +765,9 @@ def get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, derivative, g_array
     return integral
 
 @nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:],
-                 nb.c16[:], nb.i8[:], nb.f8[:,:]),
+                 nb.c16[:], nb.i8[:], nb.f8[:,:], nb.i8),
          cache=True, fastmath=True, nogil=True)
-def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm, g_array):
+def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm, g_array, cutoff_id):
     '''
     Get expansion coefficient for one neighbor.  Then add
     to the whole expansion coefficient
@@ -584,6 +801,8 @@ def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm
     # gaussian factor for this neighbor for the inner product
     expfac = 4*np.pi*np.exp(-alpha*ri**2)
 
+    sfac = compute_sfac(ri, rcut, cutoff_id)
+
     for n in range(1, nmax+1, 1):
         i = 0
         for l in range(0, lmax+1 ,1):
@@ -592,15 +811,15 @@ def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm
             r_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, False, g_array, Nmax)
             for m in range(-l, l+1, 1):
                 #Ylm = sph_harm(Ra, Rb, l, m)
-                Ylm = ulist[idxylm[i]].conjugate()*np.sqrt((2*l+1)/4/np.pi)*(-1)**m
-                clist[n-1, i] += r_int*Ylm*expfac
+                Ylm = ulist[idxylm[i]]*np.sqrt((2*l+1)/4/np.pi)*(-1)**m
+                clist[n-1, i] += r_int*Ylm*expfac*sfac
                 i += 1
     return
 
 @nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:],
-                 nb.c16[:,:,:], nb.c16[:], nb.i8[:], nb.f8[:,:]),
+                 nb.c16[:,:,:], nb.c16[:], nb.i8[:], nb.f8[:,:], nb.i8),
          cache=True, fastmath=True, nogil=True)
-def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ulist, idxylm, g_array):
+def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ulist, idxylm, g_array, cutoff_id):
     '''
     Get expansion coefficient for one neighbor.  Then add
     to the whole expansion coefficient
@@ -639,7 +858,7 @@ def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ul
     for l in range(0, lmax+2, 1):
         for m in range(-l, l+1, 1):
             #Ylms[i] = sph_harm(Ra, Rb, l, m)
-            Ylms[i] = ulist[idxylm[i]].conjugate()*np.sqrt((2*l+1)/4/np.pi)*(-1)**m
+            Ylms[i] = ulist[idxylm[i]]*np.sqrt((2*l+1)/4/np.pi)*(-1)**m
             i += 1
 
     dYlm = np.zeros(((lmax+1)**2,3), dtype=np.complex128)
@@ -683,6 +902,8 @@ def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ul
     # gaussian factor for this neighbor for the inner product
     expfac = 4*np.pi*np.exp(-alpha*ri**2)
     dexpfac = -2*alpha*expfac*rvec
+    sfac = compute_sfac(ri, rcut, cutoff_id)
+    dsfac = compute_dsfac(ri, rcut, cutoff_id)*rvec/ri
 
     for n in range(1, nmax+1, 1):
         i = 0
@@ -692,8 +913,11 @@ def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ul
             r_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, False, g_array, Nmax)
             dr_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, True, g_array, Nmax)*2*alpha*rvec/ri
             for m in range(-l, l+1, 1):
-                clist[n-1, i] += r_int*Ylms[i]*expfac
-                dclist[n-1,i,:] += r_int*Ylms[i]*dexpfac + dr_int*Ylms[i]*expfac + r_int*expfac*dYlm[i,:]
+                sfac = compute_sfac(ri, rcut, cutoff_id)
+                dsfac = compute_dsfac(ri, rcut, cutoff_id)*rvec/ri
+                clist[n-1, i] += r_int*Ylms[i]*expfac*sfac
+                dclist[n-1,i,:] += (r_int*Ylms[i]*dexpfac + dr_int*Ylms[i]*expfac + r_int*expfac*dYlm[i,:])*sfac
+                dclist[n-1,i,:] += r_int*Ylms[i]*expfac*dsfac
                 i += 1
     return
 
@@ -783,9 +1007,9 @@ def zero_4D_array(arr):
                     arr[i,j,k,l] = 0.0 + 0.0j
     return
 
-@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8, nb.i8, nb.f8, nb.f8, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:]),
+@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8, nb.i8, nb.f8, nb.f8, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:], nb.i8),
          cache=True, fastmath=True, nogil=True)
-def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, nmax, lmax, rcut, alpha, derivative, stress, plist, dplist, pstress):
+def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, nmax, lmax, rcut, alpha, derivative, stress, plist, dplist, pstress, cutoff_id):
     '''
     Interface to SO3 class, this is the main work function for the power spectrum calculation.
     '''
@@ -868,7 +1092,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                             compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
 
                             compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor], ulist, idxylm, g_array)
+                                              clist, dclist[neighbor], ulist, idxylm, g_array, cutoff_id)
 
                             dclist[neighbor] *= Weight
 
@@ -908,7 +1132,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
                     compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
                     compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, ulist, idxylm, g_array)
+                                      clist, ulist, idxylm, g_array, cutoff_id)
 
                     clist *= weight
 
@@ -934,7 +1158,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
                     compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
                     compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor], ulist, idxylm, g_array)
+                                      clist, dclist[neighbor], ulist, idxylm, g_array, cutoff_id)
 
                     dclist[neighbor] *= Weight
 
@@ -988,7 +1212,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                             zero_1d(ulist)
                             compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
                             compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor], ulist, idxylm, g_array)
+                                              clist, dclist[neighbor], ulist, idxylm, g_array, cutoff_id)
 
                             dclist[neighbor] *= Weight
 
@@ -1018,7 +1242,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
 
                     compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist,ulist,idxylm, g_array)
+                                      clist,ulist,idxylm, g_array, cutoff_id)
 
                     clist *= weight
 
@@ -1043,7 +1267,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
 
                     compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor], ulist, idxylm, g_array)
+                                      clist, dclist[neighbor], ulist, idxylm, g_array, cutoff_id)
 
                     dclist[neighbor] *= Weight
 
@@ -1089,7 +1313,7 @@ def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs,
                     zero_1d(ulist)
 
                     compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, ulist, idxylm, g_array)
+                                      clist, ulist, idxylm, g_array, cutoff_id)
 
                     clist *= weight
 
