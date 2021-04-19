@@ -383,21 +383,22 @@ class PR():
 
         Returns:
         --------
-        energy: float
-            The predicted energy
+        energies: 1D array 
+            The predicted energies
         forces: 2D array [N_atom, 3] (if dxdr is provided)
             The predicted forces
         stress: 2D array [3, 3] (if rdxdr is provided)
             The predicted stress
         """
         no_of_atoms = len(descriptor['elements'])
-        energy, force, stress = 0., np.zeros([no_of_atoms, 3]), np.zeros([6])
+        energies, force, stress = np.zeros([no_of_atoms]), np.zeros([no_of_atoms, 3]), np.zeros([6])
         
         X = self.parse_descriptors({'0': descriptor}, fc=bforce, sc=bstress, train=False)
         
         _y = np.dot(X, self.coef_) # Calculate properties
 
-        energy = _y[0] # get energy
+        #energy = _y[0] # get energy
+        #energies = _y[0] # return the array of atomic energies
         
         if bforce: # get force
             force += np.reshape(_y[1:(no_of_atoms*3+1)], (no_of_atoms, 3))
@@ -405,7 +406,7 @@ class PR():
         if bstress: # get stress
             stress += _y[-6:]*eV2GPa # in GPa
         
-        return energy, force, stress
+        return energies, force, stress
 
 
     def mean_absolute_error(self, true, predicted):

@@ -27,11 +27,12 @@ class PyXtalFFCalculator(Calculator):
         #self.ff.run(mode='predict', mliap=self.parameters.mliap)
 
         desp = compute_descriptor(self.parameters.ff._descriptors, atoms)
-        energy, forces, stress = self.parameters.ff.model.calculate_properties(desp, bforce=True, bstress=True)
+        energies, forces, stress = self.parameters.ff.model.calculate_properties(desp, bforce=True, bstress=True)
 
         self.desp = desp
-        self.results['energy'] = energy*len(atoms)
-        self.results['free_energy'] = energy*len(atoms)
+        self.results['energies'] = energies
+        self.results['energy'] = energies.sum()
+        self.results['free_energy'] = energies.sum()
         self.results['forces'] = forces
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy

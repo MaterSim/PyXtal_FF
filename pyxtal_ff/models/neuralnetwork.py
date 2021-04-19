@@ -606,7 +606,7 @@ class NeuralNetwork():
         """
         no_of_atoms = len(descriptor['elements'])
         no_of_descriptors = descriptor['x'].shape[1]
-        energy, force, stress = 0., np.zeros([no_of_atoms, 3]), np.zeros([6])
+        energies, force, stress = np.zeros([no_of_atoms]), np.zeros([no_of_atoms, 3]), np.zeros([6])
         
         # Normalizing
         d = {'x': {}, 'dxdr': {}, 'seq': {}, 'rdxdr': {}}
@@ -647,6 +647,7 @@ class NeuralNetwork():
         if bstress:
             rdxdr = d['rdxdr']
         
+        count = 0
         for element, model in self.models.items():
             if element in x.keys():
                 _x = x[element].requires_grad_()
@@ -655,7 +656,9 @@ class NeuralNetwork():
                 if bstress:
                     _rdxdr = rdxdr[element]
                 _e = model(_x).sum()
-                energy += _e.detach().numpy() 
+                #energy += _e.detach().numpy() 
+                energies[count:count+len(_x)] = model(_x).detach().numpy().reshape([len(_x)])
+
                 
                 if bforce:
                     dedx = torch.autograd.grad(_e, _x)[0]
@@ -679,7 +682,7 @@ class NeuralNetwork():
                         dedx = torch.autograd.grad(_e, _x)[0]
                     stress += -torch.einsum("ik, ikl->l", dedx, _rdxdr).numpy()
 
-        return energy/no_of_atoms, force, stress*eV2GPa
+        return energies, force, stress*eV2GPa
 
 
     def save_checkpoint(self, des_info, filename=None):
