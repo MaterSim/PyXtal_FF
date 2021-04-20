@@ -125,13 +125,13 @@ class PR():
  
         for i in range(len(list(db.keys()))):
             no_of_atoms = len(db[str(i)]['force'])
-            Energy, Force, Stress = self.calculate_properties(db[str(i)], 
+            Energy, Force, Stress = self.calculate_properties(db[str(i)],       # Energy per atom
                                     self.force_coefficient, self.stress_coefficient)
             
             # Store energy into list
             true_energy = db[str(i)]['energy'] / no_of_atoms
             energy.append(true_energy)
-            _energy.append(Energy)
+            _energy.append(Energy.sum() / no_of_atoms)
 
             if self.force_coefficient:
                 true_force = np.ravel(db[str(i)]['force'])
@@ -383,8 +383,8 @@ class PR():
 
         Returns:
         --------
-        energies: 1D array 
-            The predicted energies
+        energy: float
+            The predicted energy
         forces: 2D array [N_atom, 3] (if dxdr is provided)
             The predicted forces
         stress: 2D array [3, 3] (if rdxdr is provided)
@@ -397,11 +397,12 @@ class PR():
         
         _y = np.dot(X, self.coef_) # Calculate properties
 
-        #energy = _y[0] # get energy
-        #energies = _y[0] # return the array of atomic energies
+        energies = _y[:no_of_atoms]
+
+        #energy = _y[0] / no_of_atoms # get energy/atom
         
         if bforce: # get force
-            force += np.reshape(_y[1:(no_of_atoms*3+1)], (no_of_atoms, 3))
+            force += np.reshape(_y[no_of_atoms:no_of_atoms+(no_of_atoms*3)], (no_of_atoms, 3))
 
         if bstress: # get stress
             stress += _y[-6:]*eV2GPa # in GPa
@@ -467,7 +468,7 @@ class PR():
             d_max = self.d_max
 
         columns = (1+d_max)*len(self.elements)
-        rows = no_of_structures
+        rows = no_of_structures if train else no_of_atoms
         rows += no_of_atoms * 3 if fc else 0 # x, y, and z
         rows += stress_components if sc else 0 # xx, xy, xz, ..., zz
         
@@ -559,66 +560,121 @@ class PR():
             # Arranging x and dxdr for energy and forces.
             bias_weights = 1.0
             
-            sna = np.zeros([len(self.elements), 1+d_max])
-            if fc:
-                snad = np.zeros([len(self.elements), len(x), 1+d_max, 3])
-            if sc and _group:
-                snav = np.zeros([len(self.elements), 1+d_max, 6])
-            
-            _sna, _snad, _snav, _count = {}, {}, {}, {}
-            for element in self.elements:
-                _sna[element] = None
-                _snad[element] = None
-                _snav[element] = None
-                _count[element] = 0
-            
-            # Loop over the number of atoms in a structure.
-            for e, element in enumerate(elements):
-                if _sna[element] is None:
-                    _sna[element] = 1 * x[e]
-                    if fc:
-                        shp = snad.shape
-                        _snad[element] = np.zeros([shp[1], shp[2]-1, shp[3]])
-                        arr = np.where(seq[:, 0]==e)[0]
-                        _seq = seq[arr][:, 1]
-                        _snad[element][_seq] = -1 * dxdr[arr]
-                    if sc and _group:
-                        _snav[element] = -1 * rdxdr[e]  # [d, 6]
-                else:
-                    _sna[element] += x[e]
-                    if fc:
-                        arr = np.where(seq[:, 0]==e)[0]
-                        _seq = seq[arr][:, 1]
-                        _snad[element][_seq] -= dxdr[arr]
-                    if sc and _group: 
-                        _snav[element] -= rdxdr[e]
-                _count[element] += 1
+            if train:
+                sna = np.zeros([len(self.elements), 1+d_max])
+                if fc:
+                    snad = np.zeros([len(self.elements), len(x), 1+d_max, 3])
+                if sc and _group:
+                    snav = np.zeros([len(self.elements), 1+d_max, 6])
+                
+                _sna, _snad, _snav, _count = {}, {}, {}, {}
+                for element in self.elements:
+                    _sna[element] = None
+                    _snad[element] = None
+                    _snav[element] = None
+                    _count[element] = 0
+                
+                # Loop over the number of atoms in a structure.
+                for e, element in enumerate(elements):
+                    if _sna[element] is None:
+                        _sna[element] = 1 * x[e]
+                        if fc:
+                            shp = snad.shape
+                            _snad[element] = np.zeros([shp[1], shp[2]-1, shp[3]])
+                            arr = np.where(seq[:, 0]==e)[0]
+                            _seq = seq[arr][:, 1]
+                            _snad[element][_seq] = -1 * dxdr[arr]
+                        if sc and _group:
+                            _snav[element] = -1 * rdxdr[e]  # [d, 6]
+                    else:
+                        _sna[element] += x[e]
+                        if fc:
+                            arr = np.where(seq[:, 0]==e)[0]
+                            _seq = seq[arr][:, 1]
+                            _snad[element][_seq] -= dxdr[arr]
+                        if sc and _group: 
+                            _snav[element] -= rdxdr[e]
+                    _count[element] += 1
 
-            for e, element in enumerate(self.elements):
-                if _count[element] > 0:
-                    _sna[element] /= _count[element]
-                    sna[e, :] += np.hstack(([bias_weights], _sna[element]))
-                    if fc:
-                        snad[e, :, 1:, :] += _snad[element]
-                    if sc and _group:
-                        snav[e, 1:, :] += _snav[element]
-                    
-            # X for energy
-            X[xcount, :] += sna.ravel()
-            xcount += 1
+                for e, element in enumerate(self.elements):
+                    if _count[element] > 0:
+                        #_sna[element] /= _count[element]
+                        sna[e, :] += np.hstack(([bias_weights*_count[element]], _sna[element]))
+                        if fc:
+                            snad[e, :, 1:, :] += _snad[element]
+                        if sc and _group:
+                            snav[e, 1:, :] += _snav[element]
+                        
+                # X for energy
+                X[xcount, :] += sna.ravel()
+                xcount += 1
 
-            # X for forces.
-            if fc:
-                for j in range(snad.shape[1]):
-                    for k in range(snad.shape[3]):
-                        X[xcount, :] += snad[:, j, :, k].ravel()
-                        xcount += 1
-            
-            # X for stress.
-            if sc and _group: 
-                shp = snav.shape
-                X[xcount:xcount+6, :] = snav.reshape([shp[0]*shp[1], shp[2]]).T
-                xcount += 6
+                # X for forces.
+                if fc:
+                    for j in range(snad.shape[1]):
+                        for k in range(snad.shape[3]):
+                            X[xcount, :] += snad[:, j, :, k].ravel()
+                            xcount += 1
+                
+                # X for stress.
+                if sc and _group: 
+                    shp = snav.shape
+                    X[xcount:xcount+6, :] = snav.reshape([shp[0]*shp[1], shp[2]]).T
+                    xcount += 6
+
+            else:
+                if fc:
+                    snad = np.zeros([len(self.elements), len(x), 1+d_max, 3])
+                if sc and _group:
+                    snav = np.zeros([len(self.elements), 1+d_max, 6])
+                _snad, _snav, _count = {}, {}, {}
+                for element in self.elements:
+                    _snad[element] = None
+                    _snav[element] = None
+                    _count[element] = 0
+
+                # Loop over the number of atoms in a structure.
+                for e, element in enumerate(elements):
+                    elem_cnt = self.elements.index(element)
+                    X[xcount, elem_cnt*(1+d_max):(elem_cnt+1)*(1+d_max)] = np.hstack(([bias_weights], x[e]))
+                    xcount += 1
+                    if _snad[element] is None:
+                        if fc:
+                            shp = snad.shape
+                            _snad[element] = np.zeros([shp[1], shp[2]-1, shp[3]])
+                            arr = np.where(seq[:, 0]==e)[0]
+                            _seq = seq[arr][:, 1]
+                            _snad[element][_seq] = -1 * dxdr[arr]
+                        if sc and _group:
+                            _snav[element] = -1 * rdxdr[e]  # [d, 6]
+                    else:
+                        if fc:
+                            arr = np.where(seq[:, 0]==e)[0]
+                            _seq = seq[arr][:, 1]
+                            _snad[element][_seq] -= dxdr[arr]
+                        if sc and _group: 
+                            _snav[element] -= rdxdr[e]
+                    _count[element] += 1
+
+                for e, element in enumerate(self.elements):
+                    if _count[element] > 0:
+                        if fc:
+                            snad[e, :, 1:, :] += _snad[element]
+                        if sc and _group:
+                            snav[e, 1:, :] += _snav[element]
+
+                # X for forces.
+                if fc:
+                    for j in range(snad.shape[1]):
+                        for k in range(snad.shape[3]):
+                            X[xcount, :] += snad[:, j, :, k].ravel()
+                            xcount += 1
+                
+                # X for stress.
+                if sc and _group: 
+                    shp = snav.shape
+                    X[xcount:xcount+6, :] = snav.reshape([shp[0]*shp[1], shp[2]]).T
+                    xcount += 6
         
         if train:
             db.close()
@@ -651,7 +707,8 @@ class PR():
         
         for i in range(self.no_of_structures):
             data = db[str(i)]
-            energy = np.array([data['energy']/len(data['elements'])])
+            #energy = np.array([data['energy']/len(data['elements'])])
+            energy = np.array([data['energy']])
             w_energy = np.array([1.])
 
             if self.force_coefficient:
