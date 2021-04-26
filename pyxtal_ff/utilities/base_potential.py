@@ -5,11 +5,36 @@ from ase.neighborlist import NeighborList
 factor = 14.399645306701126
 
 class ZBL:
+    """A class for calculating the Ziegler-Biersack-Littmark (ZBL) 
+    screened nuclear repulsion for describing high-energy collisions between atoms.
+
+    Source: J.F. Ziegler, J. P. Biersack and U. Littmark, 
+            “The Stopping and Range of Ions in Matter,” Volume 1, Pergamon, 1985.
+
+    Parameters
+    ----------
+    inner: float
+        distance where switching function begins.
+    outer: float
+        global cutoff for ZBL interaction.
+    """
     def __init__(self, inner, outer):
         self.inner = inner
         self.outer = outer
 
     def calculate(self, crystal):
+        """ The calculate function.
+        
+        Parameters
+        ----------
+        crystal: object
+            ASE Structure object.
+
+        Returns
+        -------
+        results: dict
+            The energy, forces, and stress of ZBL contribution.
+        """
         self.crystal = crystal
         self.total_atoms = len(crystal)
         vol = crystal.get_volume()
@@ -76,7 +101,31 @@ class ZBL:
         return self.result
 
 
-def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, derivative=True, stress_derivative=True):
+def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, 
+        derivative=True:
+    """Calculate the atomic ZBL energy, force, and stress.
+
+    Parameters
+    ----------
+    i: int
+        The i-th center atom
+    rij: float array [j,3]
+        The vector distances of atom i to neighbors js.
+    dij: float array [j]
+        The distance between atom i and neighbors js.
+    Zi: int
+        The atomic number of atom i.
+    Zj: int array
+        The atomic number of atom j.
+    r_outer: float
+        global cutoff for ZBL interaction.
+    r_inner: float
+        distance where switching function begins.
+    total_atoms: int
+        The total atom in the unit cell
+    IDs: int array [j]
+        The indices of neighbors centering about atom i.
+    """
     ids1 = (dij <= r_outer)
 
     if True not in ids1:
@@ -135,7 +184,6 @@ def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, 
         #t1 = time.time()
         #print("Energy", t1-t0)
 
-
         # Force
         #t0 = time.time()
         dE1_ddij = -Eij * dij_inv
@@ -169,7 +217,8 @@ def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, 
 
 
 def get_ABC_coefficients(Zi, Zj, r_outer, r_inner):
-    import time
+    """A function to get the switching A, B, and C coefficients."""
+    #import time
     t0 =time.time()
     kZiZj = factor * Zi * Zj
     a_inv = (Zi ** 0.23 + Zj ** 0.23) / 0.46850
@@ -194,8 +243,8 @@ def get_ABC_coefficients(Zi, Zj, r_outer, r_inner):
     A = (-3 * EP + r * EDP) / r ** 2
     B = (2 * EP - r * EDP) / r ** 3
     C = -E + 0.5 * r * EP - (1/12) * r ** 2 * EDP
-    t1 = time.time()
-    print(t1-t0)
+    #t1 = time.time()
+    #print(t1-t0)
 
     return [A, B, C]
 
