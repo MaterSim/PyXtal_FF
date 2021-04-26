@@ -63,60 +63,85 @@ class ZBL:
             Zj = np.array(Zj)
             ABCij = np.array(ABCij)
 
-            #print(ABCij)
-            #print(ABCij.shape)
-            #import sys; sys.exit()
-
-
-
             Rij = Rj - Ri
             Dij = np.sqrt(np.sum(Rij**2, axis=1))
 
-            d = calculate_ZBL(Rij, Dij, Zi, Zj, self.outer, self.inner, ABCij)
-            self.result['energy'] += d
+            energy, forces, stress = calculate_ZBL(i, Rij, Dij, Zi, Zj, self.outer, self.inner, ABCij, self.total_atoms, IDs)
+            self.result['energy'] += energy
+            self.result['force'] += forces
 
         return self.result
 
 
-def calculate_ZBL(rij, dij, Zi, Zj, r_outer, r_inner, ABC):
+def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, derivative=True, stress_derivative=True):
     ids1 = (dij <= r_outer)
-    #nids1 = np.logical_not(ids1)
-
-
 
     if True not in ids1:
-        return 0.
-
+        return 0., np.zeros([total_atoms, 3]), np.zeros([6])
     else:
-        results = np.zeros([len(rij)])
+        ij_list = i * np.ones([len(IDs), 2], dtype=int)
+        ij_list[:, 1] = IDs
+        unique_js = np.unique(IDs)
+        if i not in unique_js:
+            unique_js = np.append(i, unique_js)
+        unique_js.sort()
+        seq = i*np.ones([len(unique_js), 2], dtype=int)
+        seq[:, 1] = unique_js
+        uN = len(unique_js)
+
+        energy = np.zeros([len(dij)])
+        forces = np.zeros([total_atoms, 3])
+        stress = np.zeros([6])
 
         kZi = factor * Zi
-        #kZi = Zi
         kZiZj = kZi * Zj
         dij_inv = 1 / dij
-
         Zi_inv = Zi ** 0.23 / 0.46850
         Zj_inv = Zj ** 0.23 / 0.46850
         a_inv = Zi_inv + Zj_inv
-
         x = dij * a_inv
-        phi_ij = 0.18175 * np.exp(-3.19980 * x) + 0.50986 * np.exp(-0.94229 * x) + \
-                 0.28022 * np.exp(-0.40290 * x) + 0.02817 * np.exp(-0.20162 * x) 
-
+        
+        exp1 = np.exp(-3.19980 * x)
+        exp2 = np.exp(-0.94229 * x)
+        exp3 = np.exp(-0.40290 * x)
+        exp4 = np.exp(-0.20162 * x)
+        phi_ij = 0.18175 * exp1 + 0.50986 * exp2 + 0.28022 * exp3 + 0.02817 * exp4
         Eij = kZiZj * dij_inv * phi_ij 
 
-        # add switching function
-        SA = 0.333333333 * ABC[:,0] * (dij - r_inner) ** 3
-        SB = 0.25 * ABC[:,1] * (dij - r_inner) ** 4
-        SC = ABC[:,2]
-
-        results[ids1] += SC[ids1]
-
+        # Switching function
+        if derivative:
+            dSA = ABC[:,0] * (dij - r_inner) ** 2
+            dSB = ABC[:,1] * (dij - r_inner) ** 3
+            SA = 0.333333333 * dSA * (dij - r_inner)
+            SB = 0.25 * dSB * (dij - r_inner)
+            SC = ABC[:,2]
+        else:
+            SA = 0.333333333 * ABC[:,0] * (dij - r_inner) ** 3
+            SB = 0.25 * ABC[:,1] * (dij - r_inner) ** 4
+            SC = ABC[:,2]
+        
+        # Collecting atomic energy
+        energy[ids1] += SC[ids1] + Eij[ids1]
         ids2 = (dij <= r_outer) & (dij > r_inner)
-        results[ids2] += SA[ids2] + SB[ids2]
-    
-        return np.sum(results) #np.sum(ZBL_ij)
+        energy[ids2] += SA[ids2] + SB[ids2]
 
+        # Force
+        dE1_ddij = -Eij * dij_inv
+
+        dphi_ddij = (-0.18175 * 3.19980 * exp1 - 0.50986 * 0.94229 * exp2 - \
+                      0.28022 * 0.40290 * exp3 - 0.02817 * 0.20162 * exp4) * a_inv
+        dE2_ddij = kZiZj * dij_inv * dphi_ddij
+
+        dRij_dRm = np.zeros([len(dij), 3, uN])
+        for mm, _m in enumerate(unique_js):
+            mm_list = _m * np.ones([len(dij), 1], dtype=int)
+            dRij_dRm[:,:,mm] = dRij_dRm_norm(rij, np.hstack((ij_list, mm_list))) # [j, 3, uN]
+
+        dE_ddij = dE1_ddij + dE2_ddij + dSA + dSB # [j]
+
+        forces -= np.einsum('ijk,i->kj', dRij_dRm[ids2], dE_ddij[ids2])
+    
+        return np.sum(energy), forces, stress
 
 def get_ABC_coefficients(Zi, Zj, r_outer, r_inner):
     kZiZj = factor * Zi * Zj
@@ -133,7 +158,7 @@ def get_ABC_coefficients(Zi, Zj, r_outer, r_inner):
     phiP = (-0.18175 * 3.19980 * exp1 - 0.50986 * 0.94229 * exp2 - \
              0.28022 * 0.40290 * exp3 - 0.02817 * 0.20162 * exp4) * a_inv
     phiDP = (0.18175 * 3.19980 ** 2 * exp1 + 0.50986 * 0.94229 ** 2 * exp2 + \
-             0.28022 * 0.40290 ** 2 * exp3 + 0.02817 * 0.20162 ** 2 * exp4) * a_inv
+             0.28022 * 0.40290 ** 2 * exp3 + 0.02817 * 0.20162 ** 2 * exp4) * (a_inv ** 2)
 
     E = kZiZj * (1 / r_outer) * phi
     EP = kZiZj * (-1 / r_outer ** 2 * phi + 1 / r_outer * phiP)
@@ -141,19 +166,55 @@ def get_ABC_coefficients(Zi, Zj, r_outer, r_inner):
 
     A = (-3 * EP + r * EDP) / r ** 2
     B = (2 * EP - r * EDP) / r ** 3
-    C = -E + 0.5 * r * EP - (1/12) * r ** 2 * EP
+    C = -E + 0.5 * r * EP - (1/12) * r ** 2 * EDP
 
     return [A, B, C]
 
+def dRij_dRm_norm(Rij, ijm_list):
+    """Calculate the derivative of Rij norm w. r. t. atom m. This term affects
+    only on i and j.
+
+    Parameters
+    ----------
+    Rij : array [j, 3] or [j*k, 3]
+        The vector distances of atom i to atom j.
+    ijm_list: array [j, 3] or [j*k, 3]
+        Id list of center atom i, neighbors atom j, and atom m.
+
+    Returns
+    -------
+    dRij_m: array [j, 3] or [j*k, 3]
+        The derivative of pair atoms w.r.t. atom m in x, y, z directions.
+    """
+    dRij_m = np.zeros([len(Rij), 3])
+    R1ij = np.linalg.norm(Rij, axis=1).reshape([len(Rij),1])
+    l1 = (ijm_list[:,2]==ijm_list[:,0])
+    dRij_m[l1, :] = -Rij[l1]/R1ij[l1]
+    l2 = (ijm_list[:,2]==ijm_list[:,1])
+    dRij_m[l2, :] = Rij[l2]/R1ij[l2]
+    l3 = (ijm_list[:,0]==ijm_list[:,1])
+    dRij_m[l3, :] = 0
+
+    return dRij_m
 
 if __name__ == '__main__':
     import time
     from ase.build import bulk
     from ase.io import read
-    np.set_printoptions(formatter={'float': '{: 0.4f}'.format})
+    np.set_printoptions(formatter={'float': '{: 0.6f}'.format})
 
     struc = read("MOD_NiMo.cif")
-    zbl = ZBL(2.0, 3.0)
-    energy = zbl.calculate(struc)['energy'] / len(struc)
+    #struc = read("MOD_NiMo_real.cif")
+    t0 = time.time()
+    zbl = ZBL(2.0, 3.5)
+    d = zbl.calculate(struc)
+    energy = d['energy'] / len(struc)
+    forces = d['force']
+    stress = d['stress']
+    t1 = time.time()
 
-    print(energy)
+    print("Energy: ", energy)
+    print("Force:")
+    print(forces)
+    print("Stress: ", stress)
+    print("\nTime: ", round(t1-t0, 6), "s")
