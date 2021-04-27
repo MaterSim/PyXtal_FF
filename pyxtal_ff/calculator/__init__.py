@@ -29,7 +29,7 @@ class PyXtalFFCalculator(Calculator):
         #self.ff.run(mode='predict', mliap=self.parameters.mliap)
 
         # base potential
-        if self.parameters.ff._desciptors['base_potential']:
+        if self.parameters.ff._descriptors['base_potential']:
             self.base_potential = ZBL(self.parameters.ff._desciptors['base_potential']['inner'],
                                       self.parameters.ff._desciptors['base_potential']['outer'],
                                       atomic_energy=True)
@@ -49,7 +49,7 @@ class PyXtalFFCalculator(Calculator):
         self.results['energies'] = energies + base_energies
         self.results['energy'] = energies.sum() + base_energy
         self.results['free_energy'] = energies.sum() + base_energy
-        self.results['forces'] = forces + base_force
+        self.results['forces'] = forces + base_forces
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
         # from GPa to eV/A^3
