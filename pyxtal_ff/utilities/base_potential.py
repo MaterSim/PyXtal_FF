@@ -17,10 +17,13 @@ class ZBL:
         distance where switching function begins.
     outer: float
         global cutoff for ZBL interaction.
+    atomic_energy: bool
+        If True, atomic_energy will be recorded and returned.
     """
-    def __init__(self, inner, outer):
+    def __init__(self, inner, outer, atomic_energy=False):
         self.inner = inner
         self.outer = outer
+        self.atomic_energy = atomic_energy
 
     def calculate(self, crystal):
         """ The calculate function.
@@ -39,12 +42,17 @@ class ZBL:
         self.total_atoms = len(crystal)
         vol = crystal.get_volume()
 
+        print(self.total_atoms)
+
         rc = [(2.0+self.outer)/2.] * self.total_atoms
         neighbors = NeighborList(rc, self_interaction=False, bothways=False, skin=0.)
         neighbors.update(crystal)
 
         self.result = {'energy': 0, 'force': np.zeros([self.total_atoms, 3]),
-                       'stress': np.zeros([3,3])}
+                       'stress': np.zeros([3,3]),
+                       'energies': None}
+        if self.atomic_energy:
+            self.result['energies'] = []
 
         # Get unique Zi and Zj
         elements = []
@@ -95,14 +103,18 @@ class ZBL:
             self.result['energy'] += energy
             self.result['force'] += forces
             self.result['stress'] += stress
-
+            if self.atomic_energy:
+                self.result['energies'].append(energy)
+        
+        if self.atomic_energy:
+            self.result['_energies'] = np.array(self.result['energies'])
         self.result['stress'] /= vol
+        #self.result['stress'] = self.result['stress'].ravel()[[0,4,8,1,2,5]]
 
         return self.result
 
 
-def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, 
-        derivative=True:
+def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, derivative=True):
     """Calculate the atomic ZBL energy, force, and stress.
 
     Parameters
@@ -139,7 +151,7 @@ def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs,
         if i not in unique_js:
             unique_js = np.append(i, unique_js)
         unique_js.sort()
-        seq = i*np.ones([len(unique_js), 2], dtype=int)
+        seq = i * np.ones([len(unique_js), 2], dtype=int)
         seq[:, 1] = unique_js
         uN = len(unique_js)
         #t1 = time.time()
@@ -192,23 +204,31 @@ def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs,
         dE2_ddij = kZiZj * dij_inv * dphi_ddij
         dE_ddij = dE1_ddij + dE2_ddij + dSA + dSB # [j]
 
-        dRij_dRm = np.zeros([len(dij), 3, uN])
+        dRij_dRm = np.zeros([len(dij), 3, total_atoms])
         for mm, _m in enumerate(unique_js):
             mm_list = _m * np.ones([len(dij), 1], dtype=int)
-            dRij_dRm[:,:,mm] = dRij_dRm_norm(rij, np.hstack((ij_list, mm_list))) # [j, 3, uN]
+            dRij_dRm[:,:,_m] = dRij_dRm_norm(rij, np.hstack((ij_list, mm_list))) # [j, 3, uN]
         #force = np.einsum('ijk,i->ikj', dRij_dRm[ids2], dE_ddij[ids2]) # [j,uN,3]
         #forces -= np.einsum('ijk->jk', force)
         force = np.einsum('ijk,i->ikj', dRij_dRm, dE_ddij) # [j,uN,3]
+        #print(force.shape)
+        #print(force[ids2].shape)
+        #print(forces.shape)
         forces -= np.einsum('ijk->jk', force[ids2])
         #t1 = time.time()
         #print("force", t1-t0)
 
         # Stress
         #t0 = time.time()
+        print(ij_list)
+        print(unique_js)
         for count, ij in enumerate(ij_list):
             if dij[count] <= r_outer and dij[count] > r_inner:
-                _j = np.where(unique_js==ij[1])[0][0]
+                #_j = np.where(unique_js==ij[1])[0][0]
+                #stress -= np.einsum('i,j->ij', force[count,_j,:], rij[count])
+                _j = ij[1]
                 stress -= np.einsum('i,j->ij', force[count,_j,:], rij[count])
+
         #t1 = time.time()
         #print("stress", t1-t0)
         #import sys; sys.exit()
@@ -219,7 +239,7 @@ def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs,
 def get_ABC_coefficients(Zi, Zj, r_outer, r_inner):
     """A function to get the switching A, B, and C coefficients."""
     #import time
-    t0 =time.time()
+    #t0 =time.time()
     kZiZj = factor * Zi * Zj
     a_inv = (Zi ** 0.23 + Zj ** 0.23) / 0.46850
     r = r_outer - r_inner
@@ -286,7 +306,7 @@ if __name__ == '__main__':
     struc = read("MOD_NiMo_real.cif")
     t0 = time.time()
     #zbl = ZBL(2.0, 3.5)
-    zbl = ZBL(2.0, 10.5)
+    zbl = ZBL(2.0, 3.0)
     d = zbl.calculate(struc)
     energy = d['energy'] / len(struc)
     forces = d['force']
