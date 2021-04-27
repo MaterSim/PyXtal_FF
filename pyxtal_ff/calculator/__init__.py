@@ -1,13 +1,15 @@
-from pyxtal_ff import PyXtal_FF
 import numpy as np
-np.set_printoptions(formatter={'float': '{: 8.4f}'.format})
 from ase import units
-from pyxtal_ff.utilities import compute_descriptor
-from ase.calculators.calculator import Calculator, all_changes#, PropertyNotImplementedError
 from ase.optimize import LBFGS
 from ase.optimize.fire import FIRE
 from ase.constraints import ExpCellFilter
+from ase.calculators.calculator import Calculator, all_changes
 from ase.spacegroup.symmetrize import FixSymmetry, check_symmetry
+from pyxtal_ff import PyXtal_FF
+from pyxtal_ff.utilities import compute_descriptor
+from pyxtal_ff.utilities.base_potential import ZBL
+np.set_printoptions(formatter={'float': '{: 8.4f}'.format})
+
 
 class PyXtalFFCalculator(Calculator):
     implemented_properties = ['energy', 'forces', 'stress']
@@ -26,18 +28,32 @@ class PyXtalFFCalculator(Calculator):
         #self.ff = PyXtal_FF(model={'system': chem_symbols}, logo=self.parameters.logo)
         #self.ff.run(mode='predict', mliap=self.parameters.mliap)
 
+        # base potential
+        if self.parameters.ff._desciptors['base_potential']:
+            self.base_potential = ZBL(self.parameters.ff._desciptors['base_potential']['inner'],
+                                      self.parameters.ff._desciptors['base_potential']['outer'],
+                                      atomic_energy=True)
+            base_results = self.base_potential(atoms)
+            base_energy = base_results['energy']
+            base_forces = base_results['force']
+            base_stress = base_results['stress'] # eV/A^3
+            base_energies = base_results['energies']
+        else:
+            base_energy, base_forces, base_stress = 0., 0., 0.
+            base_energies = 0.
+
         desp = compute_descriptor(self.parameters.ff._descriptors, atoms)
         energies, forces, stress = self.parameters.ff.model.calculate_properties(desp, bforce=True, bstress=True)
 
         self.desp = desp
-        self.results['energies'] = energies
-        self.results['energy'] = energies.sum()
-        self.results['free_energy'] = energies.sum()
-        self.results['forces'] = forces
+        self.results['energies'] = energies + base_energies
+        self.results['energy'] = energies.sum() + base_energy
+        self.results['free_energy'] = energies.sum() + base_energy
+        self.results['forces'] = forces + base_force
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
-        self.results['stress']  = stress[[0, 1, 2, 5, 4, 3]]*units.GPa # from GPa to eV/A^3
-
+        # from GPa to eV/A^3
+        self.results['stress'] = (stress[[0, 1, 2, 5, 4, 3]] * units.GPa + base_stress) 
 
     def __str__(self):
         s = "\nASE calculator with pyxtal_ff force field\n"
@@ -63,7 +79,6 @@ def elastic_properties(C):
     Eh = (Ev+Er)/2    
     vh = (vv+vr)/2   
     return Kv, Gv, Ev, vv, Kr, Gr, Er, vr, Kh, Gh, Eh, vh
-
 
 def optimize(atoms, sym=True, box=False, method='FIRE', fmax=0.01, steps=1000, logfile='ase.log'):
     if sym:
@@ -114,4 +129,3 @@ if  __name__ == "__main__":
         print("{:s}: {:8.2f}(GPa)".format(name, Cij))
 
     print(elastic_properties(C))
-
