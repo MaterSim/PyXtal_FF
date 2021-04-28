@@ -731,6 +731,7 @@ class NeuralNetwork():
         no_of_atoms = len(descriptor['elements'])
         no_of_descriptors = descriptor['x'].shape[1]
         energy, force, stress = 0., np.zeros([no_of_atoms, 3]), np.zeros([6])
+        force_aleatoric, force_epistemic = np.zeros([no_of_atoms, 3]), np.zeros([no_of_atoms, 3])
         aleatoric, epistemic = 0., 0.
         
         # Normalizing
@@ -789,7 +790,10 @@ class NeuralNetwork():
                 epistemic += torch.sum(( Beta / (Alpha - 1) / Nu ) ** 0.5)
                 
                 if bforce:
-                    dedx = torch.autograd.grad(gamma, _x)[0]
+                    dedx = torch.autograd.grad(gamma, _x, retain_graph=True)[0]
+                    dedx_aleatoric = torch.autograd.grad(aleatoric, _x, retain_graph=True)[0]
+                    dedx_epistemic = torch.autograd.grad(epistemic, _x)[0]
+
                     shp = dedx.shape
                     #force += -torch.einsum("ik, ijkl->jl", dedx, _dxdr).numpy()
                     if no_of_atoms > 400: 
@@ -797,20 +801,28 @@ class NeuralNetwork():
                             ids = np.where(d['seq'][element][:,1]==_m)[0]
                             tmp = _dxdr[ids, :, :]
                             _dedx = dedx[d['seq'][element][ids][:,0]]
+                            _dedx_alea = dedx_aleatoric[d['seq'][element][ids][:,0]]
+                            _dedx_epis = dedx_epistemic[d['seq'][element][ids][:,0]]
                             force[_m, :] -= torch.einsum("ij, ijk->k", _dedx, tmp).numpy()
+                            force_aleatoric [_m, :] -= torch.einsum("ij, ijk->k", _dedx_alea, tmp).numpy()
+                            force_epistemic [_m, :] -= torch.einsum("ij, ijk->k", _dedx_epis, tmp).numpy()
+
                     else:
                         tmp = torch.zeros([len(d['x'][element]), no_of_atoms, d['x'][element].shape[1], 3])
                         for _m in range(no_of_atoms):
                             ids = np.where(d['seq'][element][:,1]==_m)[0]
                             tmp[d['seq'][element][ids, 0], _m, :, :] += _dxdr[ids, :, :]
                         force -= torch.einsum("ik, ijkl->jl", dedx, tmp).numpy() 
+                        force_aleatoric -= torch.einsum("ik, ijkl->jl", dedx_aleatoric, tmp).numpy()
+                        force_epistemic -= torch.einsum("ik, ijkl->jl", dedx_epistemic, tmp).numpy()
 
                 if bstress:
                     if bforce == False:
                         dedx = torch.autograd.grad(gamma, _x)[0]
                     stress += -torch.einsum("ik, ikl->l", dedx, _rdxdr).numpy()
 
-        return [energy/no_of_atoms, aleatoric.detach().numpy()/no_of_atoms, epistemic.detach().numpy()/no_of_atoms], force, stress*eV2GPa
+        return [energy/no_of_atoms, aleatoric.detach().numpy()/no_of_atoms, epistemic.detach().numpy()/no_of_atoms], \
+                [force, force_aleatoric, force_epistemic], stress*eV2GPa
 
 
     def save_checkpoint(self, des_info, filename=None):

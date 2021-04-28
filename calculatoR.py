@@ -18,6 +18,7 @@ calc = PyXtalFFCalculator(ff=ff)
 Si = read(f)
 
 Pred_eng, Aleatoric, Epistemic = [], [], []
+fAleatoric, fEpistemic = [], []
 for fac in [0.90, 0.92, 0.94, 0.96, 0.98, 1.00, 1.02, 1.04, 1.06, 1.08, 1.10]:
     struc = Si.copy()
     pos = struc.get_scaled_positions().copy()
@@ -29,6 +30,10 @@ for fac in [0.90, 0.92, 0.94, 0.96, 0.98, 1.00, 1.02, 1.04, 1.06, 1.08, 1.10]:
     Aleatoric.append(struc.calc.results['aleatoric']/len(struc))
     Epistemic.append(struc.calc.results['epistemic']/len(struc))
 
+    print(struc.calc.results['faleatoric'])
+    fAleatoric.append(np.max(struc.calc.results['faleatoric']))
+    fEpistemic.append(np.max(struc.calc.results['fepistemic']))
+
 data = loadfn("data.json")
 energy = np.array(data['energy']) / 8
 volume = np.array(data['volume']) / 8
@@ -36,6 +41,8 @@ volume = np.array(data['volume']) / 8
 print(list(np.abs(Pred_eng - energy)))
 print(Aleatoric)
 print(Epistemic)
+print(fAleatoric)
+print(fEpistemic)
 
 uncertain = Aleatoric if uncertainty_type == 'aleatoric' else Epistemic
 plt.plot(volume, energy, color='r', label='True')

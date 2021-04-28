@@ -31,8 +31,10 @@ class PyXtalFFCalculator(Calculator):
 
         if isinstance(energy, list):
             energy, aleatoric, epistemic = energy
+            force, faleatoric, fepistemic = forces
         else:
-            energy, aleatoric, epistemic = None
+            aleatoric, epistemic = None, None
+            faleatoric, fepistemic = None, None
 
         self.desp = desp
         self.results['energy'] = energy*len(atoms)
@@ -40,6 +42,8 @@ class PyXtalFFCalculator(Calculator):
         self.results['aleatoric'] = aleatoric*len(atoms)
         self.results['epistemic'] = epistemic*len(atoms)
         self.results['forces'] = forces
+        self.results['faleatoric'] = faleatoric
+        self.results['fepistemic'] = fepistemic
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
         self.results['stress']  = stress[[0, 1, 2, 5, 4, 3]]*units.GPa # from GPa to eV/A^3
