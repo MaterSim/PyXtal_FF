@@ -667,13 +667,6 @@ def compute_dcs(pos, nmax, lmax, rcut, alpha, cutoff):
     C *= cutoff_array[:,np.newaxis,np.newaxis,np.newaxis]
     return C, dC
 
-def get_rotated_struc(struc, angle=0, axis='x'):
-    s_new = struc.copy()
-    s_new.rotate(angle, axis)
-    cell = 17.22*np.eye(3)
-    p_struc = Atoms(s_new.symbols.numbers, positions=s_new.positions, cell=cell, pbc=True)
-    return p_struc
-
 if  __name__ == "__main__":
     from ase.io import read
     import time
@@ -723,23 +716,10 @@ if  __name__ == "__main__":
     der = options.der
     stress = options.stress
 
-    struc = get_rotated_struc(test)
     start1 = time.time()
-    f = SO3(nmax=5, lmax=5, rcut=5.5, alpha=2.0, derivative=True, stress=False)
-    x = f.calculate(struc)#, atom_ids=[0, 1])
-    #norm = np.linalg.norm(x['dxdr'],axis=2)
+    f = SO3(nmax=nmax, lmax=lmax, rcut=rcut, alpha=alpha, derivative=True, stress=False)
+    x = f.calculate(test)
     start2 = time.time()
-    print('calculation time')
-    print(start2-start1)
-    struc = get_rotated_struc(test,0,'x')
-    start1 = time.time()
-    f1 = SO3(nmax=5, lmax=5, rcut=5.5, alpha=2.0, derivative=False, stress=False)
-    x1 = f1.calculate(struc)#, atom_ids=[0, 1])
-    #norm1 = np.linalg.norm(x1['dxdr'],axis=2)
-    start2 = time.time()
-    print('calculation time')
-    print(start2-start1)
-    print('rotational invariance')
-    print((x['x'] - x1['x']).sum())
-    #print('gradient norm invariance')
-    #print((norm-norm1).sum())
+    print('x', x['x'])
+    print('dxdr', x['dxdr'])
+    print('calculation time {}'.format(start2-start1))
