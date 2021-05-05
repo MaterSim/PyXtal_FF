@@ -444,7 +444,7 @@ def Unity(Rij, Rc, derivative=False):
         return np.ones(len(Rij))
 
     else:
-        return np.zeros(len(Rij))
+        return np.ones(len(Rij))
 
 def W(nmax):
     arr = np.zeros((nmax,nmax), np.float64)
