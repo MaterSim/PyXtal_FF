@@ -40,7 +40,7 @@ class PyXtal_FF():
                 Compute rdxdr (needed for stress calculation) or not
             - force: bool (True)
                 Compute dxdr (needed for force calculation) or not
-             - cutoff: str
+            - cutoff: str
                 The cutoff function.
             - parameters: dict
                 Example,
@@ -56,6 +56,8 @@ class PyXtal_FF():
                 + SNAP
                     {'weights': {'Si': 1.0, 'O': 2.0},
                      'Rc': {'Si': 4.0, 'O': 5.0}
+            - zbl: dict
+                {'inner': 4.0, 'outer': 4.5}
 
         model: dict
             Machine learning parameters are defined here.
@@ -137,7 +139,7 @@ class PyXtal_FF():
         
         # Checking the keys in descriptors
         descriptors_keywords = ['type', 'Rc', 'weights', 'N_train', 'N_test', 'cutoff',
-                                'force', 'stress', 'ncpu', 'parameters']
+                                'force', 'stress', 'ncpu', 'parameters', 'base_potential']
         if descriptors is not None:
             for key in descriptors.keys():
                 if key not in descriptors_keywords:
@@ -157,6 +159,7 @@ class PyXtal_FF():
                              'force': True,
                              'stress': True,
                              'cutoff': 'cosine',
+                             'base_potential': False,
                              }
         
         # Update the default based on user-defined descriptors
