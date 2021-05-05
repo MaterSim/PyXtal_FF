@@ -3,14 +3,13 @@ import gc
 import time
 import shelve
 import numpy as np
-from ase import Atoms, units
+from ase import Atoms
 from copy import deepcopy
 from functools import partial
 from torch.utils.data import Dataset
 from monty.serialization import loadfn
 from multiprocessing import Pool, cpu_count
 from collections.abc import MutableSequence
-from .base_potential import ZBL
 
 
 class Database():#MutableSequence):
@@ -68,12 +67,6 @@ class Database():#MutableSequence):
     def store(self, structure_file, function, storage, ase_db=None):
         """ Map structures to descriptors and store them, including features, to database.
         If compute is False, print pre-computed descriptors message. """
-        if function['base_potential']:
-            self.base_potential = ZBL(function['base_potential']['inner'],
-                                      function['base_potential']['outer'])
-        else:
-            self.base_potential = None
-
         if storage:
             if os.path.isdir(structure_file) or structure_file.find('json') > 0:
                 fmt = 'json'
@@ -226,22 +219,13 @@ class Database():#MutableSequence):
             d['rdxdr'] = rdxdr.reshape([N, L, 9])[:, :, [0, 4, 8, 1, 2, 5]]
             #d['rdxdr'] = np.einsum('ijklm->iklm', d['rdxdr'])\
             #.reshape([shp[0], shp[2], shp[3]*shp[4]])[:, :, [0, 4, 8, 1, 2, 5]]  #need to change
-        
-        #print(len(data['structure']))
-        if self.base_potential:
-            base_d = self.base_potential.calculate(data['structure'])
-        else:
-            base_d = {'energy': 0., 'force': 0., 'stress': 0.}
-        
-        #print(data['energy'])
-        #print(base_d['energy'])
 
-        d['energy'] = np.asarray(data['energy'] - base_d['energy'])
-        d['force'] = np.asarray(data['force']) - base_d['force']
+        d['energy'] = np.asarray(data['energy'])
+        d['force'] = np.asarray(data['force'])
         if data['stress'] is not None:
-            d['stress'] = np.asarray(data['stress']) - base_d['stress'] / units.GPa
+            d['stress'] = np.asarray(data['stress'])
         else:
-            d['stress'] = data['stress'] 
+            d['stress'] = data['stress']
         d['group'] = data['group']
 
         return d
@@ -376,7 +360,8 @@ def parse_json(path, N=None, Random=False):
                 group = 'NoElastic'
             elif 'virial_stress' in d[key]: #kB to GPa
                 s = [-1*s/10 for s in d[key]['virial_stress']] 
-                if d['group'] == 'Ni3Mo' or d['element'] == 'Cu': #just tentative fix
+
+                if d['group'] == 'Ni3Mo': #to fix the issue
                     stress = [s[0], s[1], s[2], s[3], s[4], s[5]]
                 else:
                     stress = [s[0], s[1], s[2], s[3], s[5], s[4]]
