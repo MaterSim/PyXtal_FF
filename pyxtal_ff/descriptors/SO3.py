@@ -163,6 +163,8 @@ class SO3:
                 self._cutoff_function = Poly4
             elif cutoff_function == 'exp':
                 self._cutoff_function = Exponent
+            elif cutoff_function == 'unity':
+                self._cutoff_function = Unity
             else:
                 raise NotImplementedError('The requested cutoff function has not been implemented')
         else:
@@ -436,6 +438,13 @@ def Exponent(Rij, Rc, derivative=False):
         except:
             result = 0
             return result
+
+def Unity(Rij, Rc, derivative=False):
+    if derivative is False:
+        return np.ones(len(Rij))
+
+    else:
+        return np.zeros(len(Rij))
 
 def W(nmax):
     arr = np.zeros((nmax,nmax), np.float64)
@@ -717,7 +726,7 @@ if  __name__ == "__main__":
     stress = options.stress
 
     start1 = time.time()
-    f = SO3(nmax=nmax, lmax=lmax, rcut=rcut, alpha=alpha, derivative=True, stress=False)
+    f = SO3(nmax=nmax, lmax=lmax, rcut=rcut, alpha=alpha, derivative=True, stress=False, cutoff_function='unity')
     x = f.calculate(test)
     start2 = time.time()
     print('x', x['x'])
