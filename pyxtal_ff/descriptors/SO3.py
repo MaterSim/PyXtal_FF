@@ -1,11 +1,9 @@
 from __future__ import division
 import numpy as np
-import numba as nb
 from ase.neighborlist import NeighborList
 from optparse import OptionParser
-from copy import deepcopy
-from numba import prange, cuda
-from pyxtal_ff.descriptors.angular_momentum import Wigner_D
+from scipy.special import sph_harm, spherical_in
+from ase import Atoms
 
 class SO3:
     '''
@@ -59,10 +57,9 @@ class SO3:
                 "alpha": self.alpha,
                 "derivative": self.derivative,
                 "stress": self.stress,
-                "_type": "SO3", 
+                "_type": "SO3",
                }
         return dict
-
 
     @property
     def nmax(self):
@@ -74,7 +71,7 @@ class SO3:
             if nmax < 1:
                 raise ValueError('nmax must be greater than or equal to 1')
             if nmax > 11:
-                raise ValueError('nmax > 11 yields complex eigen values which will mess up the calculation')
+                raise ValueError('nmax > 11 yields complex eigenvalues which will mess up the calculation')
             self._nmax = nmax
         else:
             raise ValueError('nmax must be an integer')
@@ -90,8 +87,8 @@ class SO3:
                 raise ValueError('lmax must be greater than or equal to zero')
             elif lmax > 32:
                 raise NotImplementedError('''Currently we only support Wigner-D matrices and spherical harmonics
-                                          for arguments up to l=32.  If you need higher functionality, raise an issue
-                                          in our Github and we will expand the set of supported functions''')
+                for arguments up to l=32.  If you need higher functionality, raise an issue
+                in our Github and we will expand the set of supported functions''')
             self._lmax = lmax
         else:
             raise ValueError('lmax must be an integer')
@@ -153,26 +150,19 @@ class SO3:
         if isinstance(cutoff_function, str) is True:
             # more conditions
             if cutoff_function == 'cosine':
-                self._cutoff_id = 1
-                self._cutoff_function = cutoff_function
+                self._cutoff_function = Cosine
             elif cutoff_function == 'tanh':
-                self._cutoff_id = 2
-                self._cutoff_function = cutoff_function
+                self._cutoff_function = Tanh
             elif cutoff_function == 'poly1':
-                self._cutoff_id = 3
-                self._cutoff_function = cutoff_function
+                self._cutoff_function = Poly1
             elif cutoff_function == 'poly2':
-                self._cutoff_id = 4
-                self._cutoff_function = cutoff_function
+                self._cutoff_function = Poly2
             elif cutoff_function == 'poly3':
-                self._cutoff_id = 5
-                self._cutoff_function = cutoff_function
+                self._cutoff_function = Poly3
             elif cutoff_function == 'poly4':
-                self._cutoff_id = 6
-                self._cutoff_function = cutoff_function
+                self._cutoff_function = Poly4
             elif cutoff_function == 'exp':
-                self._cutoff_id = 7
-                self._cutoff_function = cutoff_function
+                self._cutoff_function = Exponent
             else:
                 raise NotImplementedError('The requested cutoff function has not been implemented')
         else:
@@ -184,7 +174,7 @@ class SO3:
         '''
         attrs = list(vars(self).keys())
         for attr in attrs:
-            if attr not in {'_nmax', '_lmax', '_rcut', '_alpha', '_derivative', '_stress', 'cutoff_id'}:
+            if attr not in {'_nmax', '_lmax', '_rcut', '_alpha', '_derivative', '_stress', '_cutoff_function'}:
                 delattr(self, attr)
         return
 
@@ -206,25 +196,85 @@ class SO3:
         self.build_neighbor_list(atom_ids)
         self.initialize_arrays()
 
-        get_power_spectrum_components(self.center_atoms, self.neighborlist,
-                                      self.seq,
-                                      self.atomic_numbers, self.nmax, self.lmax,
-                                      self.rcut, self.alpha, self.derivative,
-                                      self.stress, self._plist, self._dplist, self._pstress, self._cutoff_id)
-        vol = atoms.get_volume()
+        ncoefs = self.nmax*(self.nmax+1)//2*(self.lmax+1)
+        tril_indices = np.tril_indices(self.nmax, k=0)
 
         if self.derivative:
+            # get expansion coefficients and derivatives
+            cs, dcs = compute_dcs(self.neighborlist, self.nmax, self.lmax, self.rcut, self.alpha, self._cutoff_function)
+            # weight cs and dcs
+            cs *= self.atomic_weights[:,np.newaxis,np.newaxis,np.newaxis]
+            dcs *= self.atomic_weights[:,np.newaxis,np.newaxis,np.newaxis,np.newaxis]
+            Ris = self.center_atoms
+            Rjs = self.neighborlist + Ris
+            for i in np.unique(self.seq[:,0]):
+                # find atoms for which i is the center
+                centers = self.neighbor_indices[:,0] == i
+                # find neighbors for which i is not the index
+                neighs = self.neighbor_indices[:,1] != i
+                # get the indices for both conditions
+                inds = centers*neighs
+                # total up the c array for the center atom
+                ctot = cs[centers].sum(axis=0)
+                # get dc weights
+                # compute the power spectrum
+                P = np.einsum('ijk,ljk->ilj', ctot, np.conj(ctot)).real
+                # compute the gradient of the power spectrum for each neighbor
+                dP = np.einsum('wijkn,ljk->wiljn', dcs[centers], np.conj(ctot))
+                dP += np.conj(np.transpose(dP, axes=[0,2,1,3,4]))
+                dP = dP.real
 
-            x = {'x':self._plist.real, 'dxdr':self._dplist.real,
+                rdPi = np.einsum('wn,wijkm->wijknm', Ris[centers], dP)
+                rdPj = np.einsum('wn,wijkm->wijknm', Rjs[centers], dP)
+
+                # get ij pairs for center atom
+                ijs = self.neighbor_indices[centers]
+                # loop over unique neighbor indices
+                for j in np.unique(ijs[:,1]):
+                    # get the location of ij pairs in the NL
+                    # and therefore dP
+                    ijlocs = self.neighbor_indices[centers,1] == j
+                    # get the location of the dplist element
+                    temp = self.seq == np.array([i,j])
+                    seqloc = temp[:,0]*temp[:,1]
+                    # sum over ij pairs
+                    dPsum = np.sum(dP[ijlocs], axis=0)
+                    rdPjsum = np.sum(rdPj[ijlocs], axis=0)
+                    # flatten into dplist and rdplist
+                    self._dplist[seqloc] += (dPsum[tril_indices].flatten()).reshape(ncoefs,3)
+                    self._pstress[seqloc] += (rdPjsum[tril_indices].flatten()).reshape(ncoefs,3,3)
+
+                # get unique elements and store in feature vector
+                self._plist[i] = P[tril_indices].flatten()
+                # get location if ii pair in seq
+                temp = self.seq == np.array([i,i])
+                iiloc = temp[:,0]*temp[:,1]
+                # get location of all ijs in seq
+                ilocs = self.seq[:,0] == i
+                self._dplist[iiloc] -= np.sum(self._dplist[ilocs],axis=0)
+                rdPisum = np.sum(rdPi, axis=0)
+                self._pstress[iiloc] -= (rdPisum[tril_indices].flatten()).reshape(ncoefs,3,3)
+
+
+            x = {'x':self._plist, 'dxdr':self._dplist,
                  'elements':list(atoms.symbols), 'seq':self.seq}
 
             if self._stress:
-                x['rdxdr'] = self._pstress.real/vol
+                vol = atoms.get_volume()
+                x['rdxdr'] = self._pstress/vol
             else:
                 x['rdxdr'] = None
 
         else:
-            x = {'x':self._plist.real, 'dxdr': None, 'elements':list(atoms.symbols)}
+            cs = compute_cs(self.neighborlist, self.nmax, self.lmax, self.rcut, self.alpha, self._cutoff_function)
+            cs *= self.atomic_weights[:,np.newaxis,np.newaxis,np.newaxis]
+            # everything good up to here
+            for i in np.unique(self.seq[:,0]):
+                centers = self.neighbor_indices[:,0] == i
+                ctot = cs[centers].sum(axis=0)
+                P = np.einsum('ijk,ljk->ilj', ctot, np.conj(ctot)).real
+                self._plist[i] = P[tril_indices].flatten()
+            x = {'x':self._plist, 'dxdr': None, 'rdxdr': None, 'elements':list(atoms.symbols)}
 
         self.clear_memory()
         return x
@@ -235,7 +285,7 @@ class SO3:
         # atoms in the unit cell
         # for a cluster/molecule(s) this will be the total number
         # of atoms
-        ncell = len(self.center_atoms) #self._atoms)
+        ncell = len(self._atoms) #self._atoms)
         # degree of spherical harmonic expansion
         lmax = self.lmax
         # degree of radial expansion
@@ -246,11 +296,10 @@ class SO3:
         # of spherical harmonic expansion (including 0)
         ncoefs = nmax*(nmax+1)//2*(lmax+1)
 
-        # to include GPU support we will need to define more arrays here
-        # as no array creation methods are supported in the numba cuda package
-        self._plist = np.zeros((ncell, ncoefs), dtype=np.complex128)
-        self._dplist = np.zeros((len(self.seq), ncoefs, 3), dtype=np.complex128)
-        self._pstress = np.zeros((len(self.seq), ncoefs, 3, 3), dtype=np.complex128)
+
+        self._plist = np.zeros((ncell, ncoefs), dtype=np.float64)
+        self._dplist = np.zeros((len(self.seq), ncoefs, 3), dtype=np.float64)
+        self._pstress = np.zeros((len(self.seq), ncoefs, 3, 3), dtype=np.float64)
 
         return
 
@@ -267,427 +316,129 @@ class SO3:
         nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
         nl.update(atoms)
 
-        center_atoms = np.zeros((len(atom_ids),3), dtype=np.float64)
+        center_atoms = []
         neighbors = []
         neighbor_indices = []
-        atomic_numbers = []
+        atomic_weights = []
+        temp_indices = []
 
-        for i in atom_ids: #range(len(atoms)):
-            # get center atom position
+        for i in atom_ids:
+            # get center atom position vector
             center_atom = atoms.positions[i]
-            center_atoms[i] = center_atom
-            # get indices and cell offsets of each neighbor
+            # get indices and cell offsets for each neighbor
             indices, offsets = nl.get_neighbors(i)
-            # add an empty list to neighbors and atomic numbers for population
-            neighbors.append([])
-            atomic_numbers.append([])
-            # the indices are already numpy arrays so just append as is
-            neighbor_indices.append(indices)
+            temp_indices.append(indices)
             for j, offset in zip(indices, offsets):
-                # compute separation vector
-                pos = atoms.positions[j] + np.dot(offset, atoms.get_cell()) - center_atom
-                neighbors[i].append(pos)
-                atomic_numbers[i].append(atoms[j].number)
+                pos = atoms.positions[j] + np.dot(offset,atoms.get_cell()) - center_atom
+                center_atoms.append(center_atom)
+                neighbors.append(pos)
+                atomic_weights.append(atoms[j].number)
+                neighbor_indices.append([i,j])
 
-        Neighbors = []
-        Atomic_numbers = []
+        neighbor_indices = np.array(neighbor_indices, dtype=np.int64)
         Seq = []
-        max_len = 0
-        for i in atom_ids: #range(len(atoms)):
-            unique_atoms = np.unique(neighbor_indices[i])
+        for i in atom_ids:
+            ineighs = neighbor_indices[:,0] == i
+            unique_atoms = np.unique(neighbor_indices[ineighs])
             if i not in unique_atoms:
                 at = list(unique_atoms)
                 at.append(i)
                 at.sort()
                 unique_atoms = np.array(at)
-            # add i here if i doesnt exist (make sure its in the right spot)
             for j in unique_atoms:
                 Seq.append([i,j])
-                neigh_locs = neighbor_indices[i] == j
-                temp_neighs = np.array(neighbors[i])
-                temp_ANs = np.array(atomic_numbers[i])
-                Neighbors.append(temp_neighs[neigh_locs])
-                Atomic_numbers.append(temp_ANs[neigh_locs])
-                length = sum(neigh_locs)
-                if length > max_len:
-                    max_len = length
 
-        neighborlist = np.zeros((len(Neighbors), max_len, 3), dtype=np.float64)
         Seq = np.array(Seq, dtype=np.int64)
-        atm_nums = np.zeros((len(Neighbors), max_len), dtype=np.int64)
-        site_atomic_numbers = np.array(list(atoms.numbers), dtype=np.int64)
-
-
-        for i in range(len(Neighbors)):
-            if len(Neighbors[i]) > 0:
-                neighborlist[i, :len(Neighbors[i]), :] = Neighbors[i]
-                atm_nums[i, :len(Neighbors[i])] = Atomic_numbers[i]
-
-
-
-        # assign these arrays to attributes
-        self.center_atoms = center_atoms
-        self.neighborlist = neighborlist
+        self.center_atoms = np.array(center_atoms, dtype=np.float64)
+        self.neighborlist = np.array(neighbors, dtype=np.float64)
         self.seq = Seq
-        self.atomic_numbers = atm_nums
-        self.site_atomic_numbers = site_atomic_numbers
-
+        self.atomic_weights = np.array(atomic_weights, dtype=np.int64)
+        self.neighbor_indices = neighbor_indices
         return
 
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Cosine(Rij, Rc):
-    # Rij is the norm 
-    result = 0.5 * (np.cos(np.pi * Rij / Rc) + 1.)
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def CosinePrime(Rij, Rc):
+def Cosine(Rij, Rc, derivative=False):
     # Rij is the norm
-    result = -0.5 * np.pi / Rc * np.sin(np.pi * Rij / Rc)
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Tanh(Rij, Rc):
-    result = np.tanh(1-Rij/Rc)**3
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def TanhPrime(Rij, Rc):
-    tanh_square = np.tanh(1-Rij/Rc)**2
-    result = - (3/Rc) * tanh_square * (1-tanh_square)
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Poly1(Rij, Rc):
-    x = Rij/Rc
-    x_square = x**2
-    result = x_square * (2*x-3) + 1
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Poly1Prime(Rij, Rc):
-    term1 = (6 / Rc**2) * Rij
-    term2 = Rij/Rc - 1
-    result = term1*term2
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Poly2(Rij, Rc):
-    x = Rij/Rc
-    result = x**3 * (x*(15-6*x)-10) + 1
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Poly2Prime(Rij, Rc):
-    x = Rij/Rc
-    result = (-30/Rc) * (x**2 * (x-1)**2)
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Poly3(Rij, Rc):
-    x = Rij/Rc
-    result = x**4*(x*(x*(20*x-70)+84)-35)+1
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Poly3Prime(Rij, Rc):
-    x = Rij/Rc
-    result = (140/Rc) * (x**3 * (x-1)**3)
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Poly4(Rij, Rc):
-    x = Rij/Rc
-    result = x**5*(x*(x*(x*(315-70*x)-540)+420)-126)+1
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Poly4Prime(Rij, Rc):
-    x = Rij/Rc
-    result = (-630/Rc) * (x**4 * (x-1)**4)
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def Exponent(Rij, Rc):
-    x = Rij/Rc
-    try:
-        result = np.exp(1 - 1/(1-x**2))
-    except:
-        result = 0
-    return result
-
-
-@nb.njit(nb.f8(nb.f8, nb.f8), cache=True, fastmath=True, nogil=True)
-def ExponentPrime(Rij, Rc):
-    x = Rij/Rc
-    try:
-        result = 2*x * np.exp(1 - 1/(1-x**2)) / (1+x**2)**2
-    except:
-        result = 0
-    return result
-
-@nb.njit(cache=True, nogil=True, fastmath=True)
-def init_rootpqarray(twol):
-    ldim = twol+1
-    rootpqarray = np.zeros((ldim, ldim))
-    for p in range(1, ldim, 1):
-        for q in range(1, ldim, 1):
-            rootpqarray[p,q] = np.sqrt(p/q)
-    return rootpqarray
-
-@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.c16[:], nb.i8[:], nb.f8[:,:]),
-         cache=True, fastmath=True, nogil=True)
-def compute_uarray_recursive(x, y, z, r, twol, ulist, idxu_block, rootpqarray):
-    '''Compute the Wigner-D matrix of order twol given an axis (x,y,z)
-    and rotation angle 2*psi.
-    This function constructs a unit quaternion representating a rotation
-    of 2*psi through an axis defined by x,y,z; then populates an array of
-    Wigner-D matrices of order twol for this rotation.  The Wigner-D matrices
-    are calculated using the recursion relations in LAMMPS.
-    Parameters
-    ----------
-    x: float
-    the x coordinate corresponding to the axis of rotation.
-    y: float
-    the y coordinate corresponding to the axis of rotation.
-    z: float
-    the z coordinate corresponding to the axis of rotation
-    psi: float
-    one half of the rotation angle
-    r: float
-    magnitude of the vector (x,y,z)
-    twol: integer
-    order of hyperspherical expansion
-    ulist: 1-D complex array
-    array to populate with D-matrix elements, mathematically
-    this is a 3-D matrix, although we broadcast this to a 1-D
-    matrix
-    idxu_block: 1-D int array
-    used to index ulist
-    rootpqarray:  2-D float array
-    used for recursion relation
-    Returns
-    -------
-    None
-    '''
-    ldim = twol + 1
-
-    theta = np.arccos(z/r)
-    phi = np.arctan2(y,x)
-
-    atheta = np.cos(theta/2)
-    btheta = np.sin(theta/2)
-
-    aphi = np.cos(phi/2) + 1j*np.sin(phi/2)
-
-    a = atheta*aphi
-    b = btheta*aphi
-
-    ulist[0] = 1.0 + 0.0j
-
-    for l in range(1, ldim, 1):
-        llu = idxu_block[l]
-        llup = idxu_block[l - 1]
-
-        # fill in left side of matrix layer
-
-        mb = 0
-        while 2 * mb <= l:
-            ulist[llu] = 0
-            for ma in range(0, l, 1):
-                rootpq = rootpqarray[l - ma, l - mb]
-                ulist[llu] += rootpq * np.conj(a) * ulist[llup]
-
-                rootpq = rootpqarray[ma + 1, l - mb]
-                ulist[llu + 1] += -rootpq * np.conj(b) * ulist[llup]
-                llu += 1
-                llup += 1
-            llu += 1
-            mb += 1
-
-        # copy left side to right side using inversion symmetry
-        llu = idxu_block[l]
-        llup = llu + (l + 1) * (l + 1) - 1
-        mbpar = 1
-        mb = 0
-        while 2 * mb <= l:
-            mapar = mbpar
-            for ma in range(0, l + 1, 1):
-                if mapar == 1:
-                    ulist[llup] = np.conj(ulist[llu])
-                else:
-                    ulist[llup] = -np.conj(ulist[llu])
-
-                mapar = -mapar
-                llu += 1
-                llup -= 1
-            mbpar = -mbpar
-            mb += 1
-    return
-
-@nb.njit(nb.c16(nb.c16, nb.c16, nb.i8, nb.i8), cache=True,
-         fastmath=True, nogil=True)
-def sph_harm(Ra, Rb, l, m):
-    '''
-    Spherical harmonics from Wigner-D functions
-
-    args:
-        Ra: complex, Cayley-Klein parameter for spherical harmonic
-        Rb: complex, Cayley-Klein parameter for spherical harmonic
-        l: int, index of spherical harmonic l >= 0
-        m: int, index of spherical harmonic -l <= m <= l
-
-    The spherical harmonics are a subset of Wigner-D matrices,
-    and can be calculated in the same manner
-    '''
-    if m%2 == 0:
-        return Wigner_D(Ra, Rb, 2*l, 0, -2*m).conjugate() * np.sqrt((2*l+1)/4/np.pi) * (-1.0)**(m)
+    if derivative is False:
+        result = 0.5 * (np.cos(np.pi * Rij / Rc) + 1.)
     else:
-        return Wigner_D(Ra, Rb, 2*l, 0, -2*m).conjugate() * np.sqrt((2*l+1)/4/np.pi) * (-1.0)**(m+1)
+        result = -0.5 * np.pi / Rc * np.sin(np.pi * Rij / Rc)
+    return result
 
-@nb.njit(nb.f8(nb.f8, nb.i8, nb.b1), cache=True,
-         fastmath=True, nogil=True)
-def modifiedSphericalBessel1(r, n, derivative):
-    '''
-    Modified spherical bessel functions of the first kind
-    with and without first derivative
+def Tanh(Rij, Rc, derivative=False):
 
-    We don't have to be careful of the singularity at x=0 as
-    the Chebyshev quadrature used will never include the point 0
-
-    To include GPU support here, we will need to shift to temp
-    variables
-    '''
-    if derivative == False:
-        if n == 0:
-            return np.sinh(r)/r
-        elif n == 1:
-            return (r*np.cosh(r)-np.sinh(r))/r**2
-        else:
-            temp_arr = np.zeros((n+1), np.float64)
-            temp_arr[0] = np.sinh(r)/r
-            temp_arr[1] = (r*np.cosh(r)-np.sinh(r))/r**2
-            for i in range(2, n+1, 1):
-                temp_arr[i] = temp_arr[i-2] - (2*i-1)/r*temp_arr[i-1]
-            return temp_arr[n]
-    else:
-        if n == 0:
-            # the derivative if i0 is i1
-            return (r*np.cosh(r)-np.sinh(r))/r**2
-
-        else:
-            temp_arr = np.zeros((n+2), np.float64)
-            temp_arr[0] = np.sinh(r)/r
-            temp_arr[1] = (r*np.cosh(r)-np.sinh(r))/r**2
-            for i in range(2, n+2, 1):
-                temp_arr[i] = temp_arr[i-2] - (2*i-1)/r*temp_arr[i-1]
-            return (n*temp_arr[n-1] + (n+1)*temp_arr[n+1]) / (2*n+1)
-
-@nb.njit(nb.f8(nb.f8, nb.f8, nb.i8), cache=True, fastmath=True, nogil=True)
-def compute_sfac(r, rcut, cutoff_id):
-    '''Calculates the cosine cutoff function value given in
-    On Representing Chemical Environments, Batrok, et al.
-
-    The cosine cutoff function ensures that the hyperspherical
-    expansion for the calculation of bispectrum coefficients goes
-    smoothly to zero for atomic neighbors tending to the cutoff
-    radius.
-
-    Parameters
-    ----------
-    r: float
-        The magnitude of the separation vector from
-        an atom in the unit cell to a particular neighbor
-    rcut: float
-        The cutoff radius specified in the SO4_Bispectrum class
-
-    Returns
-    -------
-    cosine_cutoff:  float 0.5 * (cos(pi*r/rcut) + 1.0)
-    '''
-    if r > rcut:
-        return 0
-    else:
-        if cutoff_id == 1:
-            return Cosine(r, rcut)
-        elif cutoff_id == 2:
-            return Tanh(r, rcut)
-        elif cutoff_id == 3:
-            return Poly1(r, rcut)
-        elif cutoff_id == 4:
-            return Poly2(r, rcut)
-        elif cutoff_id == 5:
-            return Poly3(r, rcut)
-        elif cutoff_id == 6:
-            return Poly4(r, rcut)
-        elif cutoff_id == 7:
-            return Exponent(r, rcut)
-        else:
-            raise ValueError('not implemented')
-
-@nb.njit(nb.f8(nb.f8, nb.f8, nb.i8), cache=True, fastmath=True, nogil=True)
-def compute_dsfac(r, rcut, cutoff_id):
-    '''Calculates the derivative of the cosine cutoff for a given radii
-
-    Parameters
-    ----------
-    r: float
-        see compute_sfac
-    rcut: float
-        see compute_sfac
-
-    Returns
-    -------
-    dcosine_cutoff/dr float -0.5*pi/rcut*sin(pi*r/rcut)
-    '''
-    if r > rcut:
-        return 0
+    if derivative is False:
+        result = np.tanh(1-Rij/Rc)**3
 
     else:
-        if cutoff_id == 1:
-            return CosinePrime(r, rcut)
-        elif cutoff_id == 2:
-            return TanhPrime(r, rcut)
-        elif cutoff_id == 3:
-            return Poly1Prime(r, rcut)
-        elif cutoff_id == 4:
-            return Poly2Prime(r, rcut)
-        elif cutoff_id == 5:
-            return Poly3Prime(r, rcut)
-        elif cutoff_id == 6:
-            return Poly4Prime(r, rcut)
-        elif cutoff_id == 7:
-               return ExponentPrime(r, rcut)
-        else:
-            raise ValueError('not implemented')
+        tanh_square = np.tanh(1-Rij/Rc)**2
+        result = - (3/Rc) * tanh_square * (1-tanh_square)
+    return result
 
-'''
-These next three functions are for the evaluation of the orthonormal polynomial basis on [0,rcut]
-proposed in on representing chemical environments
-'''
-@nb.njit(nb.void(nb.i8, nb.f8[:,:]), cache=True, nogil=True, fastmath=True)
-def W(nmax, arr):
-    '''
-    Constructs the matrix of linear combination coefficients
-    from the overlap matrix S for the polynomial basis g(r)
-    defined below and in On Representing Chemical Environments.
-    This normalizes this basis on the interval [0, rcut]
+def Poly1(Rij, Rc, derivative=False):
 
-    W = S^(-1/2)
-    '''
-    # first construct the overlap matrix S
+    if derivative is False:
+        x = Rij/Rc
+        x_square = x**2
+        result = x_square * (2*x-3) + 1
+
+    else:
+        term1 = (6 / Rc**2) * Rij
+        term2 = Rij/Rc - 1
+        result = term1*term2
+    return result
+
+def Poly2(Rij, Rc, derivative=False):
+
+    if derivative is False:
+        x = Rij/Rc
+        result = x**3 * (x*(15-6*x)-10) + 1
+
+    else:
+        x = Rij/Rc
+        result = (-30/Rc) * (x**2 * (x-1)**2)
+    return result
+
+def Poly3(Rij, Rc, derivative=False):
+
+    if derivative is False:
+        x = Rij/Rc
+        result = x**4*(x*(x*(20*x-70)+84)-35)+1
+
+    else:
+        x = Rij/Rc
+        result = (140/Rc) * (x**3 * (x-1)**3)
+    return result
+
+def Poly4(Rij, Rc, derivative=False):
+
+    if derivative is False:
+        x = Rij/Rc
+        result = x**5*(x*(x*(x*(315-70*x)-540)+420)-126)+1
+
+    else:
+        x = Rij/Rc
+        result = (-630/Rc) * (x**4 * (x-1)**4)
+    return result
+
+def Exponent(Rij, Rc, derivative=False):
+
+    if derivative is False:
+        x = Rij/Rc
+        try:
+            result = np.exp(1 - 1/(1-x**2))
+        except:
+            result = 0
+
+    else:
+        x = Rij/Rc
+        try:
+            result = 2*x * np.exp(1 - 1/(1-x**2)) / (1+x**2)**2
+        except:
+            result = 0
+            return result
+
+def W(nmax):
+    arr = np.zeros((nmax,nmax), np.float64)
     for alpha in range(1, nmax+1, 1):
         temp1 = (2*alpha+5)*(2*alpha+6)*(2*alpha+7)
         for beta in range(1, alpha+1, 1):
@@ -699,630 +450,229 @@ def W(nmax, arr):
     eigvals, V = np.linalg.eig(sinv)
     sqrtD = np.diag(np.sqrt(eigvals))
     arr[:,:] = np.dot(np.dot(V, sqrtD), np.linalg.inv(V))
-    return
+    return arr
 
-@nb.njit(nb.f8(nb.f8, nb.i8, nb.f8), cache=True, nogil=True, fastmath=True)
 def phi(r, alpha, rcut):
     '''
     See g below
     '''
     return (rcut-r)**(alpha+2)/np.sqrt(2*rcut**(2*alpha+7)/(2*alpha+5)/(2*alpha+6)/(2*alpha+7))
 
-@nb.njit(nb.c16(nb.f8, nb.i8, nb.i8, nb.f8, nb.f8[:,:]), cache=True,
-         nogil=True, fastmath=True)
 def g(r, n, nmax, rcut, w):
-    '''
-    Evaluate the radial basis at a given r, given the overlap matrix
-    for the maximal n.
-    '''
-    Sum = 0.0 + 0.0j
+
+    Sum = 0.0
     for alpha in range(1, nmax+1):
         Sum += w[n-1, alpha-1]*phi(r, alpha, rcut)
 
     return Sum
 
-@nb.njit(nb.c16(nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.i8, nb.f8[:,:], nb.b1, nb.f8),
-         cache=True, fastmath=True, nogil=True)
-def integrand(r, ri, alpha, rcut, n, l, nmax, w, derivative, g_elem):
-    '''
-    The integrand of the radial inner product as in
-    *cite our paper later*
-    '''
-    if derivative == False:
-        return g_elem*modifiedSphericalBessel1(2*alpha*r*ri, l, False)
-    else:
-        return r*g_elem*modifiedSphericalBessel1(2*alpha*r*ri, l, True)
-
-@nb.njit(nb.void(nb.i8, nb.i8, nb.f8, nb.f8, nb.f8[:,:], nb.f8[:,:]), cache=True, nogil=True, fastmath=True)
-def init_garray(nmax, lmax, rcut, alpha, w, g_array):
-    Nmax = (nmax+lmax+1)*10
-    for i in range(1, Nmax+1):
+def GaussChebyshevQuadrature(nmax,lmax):
+    NQuad = (nmax+lmax+1)*10
+    quad_array = np.zeros(NQuad, dtype=np.float64)
+    for i in range(1,NQuad+1,1):
         # roots of Chebyshev polynomial of degree N
-        x = np.cos((2*i-1)*np.pi/2/Nmax)
-        # transform the interval [-1,1] to [0, rcut]
-        xi = rcut/2*(x+1)
-        for n in range(1,nmax+1):
-            # r**2*g(n)(r)*e^(-alpha*r**2)
-            g_array[n-1, i-1] = (rcut/2*np.pi/Nmax*np.sqrt(1-x**2)*xi**2*g(xi, n, nmax, rcut, w)*np.exp(-alpha*xi**2)).real
+        x = np.cos((2*i-1)*np.pi/2/NQuad)
+        quad_array[i-1] = x
+    return quad_array, np.pi/NQuad
+
+def compute_cs(pos, nmax, lmax, rcut, alpha, cutoff):
+
+    # compute the overlap matrix
+    w = W(nmax)
+
+    # get the norm of the position vectors
+    Ris = np.linalg.norm(pos, axis=1) # (Nneighbors)
+
+    # initialize Gauss Chebyshev Quadrature
+    GCQuadrature, weight = GaussChebyshevQuadrature(nmax,lmax) #(Nquad)
+    weight *= rcut/2
+    # transform the quadrature from (-1,1) to (0, rcut)
+    Quadrature = rcut/2*(GCQuadrature+1)
+
+    # compute the arguments for the bessel functions
+    BesselArgs = 2*alpha*np.outer(Ris,Quadrature)#(Nneighbors x Nquad)
+
+    # initalize the arrays for the bessel function values
+    # and the G function values
+    Bessels = np.zeros((len(Ris), len(Quadrature), lmax+1), dtype=np.float64) #(Nneighbors x Nquad x lmax+1)
+    Gs = np.zeros((nmax, len(Quadrature)), dtype=np.float64) # (nmax, nquad)
+
+    # compute the g values
+    for n in range(1,nmax+1,1):
+        Gs[n-1,:] = g(Quadrature, n, nmax, rcut, w)
+
+    # compute the bessel values
+    for l in range(lmax+1):
+        Bessels[:,:,l] = spherical_in(l, BesselArgs)
+
+    # mutliply the terms in the integral separate from the Bessels
+    Quad_Squared = Quadrature**2
+    Gs *= Quad_Squared * np.exp(-alpha*Quad_Squared) * np.sqrt(1-GCQuadrature**2) * weight
+
+    # perform the integration with the Bessels
+    integral_array = np.einsum('ij,kjl->kil', Gs, Bessels) # (Nneighbors x nmax x lmax+1)
+
+    # compute the gaussian for each atom and multiply with 4*pi
+    # to minimize floating point operations
+    # weight can also go here since the Chebyshev gauss quadrature weights are uniform
+    exparray = 4*np.pi*np.exp(-alpha*Ris**2) # (Nneighbors)
+
+    cutoff_array = cutoff(Ris, rcut)
+
+    exparray *= cutoff_array
+
+    # get the spherical coordinates of each atom
+    thetas = np.arccos(pos[:,2]/Ris[:])
+    phis = np.arctan2(pos[:,1], pos[:,0])
+
+    # determine the size of the m axis
+    msize = 2*lmax+1
+    # initialize an array for the spherical harmonics
+    ylms = np.zeros((len(Ris), lmax+1, msize), dtype=np.complex128)
+
+    # compute the spherical harmonics
+    for l in range(lmax+1):
+        for m in range(-l,l+1,1):
+            midx = msize//2 + m
+            ylms[:,l,midx] = sph_harm(m, l, phis, thetas)
+
+    # multiply the spherical harmonics and the radial inner product
+    Y_mul_innerprod = np.einsum('ijk,ilj->iljk', ylms, integral_array)
+
+    # multiply the gaussians into the expression
+    C = np.einsum('i,ijkl->ijkl', exparray, Y_mul_innerprod)
+    return C
+
+def compute_dcs(pos, nmax, lmax, rcut, alpha, cutoff):
+    # compute the overlap matrix
+    w = W(nmax)
+
+    # get the norm of the position vectors
+    Ris = np.linalg.norm(pos, axis=1) # (Nneighbors)
+
+    # get unit vectors
+    upos = pos/Ris[:,np.newaxis]
+
+    # initialize Gauss Chebyshev Quadrature
+    GCQuadrature, weight = GaussChebyshevQuadrature(nmax,lmax) #(Nquad)
+    weight *= rcut/2
+    # transform from (-1,1) to (0, rcut)
+    Quadrature = rcut/2*(GCQuadrature+1)
+
+    # compute the arguments for the bessel functions
+    BesselArgs = 2*alpha*np.outer(Ris,Quadrature)#(Nneighbors x Nquad)
+
+    # initalize the arrays for the bessel function values
+    # and the G function values
+    Bessels = np.zeros((len(Ris), len(Quadrature), lmax+1), dtype=np.float64) #(Nneighbors x Nquad x lmax+1)
+    Gs = np.zeros((nmax, len(Quadrature)), dtype=np.float64) # (nmax, nquad)
+    dBessels = np.zeros((len(Ris), len(Quadrature), lmax+1), dtype=np.float64) #(Nneighbors x Nquad x lmax+1)
+
+    # compute the g values
+    for n in range(1,nmax+1,1):
+        Gs[n-1,:] = g(Quadrature, n, nmax, rcut,w)*weight
+
+    # compute the bessel values
+    for l in range(lmax+1):
+        Bessels[:,:,l] = spherical_in(l, BesselArgs)
+        dBessels[:,:,l] = spherical_in(l, BesselArgs, derivative=True)
+
+    #(Nneighbors x Nquad x lmax+1) unit vector here
+    gradBessels = np.einsum('ijk,in->ijkn',dBessels,upos)
+    gradBessels *= 2*alpha
+    # multiply with r for the integral
+    gradBessels = np.einsum('ijkn,j->ijkn',gradBessels,Quadrature)
+
+    # mutliply the terms in the integral separate from the Bessels
+    Quad_Squared = Quadrature**2
+    Gs *= Quad_Squared * np.exp(-alpha*Quad_Squared) * np.sqrt(1-GCQuadrature**2)
+
+    # perform the integration with the Bessels
+    integral_array = np.einsum('ij,kjl->kil', Gs, Bessels) # (Nneighbors x nmax x lmax+1)
+
+    grad_integral_array = np.einsum('ij,kjlm->kilm', Gs, gradBessels)# (Nneighbors x nmax x lmax+1, 3)
+
+    # compute the gaussian for each atom
+    exparray = 4*np.pi*np.exp(-alpha*Ris**2) # (Nneighbors)
+
+    gradexparray = (-2*alpha*Ris*exparray)[:,np.newaxis]*upos
+
+    cutoff_array = cutoff(Ris, rcut)
+
+    grad_cutoff_array = np.einsum('i,in->in',cutoff(Ris, rcut, True), upos)
+
+    # get the spherical coordinates of each atom
+    thetas = np.arccos(pos[:,2]/Ris[:])
+    phis = np.arctan2(pos[:,1], pos[:,0])
+
+    # the size changes temporarily for the derivative
+    # determine the size of the m axis
+    Msize = 2*(lmax+1)+1
+    msize = 2*lmax + 1
+    # initialize an array for the spherical harmonics and gradients
+    #(Nneighbors, l, m, *3*)
+    ylms = np.zeros((len(Ris), lmax+1+1, Msize), dtype=np.complex128)
+    gradylms = np.zeros((len(Ris), lmax+1, msize, 3), dtype=np.complex128)
+    # compute the spherical harmonics
+    for l in range(lmax+1+1):
+        for m in range(-l,l+1,1):
+            midx = Msize//2 + m
+            ylms[:,l,midx] = sph_harm(m, l, phis, thetas)
 
 
-@nb.njit(nb.c16(nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.i8, nb.f8[:,:], nb.b1, nb.f8[:,:], nb.i8),
-         cache=True, fastmath=True, nogil=True)
-def get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, derivative, g_array, Nmax):
-    '''
-    Chebyshev-Gauss quadrature integral calculator
-    for the radial inner product as in *cite our paper later*
-    '''
-    integral = 0.0
-    # heuristic rule for how many points to include in the quadrature
-    for i in range(1, Nmax+1, 1):
-        # roots of Chebyshev polynomial of degree N
-        x = np.cos((2*i-1)*np.pi/2/Nmax)
-        # transforming the root from the interval [-1,1] to the interval [0, rcut]
-        xi = rcut/2*(x+1)
-        integral += integrand(xi, ri, alpha, rcut, n, l, nmax, w, derivative, g_array[n-1,i-1])
-    # the weight (pi/N) is uniform for Chebyshev-Gauss quadrature
-    return integral
-
-@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:],
-                 nb.c16[:], nb.i8[:], nb.f8[:,:], nb.i8),
-         cache=True, fastmath=True, nogil=True)
-def compute_carray(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, ulist, idxylm, g_array, cutoff_id):
-    '''
-    Get expansion coefficient for one neighbor.  Then add
-    to the whole expansion coefficient
-    '''
-
-    '''
-    # construct Cayley-Klein parameters of the unit quaternion
-    # for one neighbor for spherical harmonic
-    # calculation
-
-    # get spherical coordinates from cartesian
-    theta = np.arccos(z/ri)
-    phi = np.arctan2(y,x)
-
-    # construct Cayley-Klein parameters for rotation
-    # about initial y axis
-    atheta = np.cos(theta/2)
-    btheta = np.sin(theta/2)
-
-    # construct Cayley-Klein parameters for rotation
-    # about new z axis
-    # note that bphi = 0 for rotations about z
-    aphi = np.cos(phi/2) + 1j*np.sin(phi/2)
-
-    # compose the rotations
-    Ra = atheta*aphi
-    Rb = btheta*aphi
-    '''
-
-    Nmax = (nmax+lmax+1)*10
-    # gaussian factor for this neighbor for the inner product
-    expfac = 4*np.pi*np.exp(-alpha*ri**2)
-
-    sfac = compute_sfac(ri, rcut, cutoff_id)
-
-    for n in range(1, nmax+1, 1):
-        i = 0
-        for l in range(0, lmax+1 ,1):
-            # the radial portion of this inner product cannot be calculated
-            # analytically, hence we calculate the inner product numerically
-            r_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, False, g_array, Nmax)
-            for m in range(-l, l+1, 1):
-                #Ylm = sph_harm(Ra, Rb, l, m)
-                Ylm = ulist[idxylm[i]]*np.sqrt((2*l+1)/4/np.pi)*(-1)**m
-                clist[n-1, i] += r_int*Ylm*expfac*sfac
-                i += 1
-    return
-
-@nb.njit(nb.void(nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.f8, nb.i8, nb.i8, nb.f8[:,:], nb.c16[:,:],
-                 nb.c16[:,:,:], nb.c16[:], nb.i8[:], nb.f8[:,:], nb.i8),
-         cache=True, fastmath=True, nogil=True)
-def compute_carray_wD(x, y, z, ri, alpha, rcut, nmax, lmax, w, clist, dclist, ulist, idxylm, g_array, cutoff_id):
-    '''
-    Get expansion coefficient for one neighbor.  Then add
-    to the whole expansion coefficient
-    '''
-
-    # keep x,y,z instead of array for GPU support
-    rvec = np.array((x,y,z), dtype=np.float64)
-    '''
-    # construct Cayley-Klein parameters of the unit quaternion
-    # for one neighbor for spherical harmonic
-    # calculation
-
-    # get spherical coordinates from cartesian
-    theta = np.arccos(z/ri)
-    phi = np.arctan2(y,x)
-
-    # construct Cayley-Klein parameters for rotation
-    # about initial y axis
-    atheta = np.cos(theta/2)
-    btheta = np.sin(theta/2)
-
-    # construct Cayley-Klein parameters for rotation
-    # about new z axis
-    # note that bphi = 0 for rotations about z
-    aphi = np.cos(phi/2) + 1j*np.sin(phi/2)
-
-    # compose the rotations
-    Ra = atheta*aphi
-    Rb = btheta*aphi
-    '''
-    Nmax = (nmax+lmax+1)*10
-    Ylms = np.zeros((lmax+2)**2, dtype=np.complex128)
-
-    # get spherical harmonics up to l+1
-    i = 0
-    for l in range(0, lmax+2, 1):
+    for l in range(1, lmax+1):
         for m in range(-l, l+1, 1):
-            #Ylms[i] = sph_harm(Ra, Rb, l, m)
-            Ylms[i] = ulist[idxylm[i]]*np.sqrt((2*l+1)/4/np.pi)*(-1)**m
-            i += 1
+            midx = msize//2 + m
+            Midx = Msize//2 + m
+            # get gradient with recpect to spherical covariant components
+            xcov0 = -np.sqrt(((l+1)**2-m**2)/(2*l+1)/(2*l+3))*l*ylms[:,l+1,Midx]/Ris
 
-    dYlm = np.zeros(((lmax+1)**2,3), dtype=np.complex128)
-    # get gradient of spherical harmonics using relationship
-    # to covariant spherical coordinates
-    # this avoids singularities at the poles that exist
-    # when using polar coordinates or cartesian coordinates
-    i = 1
-    # start i at 1 as the gradient of Y00 = 0
-
-    #NOTE: for GPU support get rid of the array and calculate each
-    # spherical harmonic on the fly as the if conditions are built into
-    # the spherical harmonic calculation
-    # Also just use the dC array to store the initial dYlms
-    for l in range(1, lmax+1, 1):
-        ellpl1 = np.sum(np.arange(0,l+2,1)*2)
-        ellm1 = np.sum(np.arange(0,l,1)*2)
-        for m in range(-l, l+1, 1):
-            # get indices of l+1 and l-1 spherical harmonics for m = 0
-
-            # get the gradient of spherical harmonics with respect to
-            # covariant spherical coordinates VMK 5.8.3
-            xcov0 = -np.sqrt(((l+1)**2-m**2)/(2*l+1)/(2*l+3))*l*Ylms[ellpl1+m]/ri
             if abs(m) <= l-1:
-                xcov0 += np.sqrt((l**2-m**2)/(2*l-1)/(2*l+1))*(l+1)*Ylms[ellm1+m]/ri
+                xcov0 += np.sqrt((l**2-m**2)/(2*l-1)/(2*l+1))*(l+1)*ylms[:,l-1,Midx]/Ris
 
-            xcovpl1 = -np.sqrt((l+m+1)*(l+m+2)/2/(2*l+1)/(2*l+3))*l*Ylms[ellpl1+m+1]/ri
+
+            xcovpl1 = -np.sqrt((l+m+1)*(l+m+2)/2/(2*l+1)/(2*l+3))*l*ylms[:,l+1,Midx+1]/Ris
+
             if abs(m+1) <= l-1:
-                xcovpl1 -= np.sqrt((l-m-1)*(l-m)/2/(2*l-1)/(2*l+1))*(l+1)*Ylms[ellm1+m+1]/ri
+                xcovpl1 -= np.sqrt((l-m-1)*(l-m)/2/(2*l-1)/(2*l+1))*(l+1)*ylms[:,l-1,Midx+1]/Ris
 
-            xcovm1 = -np.sqrt((l-m+1)*(l-m+2)/2/(2*l+1)/(2*l+3))*l*Ylms[ellpl1+m-1]/ri
+
+            xcovm1 = -np.sqrt((l-m+1)*(l-m+2)/2/(2*l+1)/(2*l+3))*l*ylms[:,l+1,Midx-1]/Ris
+
             if abs(m-1) <= l-1:
-                xcovm1 -= np.sqrt((l+m-1)*(l+m)/2/(2*l-1)/(2*l+1))*(l+1)*Ylms[ellm1+m-1]/ri
+                xcovm1 -= np.sqrt((l+m-1)*(l+m)/2/(2*l-1)/(2*l+1))*(l+1)*ylms[:,l-1,Midx-1]/Ris
 
             #transform the gradient to cartesian
-            dYlm[i,0] = 1/np.sqrt(2)*(xcovm1-xcovpl1)
-            dYlm[i,1] = 1j/np.sqrt(2)*(xcovm1+xcovpl1)
-            dYlm[i,2] = xcov0
-            i += 1
-
-    # gaussian factor for this neighbor for the inner product
-    expfac = 4*np.pi*np.exp(-alpha*ri**2)
-    dexpfac = -2*alpha*expfac*rvec
-    sfac = compute_sfac(ri, rcut, cutoff_id)
-    dsfac = compute_dsfac(ri, rcut, cutoff_id)*rvec/ri
-
-    for n in range(1, nmax+1, 1):
-        i = 0
-        for l in range(0, lmax+1 ,1):
-            # the radial portion of this inner product cannot be calculated
-            # analytically, hence we calculate the inner product numerically
-            r_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, False, g_array, Nmax)
-            dr_int = get_radial_inner_product(ri, alpha, rcut, n, l, nmax, w, True, g_array, Nmax)*2*alpha*rvec/ri
-            for m in range(-l, l+1, 1):
-                sfac = compute_sfac(ri, rcut, cutoff_id)
-                dsfac = compute_dsfac(ri, rcut, cutoff_id)*rvec/ri
-                clist[n-1, i] += r_int*Ylms[i]*expfac*sfac
-                dclist[n-1,i,:] += (r_int*Ylms[i]*dexpfac + dr_int*Ylms[i]*expfac + r_int*expfac*dYlm[i,:])*sfac
-                dclist[n-1,i,:] += r_int*Ylms[i]*expfac*dsfac
-                i += 1
-    return
-
-@nb.njit(nb.void(nb.c16[:,:], nb.c16[:,:]), cache=True,
-         fastmath=True, nogil=True)
-def add_carraytot(clisttot, clist):
-    '''
-    Add the expansion coefficient array for
-    one neighbor to the total
-    '''
-    clisttot[:,:] += clist[:,:]
-    return
-
-@nb.njit(nb.void(nb.i8, nb.i8, nb.c16[:,:], nb.c16[:]), cache=True,
-         fastmath=True, nogil=True)
-def compute_pi(nmax, lmax, clisttot, plist):
-    '''
-    Compute the power spectrum components by p(n1,n2,l) by summing over l
-    There is a symmetry for interchanging n1 and n2 so we only take the unique
-    elements of the power spectrum.
-    '''
-    i = 0
-    for n1 in range(0, nmax, 1):
-        for n2 in range(0, n1+1, 1):
-            j = 0
-            for l in range(0, lmax+1, 1):
-                # normalization factor in erratum
-                norm = 2*np.sqrt(2)*np.pi/np.sqrt(2*l+1)
-                for m in range(-l, l+1, 1):
-                    plist[i] += clisttot[n1, j] * clisttot[n2, j].conjugate()*norm
-                    j += 1
-                i += 1
-    return
-
-@nb.njit(nb.void(nb.i8, nb.i8, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:]), cache=True,
-         fastmath=True, nogil=True)
-def compute_dpidrj(nmax, lmax, clisttot, dclist, dplist):
-    '''
-    Compute the power spectrum components by p(n1,n2,l) by summing over l
-    There is a symmetry for interchanging n1 and n2 so we only take the unique
-    elements of the power spectrum.
-    '''
-    i = 0
-    for n1 in range(0, nmax, 1):
-        for n2 in range(0, n1+1, 1):
-            j = 0
-            for l in range(0, lmax+1, 1):
-                # normalization factor in erratum
-                norm = 2*np.sqrt(2)*np.pi/np.sqrt(2*l+1)
-                for m in range(-l, l+1, 1):
-                    temp = dclist[n1, j] * clisttot[n2, j].conjugate()
-                    temp += clisttot[n1, j] * np.conj(dclist[n2, j])
-                    temp *= norm
-                    dplist[i,:] += temp
-
-                    j += 1
-                i += 1
-    return
-
-@nb.njit(nb.void(nb.c16[:]),
-         cache=True, fastmath=True, nogil=True)
-def zero_1d(arr):
-    # zero a generic 1-d array
-    for i in range(arr.shape[0]):
-        arr[i] = 0
-    return
-
-@nb.njit(nb.void(nb.c16[:,:]), cache=True, fastmath=True, nogil=True)
-def zero_2D_array(arr):
-    '''
-    zeros an arbitrary 2D array
-    '''
-    for i in range(0, arr.shape[0], 1):
-        for j in range(0, arr.shape[1], 1):
-            arr[i,j] = 0.0 + 0.0j
-    return
-
-@nb.njit(nb.void(nb.c16[:,:,:,:]), cache=True, fastmath=True, nogil=True)
-def zero_4D_array(arr):
-    '''
-    zeros an arbitrary 2D array
-    '''
-    for i in range(0, arr.shape[0], 1):
-        for j in range(0, arr.shape[1], 1):
-            for k in range(0, arr.shape[2], 1):
-                for l in range(0, arr.shape[3], 1):
-                    arr[i,j,k,l] = 0.0 + 0.0j
-    return
-
-@nb.njit(nb.void(nb.f8[:,:], nb.f8[:,:,:], nb.i8[:,:], nb.i8[:,:], nb.i8, nb.i8, nb.f8, nb.f8, nb.b1, nb.b1, nb.c16[:,:], nb.c16[:,:,:], nb.c16[:,:,:,:], nb.i8),
-         cache=True, fastmath=True, nogil=True)
-def get_power_spectrum_components(center_atoms, neighborlist, seq, neighbor_ANs, nmax, lmax, rcut, alpha, derivative, stress, plist, dplist, pstress, cutoff_id):
-    '''
-    Interface to SO3 class, this is the main work function for the power spectrum calculation.
-    '''
-    # get the number of sites, number of neighbors, and number of spherical harmonics
-    npairs = neighborlist.shape[0]
-    nneighbors = neighborlist.shape[1]
-    numYlms = (lmax+1)**2
-
-    # allocate array memory for the total inner product
-    clisttot = np.zeros((nmax, numYlms), dtype=np.complex128)
-    # the inner product for one neighbor
-    clist = np.zeros((nmax, numYlms), dtype=np.complex128)
-    # the gradient of the inner product with respect to one neighbor
-    dclist = np.zeros((nneighbors, nmax, numYlms, 3), dtype=np.complex128)
-
-    # get the overlap matrix for n max
-    w = np.zeros((nmax, nmax), np.float64)
-    W(nmax, w)
-
-    Nmax = (nmax+lmax+1)*10
-    g_array = np.zeros((nmax, Nmax), dtype=np.float64)
-    init_garray(nmax, lmax, rcut, alpha, w, g_array)
-
-    # index list for u array
-    twolmax = 2*(lmax+1)
-    rootpq = init_rootpqarray(twolmax)
-    ldim = twolmax+1
-    idxu_block = np.zeros(ldim, dtype=np.int64)
-    idxylm = np.zeros((lmax+2)**2, dtype=np.int64)
-
-    # populate the index list for u arrays and count
-    # the number of u arrays
-    idxu_count = 0
-    idxy_count = 0
-    for l in range(0, ldim, 1):
-        idxu_block[l] = idxu_count
-        for mb in range(0, l + 1, 1):
-            for ma in range(0, l + 1, 1):
-                if l%2 == 0 and ma == l/2:
-                    idxylm[idxy_count] = idxu_count
-                    idxy_count += 1
-                idxu_count += 1
-
-    ulist = np.zeros((idxu_count), dtype=np.complex128)
-
-    if derivative == True:
-        if stress == True:
-            numps = nmax*(nmax+1)*(lmax+1)//2
-            tempdp = np.zeros((numps, 3), dtype=np.complex128)
-            Rj = np.zeros(3, dtype=np.float64)
-            isite = seq[0,0]
-            nstart = 0
-            nsite = 0 # atom 0,0
-            # get expansion coefficients and derivatives, also get power
-            # spectra
-            for n in range(npairs):
-                i, j = seq[n]
-                weight = neighbor_ANs[n,0]
-
-                # once we change center atoms, we need to compute the power
-                # spectrum and derivatives for the previous center atom before moving
-                # on
-                if i != isite:
-                    compute_pi(nmax, lmax, clisttot, plist[isite])
-                    for N in range(nstart, n, 1):
-                        I, J = seq[N]
-                        Ri = center_atoms[I]
-                        Weight = neighbor_ANs[N,0]
-                        zero_4D_array(dclist)
-                        for neighbor in prange(nneighbors):
-                            x = neighborlist[N, neighbor, 0]
-                            y = neighborlist[N, neighbor, 1]
-                            z = neighborlist[N, neighbor, 2]
-                            r = np.sqrt(x*x + y*y + z*z)
-                            if r < 10**(-8):
-                                continue
-                            zero_2D_array(clist)
-
-                            zero_1d(ulist)
-                            compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
-
-                            compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor], ulist, idxylm, g_array, cutoff_id)
-
-                            dclist[neighbor] *= Weight
-
-                            zero_2D_array(tempdp)
-                            compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
-                                           tempdp)
-
-                            if I != J:
-                                dplist[N] += tempdp
-                                dplist[nsite] -= tempdp
-
-                            Rj[0] = x + Ri[0]
-                            Rj[1] = y + Ri[1]
-                            Rj[2] = z + Ri[2]
-
-                            for k in range(numps):
-                                pstress[nsite, k] += np.outer(Ri, tempdp[k])
-                                pstress[N, k] -= np.outer(Rj, tempdp[k])
-
-
-
-                    isite = i
-                    nstart = n
-                    zero_2D_array(clisttot)
-                # end if i != isite
-                if i == j:
-                    nsite = n
-
-                for neighbor in prange(nneighbors):
-                    x = neighborlist[n, neighbor, 0]
-                    y = neighborlist[n, neighbor, 1]
-                    z = neighborlist[n, neighbor, 2]
-                    r = np.sqrt(x*x + y*y + z*z)
-                    if r < 10**(-8):
-                        continue
-                    zero_2D_array(clist)
-                    zero_1d(ulist)
-                    compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
-                    compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, ulist, idxylm, g_array, cutoff_id)
-
-                    clist *= weight
-
-                    add_carraytot(clisttot, clist)
-
-
-            # finish last center atom for power spectrum
-            compute_pi(nmax, lmax, clisttot, plist[isite])
-            for N in range(nstart, npairs, 1):
-                I, J = seq[N]
-                Ri = center_atoms[I]
-                Weight = neighbor_ANs[N,0]
-                zero_4D_array(dclist)
-                for neighbor in prange(nneighbors):
-                    x = neighborlist[N, neighbor, 0]
-                    y = neighborlist[N, neighbor, 1]
-                    z = neighborlist[N, neighbor, 2]
-                    r = np.sqrt(x*x + y*y + z*z)
-                    if r < 10**(-8):
-                        continue
-                    zero_2D_array(clist)
-
-                    zero_1d(ulist)
-                    compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
-                    compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor], ulist, idxylm, g_array, cutoff_id)
-
-                    dclist[neighbor] *= Weight
-
-                    zero_2D_array(tempdp)
-                    compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
-                                   tempdp)
-
-                    if I != J:
-                        dplist[N] += tempdp
-                        dplist[nsite] -= tempdp
-
-                    Rj[0] = x + Ri[0]
-                    Rj[1] = y + Ri[1]
-                    Rj[2] = z + Ri[2]
-
-                    for k in range(numps):
-                        pstress[nsite, k] += np.outer(Ri, tempdp[k])
-                        pstress[N, k] -= np.outer(Rj, tempdp[k])
-
-        else:
-            numps = nmax*(nmax+1)*(lmax+1)//2
-            tempdp = np.zeros((numps, 3), dtype=np.complex128)
-            isite = seq[0,0]
-            nstart = 0
-            nsite = 0 # atom 0,0
-            # get expansion coefficients and derivatives, also get power
-            # spectra
-            for n in range(npairs):
-                i, j = seq[n]
-                weight = neighbor_ANs[n,0]
-
-                # once we change center atoms, we need to compute the power
-                # spectrum and derivatives for the previous center atom before moving
-                # on
-                if i != isite:
-                    compute_pi(nmax, lmax, clisttot, plist[isite])
-                    for N in range(nstart, n, 1):
-                        I, J = seq[N]
-                        Ri = center_atoms[I]
-                        Weight = neighbor_ANs[N,0]
-                        zero_4D_array(dclist)
-                        for neighbor in prange(nneighbors):
-                            x = neighborlist[N, neighbor, 0]
-                            y = neighborlist[N, neighbor, 1]
-                            z = neighborlist[N, neighbor, 2]
-                            r = np.sqrt(x*x + y*y + z*z)
-                            if r < 10**(-8):
-                                continue
-                            zero_2D_array(clist)
-
-                            zero_1d(ulist)
-                            compute_uarray_recursive(x,y,z,r,twolmax,ulist,idxu_block,rootpq)
-                            compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                              clist, dclist[neighbor], ulist, idxylm, g_array, cutoff_id)
-
-                            dclist[neighbor] *= Weight
-
-                            zero_2D_array(tempdp)
-                            compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
-                                           tempdp)
-
-                            if I != J:
-                                dplist[N] += tempdp
-                                dplist[nsite] -= tempdp
-
-                    isite = i
-                    nstart = n
-                    zero_2D_array(clisttot)
-                # end if i != isite
-                if i == j:
-                    nsite = n
-
-                for neighbor in prange(nneighbors):
-                    x = neighborlist[n, neighbor, 0]
-                    y = neighborlist[n, neighbor, 1]
-                    z = neighborlist[n, neighbor, 2]
-                    r = np.sqrt(x*x + y*y + z*z)
-                    if r < 10**(-8):
-                        continue
-                    zero_2D_array(clist)
-                    zero_1d(ulist)
-
-                    compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist,ulist,idxylm, g_array, cutoff_id)
-
-                    clist *= weight
-
-                    add_carraytot(clisttot, clist)
-
-
-            # finish last center atom for power spectrum
-            compute_pi(nmax, lmax, clisttot, plist[isite])
-            for N in range(nstart, npairs, 1):
-                I, J = seq[N]
-                Ri = center_atoms[I]
-                Weight = neighbor_ANs[N,0]
-                zero_4D_array(dclist)
-                for neighbor in prange(nneighbors):
-                    x = neighborlist[N, neighbor, 0]
-                    y = neighborlist[N, neighbor, 1]
-                    z = neighborlist[N, neighbor, 2]
-                    r = np.sqrt(x*x + y*y + z*z)
-                    if r < 10**(-8):
-                        continue
-                    zero_2D_array(clist)
-                    zero_1d(ulist)
-
-                    compute_carray_wD(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, dclist[neighbor], ulist, idxylm, g_array, cutoff_id)
-
-                    dclist[neighbor] *= Weight
-
-                    zero_2D_array(tempdp)
-                    compute_dpidrj(nmax, lmax, clisttot, dclist[neighbor],
-                                   tempdp)
-
-                    if I != J:
-                        dplist[N] += tempdp
-                        dplist[nsite] -= tempdp
-
-    else:
-
-            isite = seq[0,0]
-            nstart = 0
-            nsite = 0 # atom 0,0
-            # get expansion coefficients and derivatives, also get power
-            # spectra
-            for n in range(npairs):
-                i, j = seq[n]
-                if i == j:
-                    nsite = n
-                weight = neighbor_ANs[n,0]
-
-                # once we change center atoms, we need to compute the power
-                # spectrum and derivatives for the previous center atom before moving
-                # on
-                if i != isite:
-                    compute_pi(nmax, lmax, clisttot, plist[isite])
-                    isite = i
-                    nstart = n
-                    zero_2D_array(clisttot)
-                # end if i != isite
-
-                for neighbor in prange(nneighbors):
-                    x = neighborlist[n, neighbor, 0]
-                    y = neighborlist[n, neighbor, 1]
-                    z = neighborlist[n, neighbor, 2]
-                    r = np.sqrt(x*x + y*y + z*z)
-                    if r < 10**(-8):
-                        continue
-                    zero_2D_array(clist)
-                    zero_1d(ulist)
-
-                    compute_carray(x, y, z, r, alpha, rcut, nmax, lmax, w,
-                                      clist, ulist, idxylm, g_array, cutoff_id)
-
-                    clist *= weight
-
-                    add_carraytot(clisttot, clist)
-
-
-            # finish last center atom for power spectrum
-            compute_pi(nmax, lmax, clisttot, plist[isite])
-    return
+            gradylms[:,l,midx,0] = 1/np.sqrt(2)*(xcovm1-xcovpl1)
+            gradylms[:,l,midx,1] = 1j/np.sqrt(2)*(xcovm1+xcovpl1)
+            gradylms[:,l,midx,2] = xcov0
+
+    # index ylms to get rid of extra terms for derivative
+    ylms = ylms[:,0:lmax+1,1:1+2*lmax+1]
+    # multiply the spherical harmonics and the radial inner product
+    Y_mul_innerprod = np.einsum('ijk,ilj->iljk', ylms, integral_array)
+    # multiply the gradient of the spherical harmonics with the radial inner get_radial_inner_product
+    dY_mul_innerprod = np.einsum('ijkn,ilj->iljkn', gradylms, integral_array)
+    # multiply the spherical harmonics with the gradient of the radial inner get_radial_inner_product
+    Y_mul_dinnerprod = np.einsum('ijk,iljn->iljkn', ylms, grad_integral_array)
+    # multiply the gaussians into the expression with 4pi
+    C = np.einsum('i,ijkl->ijkl', exparray, Y_mul_innerprod)
+    # multiply the gradient of the gaussian with the other terms
+    gradexp_mul_y_inner = np.einsum('in,ijkl->ijkln', gradexparray, Y_mul_innerprod)
+    # add gradient of inner product and spherical harmonic terms
+    gradHarmonics_mul_gaussian = np.einsum('ijkln,i->ijkln', dY_mul_innerprod+Y_mul_dinnerprod, exparray)
+    dC = gradexp_mul_y_inner + gradHarmonics_mul_gaussian
+    dC *= cutoff_array[:,np.newaxis,np.newaxis,np.newaxis,np.newaxis]
+    dC += np.einsum('in,ijkl->ijkln', grad_cutoff_array, C)
+    C *= cutoff_array[:,np.newaxis,np.newaxis,np.newaxis]
+    return C, dC
+
+def get_rotated_struc(struc, angle=0, axis='x'):
+    s_new = struc.copy()
+    s_new.rotate(angle, axis)
+    cell = 17.22*np.eye(3)
+    p_struc = Atoms(s_new.symbols.numbers, positions=s_new.positions, cell=cell, pbc=True)
+    return p_struc
 
 if  __name__ == "__main__":
     from ase.io import read
@@ -1349,7 +699,7 @@ if  __name__ == "__main__":
                       help="cutoff for neighbor calcs, default: 2.0"
                       )
 
-    parser.add_option("-s", dest="stress", default=True, 
+    parser.add_option("-s", dest="stress", default=True,
                       action='store_true',help='derivative flag')
 
     parser.add_option("-f", dest="der", default=True,
@@ -1373,29 +723,23 @@ if  __name__ == "__main__":
     der = options.der
     stress = options.stress
 
-    import time
+    struc = get_rotated_struc(test)
     start1 = time.time()
-    f = SO3(nmax, lmax, rcut, alpha, derivative=der, stress=stress)
-    x = f.calculate(test, atom_ids=[0, 1])
-    print(x['dxdr'])
+    f = SO3(nmax=5, lmax=5, rcut=5.5, alpha=2.0, derivative=True, stress=False)
+    x = f.calculate(struc)#, atom_ids=[0, 1])
+    #norm = np.linalg.norm(x['dxdr'],axis=2)
     start2 = time.time()
-    '''
-    for key, item in x.items():
-        print(key, item)
-        print('time elapsed: {}'.format(start2 - start1))
-    '''
-
-    #print(x['rdxdr'].shape)
-    #print(x['rdxdr'])
-    #print(np.einsum('ijklm->klm', x['rdxdr']))
-    #print(x['x'])
-    # reconstruct the 3D array for the first atom
-    #tmp = np.zeros([len(test), len(x['x'][0]), 3])
-    #for id, s in enumerate(x['seq']):
-    #    i, j = s[0], s[1]
-    #    if i == 0:
-    #        print(j)
-    #        print(x['dxdr'][id])
-    #print(x['x'])
-    #print(x['seq'][:8])
-    print('time elapsed: {}'.format(start2 - start1))
+    print('calculation time')
+    print(start2-start1)
+    struc = get_rotated_struc(test,0,'x')
+    start1 = time.time()
+    f1 = SO3(nmax=5, lmax=5, rcut=5.5, alpha=2.0, derivative=False, stress=False)
+    x1 = f1.calculate(struc)#, atom_ids=[0, 1])
+    #norm1 = np.linalg.norm(x1['dxdr'],axis=2)
+    start2 = time.time()
+    print('calculation time')
+    print(start2-start1)
+    print('rotational invariance')
+    print((x['x'] - x1['x']).sum())
+    #print('gradient norm invariance')
+    #print((norm-norm1).sum())
