@@ -239,7 +239,7 @@ class Database():#MutableSequence):
         d['energy'] = np.asarray(data['energy'] - base_d['energy'])
         d['force'] = np.asarray(data['force']) - base_d['force']
         if data['stress'] is not None:
-            d['stress'] = np.asarray(data['stress']) - base_d['stress'] / units.GPa
+            d['stress'] = np.asarray(data['stress']) + base_d['stress'] / units.GPa
         else:
             d['stress'] = data['stress'] 
         d['group'] = data['group']
