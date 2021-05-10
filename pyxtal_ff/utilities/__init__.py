@@ -285,7 +285,7 @@ def compute_descriptor(function, structure):
 
     elif function['type'] in ['EAD', 'ead']:
             from pyxtal_ff.descriptors.EAD import EAD
-            d = EAMD(function['parameters'],
+            d = EAD(function['parameters'],
                      function['Rc'],
                      True, True,
                      function['cutoff']).calculate(structure)
