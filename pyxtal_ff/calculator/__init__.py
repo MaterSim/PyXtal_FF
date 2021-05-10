@@ -53,7 +53,7 @@ class PyXtalFFCalculator(Calculator):
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
         # from GPa to eV/A^3
-        self.results['stress'] = (stress[[0, 1, 2, 5, 4, 3]] * units.GPa + base_stress) 
+        self.results['stress'] = (stress[[0, 1, 2, 5, 4, 3]] * units.GPa - base_stress) 
 
     def __str__(self):
         s = "\nASE calculator with pyxtal_ff force field\n"
