@@ -5,10 +5,13 @@ import numpy as np
 from ase import Atoms
 from ase.build import bulk, sort
 from ase.cluster.cubic import FaceCenteredCubic
+from ase import units
+from ase.optimize import BFGS
 
 from pkg_resources import resource_filename
 from pyxtal_ff import PyXtal_FF
-from pyxtal_ff.calculator import PyXtalFFCalculator
+from pyxtal_ff.calculator import PyXtalFFCalculator, optimize
+from pyxtal_ff.calculator.elasticity import fit_elastic_constants
 from pyxtal_ff.descriptors.SO3 import SO3
 from pyxtal_ff.descriptors.EAD import EAD
 from pyxtal_ff.descriptors.ACSF import ACSF
@@ -72,6 +75,11 @@ descriptor_comp = {'type': 'Bispectrum',
                    'Rc': 3.0,
                    'N_train': 10,
                   }
+
+# model file
+bp_model = resource_filename("pyxtal_ff", "datasets/Si/PyXtal/bp-16-16-checkpoint.pth")
+
+
 
 class TestEAD(unittest.TestCase):
     struc = get_rotated_struc(nacl)
@@ -258,6 +266,28 @@ class TestSO4(unittest.TestCase):
                 array2 = (so42['x'] - self.so40['x'])/eps
                 self.assertTrue(np.allclose(array1[:,j,:,k], array2, atol=1e-2))
 
+class TestCalculator(unittest.TestCase):
+
+    def testOptim(self):
+        ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
+        ff.run(mode='predict', mliap=bp_model)
+        calc = PyXtalFFCalculator(ff=ff)
+        si = bulk('Si', 'diamond', a=5.0, cubic=True)
+        si.set_calculator(calc)
+        si = optimize(si, box=True)
+        self.assertTrue(abs(si.get_cell()[0][0]-5.469) <1e-2)
+
+    def test_elastic(self):
+        ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
+        ff.run(mode='predict', mliap=bp_model)
+        calc = PyXtalFFCalculator(ff=ff)
+        si = bulk('Si', 'diamond', a=5.0, cubic=True)
+        si.set_calculator(calc)
+        C, C_err = fit_elastic_constants(si, symmetry='cubic', optimizer=BFGS)
+        C /= units.GPa
+        self.assertTrue(abs(C[0,0]-124.5)<1.0)
+
+
 class TestZBL(unittest.TestCase):
     struc = nacl.copy()
     d = ZBL(2.0, 7.0).calculate(struc)
@@ -362,6 +392,7 @@ class TestRegressionComp(unittest.TestCase):
     def test_lr_comp(self):
         self.ff._model['order'] = 1
         (train_stat, _) = self.ff.run(mode='train', TrainData=TrainData)
+
 
 if __name__ == '__main__':
 

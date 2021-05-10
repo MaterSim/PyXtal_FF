@@ -26,7 +26,7 @@ setup(
               'pyxtal_ff.models', 
               'pyxtal_ff.models.optimizers', 
               'pyxtal_ff.utilities'],
-    package_data={'pyxtal_ff.datasets.Si.PyXtal': ['*.json'],
+    package_data={'pyxtal_ff.datasets.Si.PyXtal': ['*.json', '*.pth'],
                   'pyxtal_ff.descriptors': ['*.npy'],
                  },
     classifiers=[
