@@ -30,10 +30,10 @@ class PyXtalFFCalculator(Calculator):
 
         # base potential
         if self.parameters.ff._descriptors['base_potential']:
-            self.base_potential = ZBL(self.parameters.ff._desciptors['base_potential']['inner'],
-                                      self.parameters.ff._desciptors['base_potential']['outer'],
+            self.base_potential = ZBL(self.parameters.ff._descriptors['base_potential']['inner'],
+                                      self.parameters.ff._descriptors['base_potential']['outer'],
                                       atomic_energy=True)
-            base_results = self.base_potential(atoms)
+            base_results = self.base_potential.calculate(atoms)
             base_energy = base_results['energy']
             base_forces = base_results['force']
             base_stress = base_results['stress'] # eV/A^3
