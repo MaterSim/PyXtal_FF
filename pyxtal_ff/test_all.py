@@ -281,7 +281,7 @@ class TestCalculator(unittest.TestCase):
         ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
         ff.run(mode='predict', mliap=bp_model)
         calc = PyXtalFFCalculator(ff=ff)
-        si = bulk('Si', 'diamond', a=5.0, cubic=True)
+        si = bulk('Si', 'diamond', a=5.469, cubic=True)
         si.set_calculator(calc)
         C, C_err = fit_elastic_constants(si, symmetry='cubic', optimizer=BFGS)
         C /= units.GPa
