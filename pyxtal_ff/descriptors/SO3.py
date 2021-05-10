@@ -263,7 +263,7 @@ class SO3:
 
             if self._stress:
                 vol = atoms.get_volume()
-                x['rdxdr'] = self._pstress/vol
+                x['rdxdr'] = -self._pstress/vol
             else:
                 x['rdxdr'] = None
 
