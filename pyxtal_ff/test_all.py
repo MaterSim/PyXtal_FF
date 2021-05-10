@@ -14,6 +14,7 @@ from pyxtal_ff.descriptors.EAD import EAD
 from pyxtal_ff.descriptors.ACSF import ACSF
 from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum as SO42
 from pyxtal_ff.descriptors.SNAP import SO4_Bispectrum as SO41
+from pyxtal_ff.utilities.base_potential import ZBL
 np.set_printoptions(formatter={'float': '{: 12.4f}'.format})
 
 def get_rotated_struc(struc, angle=0, axis='x'):
@@ -256,6 +257,30 @@ class TestSO4(unittest.TestCase):
                 so42 = SO42(lmax=lmax, rcut=rc, derivative=False).calculate(struc)
                 array2 = (so42['x'] - self.so40['x'])/eps
                 self.assertTrue(np.allclose(array1[:,j,:,k], array2, atol=1e-2))
+
+class TestZBL(unittest.TestCase):
+    struc = nacl.copy()
+    d = ZBL(2.0, 7.0).calculate(struc)
+
+    def test_ZBL(self):
+        tenergy = 4.4444502 / len(self.struc)
+        tforces = np.array(
+                    [[-0.787367, -0.773506, -0.800989],
+                     [-0.787367,  0.773506,  0.800989],
+                     [ 0.787367, -0.800989,  0.773506],
+                     [ 0.787367,  0.800989, -0.773506],
+                     [ 0.814652, -0.80031,  -0.828745],
+                     [ 0.814652,  0.80031,   0.828745],
+                     [-0.814652, -0.828745,  0.80031 ],
+                     [-0.814652,  0.828745, -0.80031]])
+        tstress = np.array([2861.0152, 2861.0152, 2861.0152, 0, 0, 0])
+        energy = self.d['energy'] / len(self.struc)
+        forces = self.d['force']
+        stress = self.d['stress'] * 1602176.6208
+
+        self.assertTrue(abs(tenergy-energy) < 1e-7)
+        self.assertTrue(np.allclose(tforces, forces))
+        self.assertTrue(np.allclose(tstress, stress))
 
 
 class TestRegression(unittest.TestCase):
