@@ -27,8 +27,9 @@ with connect(folder + '/ase.db') as db:
             s = db.get_atoms(row.id)
             s.set_calculator(calc)
             e = s.get_potential_energy()
-            stress = [x*units.GPa for x in row.data['stress']] # GPa to eV/A^3
+            dftstress = row.data['stress'] # in GPa -> [xx,yy,zz,xy,xz,yz]
+            pffstress = (-1*s.get_stress()/units.GPa)[[0,1,2,5,4,3]] # GPa to eV/A^3 -> [xx,yy,zz,yz,xz,xy] to [xx,yy,zz,xy,xz,yz]
             print("\nDFT Energy: {:6.3f} v.s. PFF energy {:6.3f}".format(row.data['energy'], e))
-            print("DFT: {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}".format(*stress))
-            print("PFF: {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}".format(*s.get_stress()))
-            calc.print_stresses()
+            print("DFT: {:6.3f} {:6.4f} {:6.4f} {:6.4f} {:6.4f} {:6.4f}".format(*dftstress))
+            print("PFF: {:6.3f} {:6.4f} {:6.4f} {:6.4f} {:6.4f} {:6.4f}".format(*pffstress))
+            #calc.print_stresses()
