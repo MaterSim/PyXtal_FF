@@ -658,7 +658,7 @@ class NeuralNetwork():
                 _e = model(_x).sum()
                 #energy += _e.detach().numpy() 
                 energies[count:count+len(_x)] = model(_x).detach().numpy().reshape([len(_x)])
-
+                count += len(_x)
                 
                 if bforce:
                     dedx = torch.autograd.grad(_e, _x)[0]
