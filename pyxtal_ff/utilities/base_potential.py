@@ -281,20 +281,22 @@ if __name__ == '__main__':
     from ase.io import read
     np.set_printoptions(formatter={'float': '{: 0.6f}'.format})
 
-    #struc = read("MOD_NiMo.cif")
-    struc = read("MOD_NiMo_real.cif")
-    #struc = bulk('Si', 'diamond', a=5.0, cubic=True)
     t0 = time.time()
-    zbl = ZBL(2.0, 10.0)
-    d = zbl.calculate(struc)
-    energy = d['energy'] / len(struc)
-    forces = d['force']
-    stress = d['stress'] * 1602176.6208
-    t1 = time.time()
+    #struc = read("MOD_NiMo.cif")
+    #struc = read("MOD_NiMo_real.cif")
+    for inner in [1.0, 1.5, 2.0, 2.5, 3.0]:
+        print("inner==================", inner)
+        for a in [2.0, 3.0, 4.0, 4.5, 5.0, 5.5]:
+            struc = bulk('Si', 'diamond', a=a, cubic=True)
+            zbl = ZBL(inner, 4.0)
+            d = zbl.calculate(struc)
+            energy = d['energy'] / len(struc)
+            forces = d['force']
+            stress = d['stress'] #* 1602176.6208
 
-    print("Energy: ", energy)
-    print("Force: ")
-    print(forces)
-    print("Stress: ")
-    print(stress)
+            #print("Energy: ", energy)
+            #print("Force: ")
+            #print(forces)
+            print(a, "Stress: ", stress)
+    t1 = time.time()
     print("\nTime: ", round(t1-t0, 6), "s")

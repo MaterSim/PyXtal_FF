@@ -37,7 +37,7 @@ else:
 model = {'system' : ['Si'],
          'hiddenlayers': [16, 16],
          'path': folder,
-         #'restart': folder + '16-16-checkpoint.pth',
+         'restart': folder + '16-16-checkpoint.pth',
          'optimizer': {'method': 'lbfgs'},
          'force_coefficient': 2e-2,
          'stress_coefficient': 2e-3,
