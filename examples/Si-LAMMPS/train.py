@@ -15,22 +15,34 @@ if not os.path.exists(TrainData):
     os.system('wget ' + url + TestData.split('/')[-1])
     os.chdir('..')
 
-descriptor = {'type': 'SO3',
-              #'weights': {'Si': 1.0},
-              'Rc': 5.0,
-              'parameters': {'lmax': 4, 'nmax': 3},
-              'ncpu': 1,
-             }
+if True:
+    folder = 'Si-snap-zbl/'
+    descriptor = {'type': 'SNAP',
+                  'weights': {'Si': 1.0},
+                  'Rc': 5.0,
+                  'parameters': {'lmax': 3},
+                  'base_potential': {'inner': 2.0, 'outer': 4.0}, #zbl potential
+                  'ncpu': 1,
+                 }
+else:
+    folder = 'Si-so3-zbl/'
+    descriptor = {'type': 'SO3',
+                  #'weights': {'Si': 1.0},
+                  'Rc': 5.0,
+                  'parameters': {'lmax': 4, 'nmax': 3},
+                  'ncpu': 1,
+                 }
+
 
 model = {'system' : ['Si'],
          'hiddenlayers': [16, 16],
-         'path': 'Si-so3/',
-         #'restart': 'Si-so3/16-16-checkpoint.pth',
+         'path': folder,
+         #'restart': folder + '16-16-checkpoint.pth',
          'optimizer': {'method': 'lbfgs'},
          'force_coefficient': 2e-2,
          'stress_coefficient': 2e-3,
          'alpha': 1e-6,
-         'epoch': 1000,
+         'epoch': 4000,
          }
 
 ff = PyXtal_FF(descriptors=descriptor, model=model)

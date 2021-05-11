@@ -2,6 +2,7 @@
 
 ## Remark
 This is the first example to let the users be familiar with PyXtal\_FF.
+
 Last updated by Qiang Zhu on 2021/05/10.
 
 ## data source:
