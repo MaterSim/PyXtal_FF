@@ -54,8 +54,8 @@ class PyXtalFFCalculator(Calculator):
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
         # from GPa to eV/A^3
-        self.results['stress_zbl'] = base_stress
-        self.results['stress_ml'] = stress * units.GPa
+        self.results['stress_zbl'] = base_stress/units.GPa
+        self.results['stress_ml'] = stress 
 
         # ase counts the stress differently
         self.results['stress'] = -(stress * units.GPa + base_stress)[[0, 1, 2, 5, 4, 3]]

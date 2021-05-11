@@ -1,7 +1,7 @@
 from random import random
 import numpy as np 
 from ase.build import bulk
-from ase.io import read
+from ase import units
 from lammps import lammps
 
 from pyxtal_ff import PyXtal_FF
@@ -42,7 +42,7 @@ lmp = lammps(lammps_name, cmd_args, comm)
 
 
 # the pair style command to appear in lammps
-parameters = ["mass 1 14.0",
+parameters = ["mass 1 28.0855",
               "pair_style hybrid/overlay &",
               "mliap model nn " + lmpiap + " descriptor " + des + " " + lmpdes + " &",
               "zbl 2.0 4.0",
@@ -53,10 +53,10 @@ parameters = ["mass 1 14.0",
 calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
 
 # check for single configuration
-for i in range(1):
+for i in range(100):
     #si = bulk('Si', 'diamond', a=5.0, cubic=True)
     si = bulk('Si', 'diamond', a=5.2, cubic=True)
-    #si.positions[0,0] += (random() - 0.5)
+    si.positions[0,0] += (random() - 0.5)
     eng = []
     force = []
     stress = []
@@ -71,14 +71,14 @@ for i in range(1):
         #print(si.get_forces())
         #print("Stresses (GPa)")
         #print(si.get_stress())
-        if j == 0:
-            calc.print_stresses()
+        #if j == 0:
+        #    calc.print_stresses()
 
     e_diff = eng[0]-eng[1]
     f_diff = np.linalg.norm((force[0] - force[1]).flatten())
     s_diff = np.linalg.norm((stress[0] - stress[1]).flatten())
 
-    #print("{:3d} {:8.3f} {:8.3f} {:8.3f} {:8.3f} {:8.3f}".format(i, eng[0], eng[1], e_diff, f_diff, s_diff))
+    print("{:3d} {:8.3f} eV {:8.3f} GPa {:8.3f} {:8.3f} {:8.3f}".format(i, eng[0], -stress[0][0]/units.GPa, e_diff, f_diff, s_diff))
     if abs(e_diff) > 1e-2:
         break
 
