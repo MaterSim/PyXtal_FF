@@ -201,12 +201,17 @@ class SO3:
         ncoefs = self.nmax*(self.nmax+1)//2*(self.lmax+1)
         tril_indices = np.tril_indices(self.nmax, k=0)
 
+        ls = np.arange(self.lmax+1)
+        norm = np.sqrt(2*np.sqrt(2)*np.pi/np.sqrt(2*ls+1))
+
         if self.derivative:
             # get expansion coefficients and derivatives
             cs, dcs = compute_dcs(self.neighborlist, self.nmax, self.lmax, self.rcut, self.alpha, self._cutoff_function)
             # weight cs and dcs
             cs *= self.atomic_weights[:,np.newaxis,np.newaxis,np.newaxis]
             dcs *= self.atomic_weights[:,np.newaxis,np.newaxis,np.newaxis,np.newaxis]
+            cs = np.einsum('inlm,l->inlm', cs, norm)
+            dcs = np.einsum('inlmj,l->inlmj', dcs, norm)
             Ris = self.center_atoms
             Rjs = self.neighborlist + Ris
             for i in np.unique(self.seq[:,0]):
@@ -218,6 +223,7 @@ class SO3:
                 inds = centers*neighs
                 # total up the c array for the center atom
                 ctot = cs[centers].sum(axis=0)
+                #ctot = np.einsum('nlm,l->nlm', ctot,norm)
                 # get dc weights
                 # compute the power spectrum
                 P = np.einsum('ijk,ljk->ilj', ctot, np.conj(ctot)).real
@@ -228,7 +234,6 @@ class SO3:
 
                 rdPi = np.einsum('wn,wijkm->wijknm', Ris[centers], dP)
                 rdPj = np.einsum('wn,wijkm->wijknm', Rjs[centers], dP)
-
                 # get ij pairs for center atom
                 ijs = self.neighbor_indices[centers]
                 # loop over unique neighbor indices
@@ -260,7 +265,6 @@ class SO3:
 
             x = {'x':self._plist, 'dxdr':self._dplist,
                  'elements':list(atoms.symbols), 'seq':self.seq}
-
             if self._stress:
                 vol = atoms.get_volume()
                 x['rdxdr'] = self._pstress/vol
@@ -270,6 +274,7 @@ class SO3:
         else:
             cs = compute_cs(self.neighborlist, self.nmax, self.lmax, self.rcut, self.alpha, self._cutoff_function)
             cs *= self.atomic_weights[:,np.newaxis,np.newaxis,np.newaxis]
+            cs = np.einsum('inlm,l->inlm', cs, norm)
             # everything good up to here
             for i in np.unique(self.seq[:,0]):
                 centers = self.neighbor_indices[:,0] == i
@@ -729,6 +734,6 @@ if  __name__ == "__main__":
     f = SO3(nmax=nmax, lmax=lmax, rcut=rcut, alpha=alpha, derivative=True, stress=False, cutoff_function='unity')
     x = f.calculate(test)
     start2 = time.time()
-    print('x', x['x'])
-    print('dxdr', x['dxdr'])
+    print('x', x['dxdr'])
+    #print('dxdr', x['dxdr'])
     print('calculation time {}'.format(start2-start1))
