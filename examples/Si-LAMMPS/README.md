@@ -1,10 +1,15 @@
 # Example of SNAP\_NN model for elemental silicon
 
+## Remark
 This is an example to train the neural networks model based on the SNAP/SO3 descriptor based on an online [dataset](https://github.com/materialsvirtuallab/mlearn/tree/master/data/Si)
+
+Note that the [zbl potential](https://lammps.sandia.gov/doc/pair_zbl.html) is included during the training.
+
+Last updated by Qiang Zhu on 2021/05/10.
 
 ## Force field training
 ```
-python snap_train.py
+python train.py
 ```
 
 After training is complete, you expect to find a folder called `Si-snap` with several important files
@@ -19,20 +24,16 @@ The training takes about 20-30 minutes.
 PyXtal\_FF provides a built in `ASE` calculator. You can simply use it for some light weight calculations.
 Below is an example of running NVT MD simulation for 1000 Si atoms.
 ```
-$ python md.py -f Si-snap/16-16-checkpoint.pth 
+$ python md.py -f Si-snap-zbl/16-16-checkpoint.pth 
 MD simulation for  1000  atoms
-Step:    0 [ 27.83]: Epot = -5.423eV  Ekin = 0.038eV (T=294K)  Etot = -5.385eV 
-Step:    1 [ 14.67]: Epot = -5.423eV  Ekin = 0.038eV (T=291K)  Etot = -5.385eV 
-Step:    2 [ 14.63]: Epot = -5.422eV  Ekin = 0.037eV (T=284K)  Etot = -5.385eV 
-Step:    3 [ 14.62]: Epot = -5.421eV  Ekin = 0.036eV (T=276K)  Etot = -5.385eV 
-Step:    4 [ 14.68]: Epot = -5.420eV  Ekin = 0.034eV (T=265K)  Etot = -5.385eV 
-Step:    5 [ 14.62]: Epot = -5.418eV  Ekin = 0.033eV (T=253K)  Etot = -5.385eV 
-Step:    6 [ 14.64]: Epot = -5.416eV  Ekin = 0.031eV (T=239K)  Etot = -5.385eV 
-Step:    7 [ 14.68]: Epot = -5.414eV  Ekin = 0.029eV (T=224K)  Etot = -5.385eV 
-Step:    8 [ 14.62]: Epot = -5.412eV  Ekin = 0.027eV (T=208K)  Etot = -5.385eV 
-Step:    9 [ 14.65]: Epot = -5.410eV  Ekin = 0.025eV (T=192K)  Etot = -5.385eV 
+Step:    0 [152.96]: Epot = -5.359eV  Ekin = 0.120eV (T=928K)  Etot = -5.239eV 
+Step:    1 [ 77.42]: Epot = -5.330eV  Ekin = 0.094eV (T=724K)  Etot = -5.237eV 
+Step:    2 [ 77.26]: Epot = -5.298eV  Ekin = 0.063eV (T=485K)  Etot = -5.235eV 
+Step:    3 [ 77.00]: Epot = -5.277eV  Ekin = 0.044eV (T=338K)  Etot = -5.233eV 
+Step:    4 [ 77.33]: Epot = -5.273eV  Ekin = 0.042eV (T=323K)  Etot = -5.231eV 
+Step:    5 [ 77.01]: Epot = -5.281eV  Ekin = 0.051eV (T=398K)  Etot = -5.230eV 
 ```
-The time cost is about 14.6 seconds for each time step.
+The time cost is about 77 seconds for each time step.
 For more types of simulations based on `Python-ASE`, checkout [this example](https://github.com/qzhu2017/PyXtal_FF/blob/master/pyxtal_ff/test_properties.py)
 
 ## LAMMPS Installation
@@ -60,40 +61,19 @@ export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/scratch/qzhu/soft/lammps/src
 
 ## Validation between python-ASE and lammps results
 
-The `validate.py` will create a randomly perturbed silicon diamond structure. Then it will perform a single point energy calculation from both `Python-ASE` and `LAMMPS` calcuator.
-
+The `validate.py` will create a randomly perturbed silicon diamond structure. Then it will perform a single point energy calculation from both `Python-ASE` and `LAMMPS` calcuator for 100 randomly perturbed structures. The last three columns present the differences in energy, forces and stress tensors. Ideally, the values should be very close to zero.
 ```
 $ python validate.py 
-
-ASE calculator with pyxtal_ff force field
-
-Energy:  -37.879 eV/atom
-Forces (eV/A)
-[[  7.0649   0.0000   0.0000]
- [ -1.6986  -1.4435  -1.4435]
- [  0.6213  -0.0000   0.0000]
- [ -1.6986   1.4435   1.4435]
- [ -0.4587  -0.0000   0.0000]
- [ -1.6857   2.2228  -2.2228]
- [ -0.4587  -0.0000  -0.0000]
- [ -1.6857  -2.2228   2.2228]]
-Stresses (GPa)
-[ -0.3004  -0.3308  -0.3308   0.0495   0.0000   0.0000]
-
-LAMMPS calculator with pyxtal_ff force field
-
-Energy:  -37.879 eV/atom
-Forces (eV/A)
-[[  7.0649   0.0000  -0.0000]
- [ -1.6986  -1.4435  -1.4435]
- [  0.6213  -0.0000   0.0000]
- [ -1.6986   1.4435   1.4435]
- [ -0.4587   0.0000   0.0000]
- [ -1.6857   2.2228  -2.2228]
- [ -0.4587  -0.0000  -0.0000]
- [ -1.6857  -2.2228   2.2228]]
-Stresses (GPa)
-[ -0.3004  -0.3308  -0.3308   0.0495  -0.0000  -0.0000]
+  0  -39.460  -39.460    0.000    0.000    0.000
+  1  -37.263  -37.263    0.000    0.001    0.000
+  2  -39.422  -39.422    0.000    0.000    0.000
+  3  -36.937  -36.937    0.000    0.001    0.000
+  4  -37.184  -37.184    0.000    0.001    0.000
+  5  -38.072  -38.072    0.000    0.000    0.000
+  6  -37.702  -37.702    0.000    0.000    0.000
+  7  -39.097  -39.097    0.000    0.000    0.000
+  8  -39.407  -39.407    0.000    0.000    0.000
+  9  -38.228  -38.228    0.000    0.000    0.000
 ```
 If you cannot get the similar results, please check your `LAMMPS` installation.
 
@@ -103,13 +83,18 @@ If you cannot get the similar results, please check your `LAMMPS` installation.
 Finally, you can run LAMMPS directly. 
 It will work as any usual `LAMMPS` calculation, except that you need to specify a new `pair style`
 ```
-pair_style mliap model nn Si-snap/NN_weights.txt descriptor sna Si-snap/DescriptorParams.txt
-pair_coeff * * Si Si
+# Potential
+pair_style hybrid/overlay &
+mliap model nn Si-snap/NN_weights.txt &
+descriptor sna Si-snap/DescriptorParam.txt &
+zbl 2.0 4.0
+pair_coeff 1 1 zbl 14.0 14.0
+pair_coeff * * mliap Si
 ```
 
 The `md.in` file gives an example to run NPT MD simulation at 500 K for 1000 Si atoms.
 ```
 lmp_mpi < md.in > md.out
 ```
-On a single CPU, it needs ~120 seconds to complete 1000 steps, which is abouot **120x** faster than the `ASE` caculator.
+On a single CPU, it needs ~120 seconds to complete 1000 steps, which is abouot **700x** faster than the `ASE` caculator.
 

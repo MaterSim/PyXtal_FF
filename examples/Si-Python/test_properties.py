@@ -27,6 +27,7 @@ if  __name__ == "__main__":
     # initial structure and calculator
     si = bulk('Si', 'diamond', a=5.0, cubic=True)
     si.set_calculator(calc)
+    print('initial stress', -si.get_stress()/units.GPa)
 
     # geometry optimization
     si = optimize(si, box=True)

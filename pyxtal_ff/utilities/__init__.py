@@ -285,7 +285,7 @@ def compute_descriptor(function, structure):
 
     elif function['type'] in ['EAD', 'ead']:
             from pyxtal_ff.descriptors.EAD import EAD
-            d = EAMD(function['parameters'],
+            d = EAD(function['parameters'],
                      function['Rc'],
                      True, True,
                      function['cutoff']).calculate(structure)
@@ -305,10 +305,6 @@ def compute_descriptor(function, structure):
         raise NotImplementedError(msg)
     
     if d['rdxdr'] is not None:
-        #shp = d['rdxdr'].shape
-        #d['rdxdr'] = np.einsum('ijklm->iklm', d['rdxdr'])\
-        #    .reshape([shp[0], shp[2], shp[3]*shp[4]])[:, :, [0,4,8,1,2,5]]
-
         N = d['x'].shape[0]
         L = d['x'].shape[1]
         rdxdr = np.zeros([N, L, 3, 3])
@@ -371,18 +367,18 @@ def parse_json(path, N=None, Random=False):
             # vasp default output: XX YY ZZ XY YZ ZX
             # pyxtal_ff/lammps use: XX YY ZZ XY XZ YZ
             # Here we assume the sequence is lammps
-            if d['group'] == 'Elastic' and 'Mo 3x3x3 cell' in d['description']: #this is very likely a wrong dataset
+            if d['group'] == 'Elastic' and 'Mo 3x3x3 cell' in d['description']:
                 stress = None
                 group = 'NoElastic'
             elif 'virial_stress' in d[key]: #kB to GPa
-                s = [-1*s/10 for s in d[key]['virial_stress']] 
+                s = [s/10 for s in d[key]['virial_stress']] 
                 if d['group'] == 'Ni3Mo' or d['element'] == 'Cu': #just tentative fix
                     stress = [s[0], s[1], s[2], s[3], s[4], s[5]]
                 else:
                     stress = [s[0], s[1], s[2], s[3], s[5], s[4]]
 
             elif 'stress' in d[key]: #kB to GPa
-                s = [-1*s/10 for s in d[key]['stress']]
+                s = [s/10 for s in d[key]['stress']]
                 if d['group'] == 'Ni3Mo': #to fix the issue
                     stress = [s[0], s[1], s[2], s[3], s[4], s[5]]
                 else:

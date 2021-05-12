@@ -1,7 +1,6 @@
 import numpy as np
 from ase.neighborlist import NeighborList
 
-# 8.9875517923e9 (Coulomb constant) * 1.602176634e-19 ^ 2 (electron charge) * 1e-10 (m to A) * 6.241509e18 (J to eV)
 factor = 14.399645306701126
 
 class ZBL:
@@ -95,7 +94,7 @@ class ZBL:
                 Rij = Rj - Ri
                 Dij = np.sqrt(np.sum(Rij**2, axis=1))
 
-                energy, forces, stress = calculate_ZBL(i, Rij, Dij, Zi, Zj, self.outer, self.inner, ABCij, self.total_atoms, IDs)
+                energy, forces, stress = calculate_ZBL(i, Ri, Rij, Dij, Zi, Zj, self.outer, self.inner, ABCij, self.total_atoms, IDs)
                 self.result['energy'] += energy
                 self.result['force'] += forces
                 self.result['stress'] += stress
@@ -113,7 +112,7 @@ class ZBL:
         return self.result
 
 
-def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, derivative=True):
+def calculate_ZBL(i, ri, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, derivative=True):
     """Calculate the atomic ZBL energy, force, and stress.
 
     Parameters
@@ -142,19 +141,13 @@ def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, 
     if True not in ids1:
         return 0., np.zeros([total_atoms, 3]), np.zeros([3,3])
     else:
+        _i = i 
         ij_list = i * np.ones([len(IDs), 2], dtype=int)
         ij_list[:, 1] = IDs
-        unique_js = np.unique(IDs)
-        if i not in unique_js:
-            unique_js = np.append(i, unique_js)
-        unique_js.sort()
-        seq = i * np.ones([len(unique_js), 2], dtype=int)
-        seq[:, 1] = unique_js
-        uN = len(unique_js)
 
         energy = np.zeros([len(dij)])
         forces = np.zeros([total_atoms, 3])
-        stress = np.zeros([3,3])
+        stress = np.zeros([total_atoms, len(ij_list), 3, 3])
         
         kZi = factor * Zi
         kZiZj = kZi * Zj
@@ -186,6 +179,7 @@ def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, 
         # Collecting atomic energy
         energy[ids1] += SC[ids1] + Eij[ids1]
         ids2 = (dij <= r_outer) & (dij > r_inner)
+        ids3 = (dij <= r_outer)
         energy[ids2] += SA[ids2] + SB[ids2]
 
         # Force
@@ -193,21 +187,27 @@ def calculate_ZBL(i, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, IDs, 
         dphi_ddij = (-0.18175 * 3.19980 * exp1 - 0.50986 * 0.94229 * exp2 - \
                       0.28022 * 0.40290 * exp3 - 0.02817 * 0.20162 * exp4) * a_inv
         dE2_ddij = kZiZj * dij_inv * dphi_ddij
-        dE_ddij = dE1_ddij + dE2_ddij + dSA + dSB # [j]
+        dE_ddij = dE1_ddij + dE2_ddij + dSA + dSB
 
         dRij_dRm = np.zeros([len(dij), 3, total_atoms])
-        for mm, _m in enumerate(unique_js):
-            mm_list = _m * np.ones([len(dij), 1], dtype=int)
-            dRij_dRm[:,:,_m] = dRij_dRm_norm(rij, np.hstack((ij_list, mm_list)))
-        force = np.einsum('ijk,i->ikj', dRij_dRm, dE_ddij) # [j,uN,3]
-        forces -= np.einsum('ijk->jk', force[ids2])
+        i_dRij_dRm = np.zeros([len(dij), 3, total_atoms])
+        j_dRij_dRm = np.zeros([len(dij), 3, total_atoms])
+        for mm in range(total_atoms):
+            mm_list = mm * np.ones([len(dij), 1], dtype=int)
+            dRij_dRm[:,:,mm], i_dRij_dRm[:,:,mm], j_dRij_dRm[:,:,mm] = dRij_dRm_norm(rij, np.hstack((ij_list, mm_list))) # [j,3,N]
 
+        forces -= np.einsum('ijk,i->kj', dRij_dRm[ids3], dE_ddij[ids3])
+        i_force = np.einsum('ijk,i->ikj', i_dRij_dRm, dE_ddij) # [j, N, 3]
+        j_force = np.einsum('ijk,i->ikj', j_dRij_dRm, dE_ddij) # [j, N, 3]
+        
         # Stress
         for count, ij in enumerate(ij_list):
-            if dij[count] <= r_outer and dij[count] > r_inner:
-                _j = ij[1]
-                stress -= np.einsum('i,j->ij', force[count,_j,:], rij[count])
-    
+            _j = ij[1]
+            stress[_i, count, :, :] += np.einsum('i,j->ij', i_force[count,_i,:], ri)
+            stress[_j, count, :, :] += np.einsum('i,j->ij', j_force[count,_j,:], rij[count]+ri)
+        
+        stress = -1 * np.einsum('ijkl->kl', stress[:, (dij <= r_outer)])
+            
         return np.sum(energy), forces, stress
 
 
@@ -253,19 +253,26 @@ def dRij_dRm_norm(Rij, ijm_list):
 
     Returns
     -------
-    dRij_m: array [j, 3] or [j*k, 3]
+    dRij_m: array [j, 3]
         The derivative of pair atoms w.r.t. atom m in x, y, z directions.
     """
     dRij_m = np.zeros([len(Rij), 3])
+    i_dRij_m = np.zeros([len(Rij), 3]) 
+    j_dRij_m = np.zeros([len(Rij), 3])
     R1ij = np.linalg.norm(Rij, axis=1).reshape([len(Rij),1])
+    
     l1 = (ijm_list[:,2]==ijm_list[:,0])
     dRij_m[l1, :] = -Rij[l1]/R1ij[l1]
+    i_dRij_m[l1, :] = -Rij[l1]/R1ij[l1]
+
     l2 = (ijm_list[:,2]==ijm_list[:,1])
     dRij_m[l2, :] = Rij[l2]/R1ij[l2]
+    j_dRij_m[l2, :] = Rij[l2]/R1ij[l2]
+    
     l3 = (ijm_list[:,0]==ijm_list[:,1])
     dRij_m[l3, :] = 0
 
-    return dRij_m
+    return dRij_m, i_dRij_m, j_dRij_m
 
 
 if __name__ == '__main__':
@@ -274,20 +281,22 @@ if __name__ == '__main__':
     from ase.io import read
     np.set_printoptions(formatter={'float': '{: 0.6f}'.format})
 
+    t0 = time.time()
     #struc = read("MOD_NiMo.cif")
     #struc = read("MOD_NiMo_real.cif")
-    struc = bulk('Si', 'diamond', a=5.0, cubic=True)
-    t0 = time.time()
-    zbl = ZBL(2.0, 3.0)
-    d = zbl.calculate(struc)
-    energy = d['energy'] / len(struc)
-    forces = d['force']
-    stress = d['stress']
-    t1 = time.time()
+    for inner in [1.0, 1.5, 2.0, 2.5, 3.0]:
+        print("inner==================", inner)
+        for a in [2.0, 3.0, 4.0, 4.5, 5.0, 5.5]:
+            struc = bulk('Si', 'diamond', a=a, cubic=True)
+            zbl = ZBL(inner, 4.0)
+            d = zbl.calculate(struc)
+            energy = d['energy'] / len(struc)
+            forces = d['force']
+            stress = d['stress'] #* 1602176.6208
 
-    print("Energy: ", energy)
-    print("Force: ")
-    print(forces)
-    print("Stress: ")
-    print(stress)
+            #print("Energy: ", energy)
+            #print("Force: ")
+            #print(forces)
+            print(a, "Stress: ", stress)
+    t1 = time.time()
     print("\nTime: ", round(t1-t0, 6), "s")

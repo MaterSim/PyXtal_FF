@@ -30,10 +30,10 @@ class PyXtalFFCalculator(Calculator):
 
         # base potential
         if self.parameters.ff._descriptors['base_potential']:
-            self.base_potential = ZBL(self.parameters.ff._desciptors['base_potential']['inner'],
-                                      self.parameters.ff._desciptors['base_potential']['outer'],
+            self.base_potential = ZBL(self.parameters.ff._descriptors['base_potential']['inner'],
+                                      self.parameters.ff._descriptors['base_potential']['outer'],
                                       atomic_energy=True)
-            base_results = self.base_potential(atoms)
+            base_results = self.base_potential.calculate(atoms)
             base_energy = base_results['energy']
             base_forces = base_results['force']
             base_stress = base_results['stress'] # eV/A^3
@@ -50,10 +50,15 @@ class PyXtalFFCalculator(Calculator):
         self.results['energy'] = energies.sum() + base_energy
         self.results['free_energy'] = energies.sum() + base_energy
         self.results['forces'] = forces + base_forces
+
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
         # from GPa to eV/A^3
-        self.results['stress'] = (stress[[0, 1, 2, 5, 4, 3]] * units.GPa + base_stress) 
+        self.results['stress_zbl'] = base_stress/units.GPa
+        self.results['stress_ml'] = stress 
+
+        # ase counts the stress differently
+        self.results['stress'] = -(stress * units.GPa + base_stress)[[0, 1, 2, 5, 4, 3]]
 
     def __str__(self):
         s = "\nASE calculator with pyxtal_ff force field\n"
@@ -61,6 +66,10 @@ class PyXtalFFCalculator(Calculator):
 
     def __repr__(self):
         return str(self)
+
+    def print_stresses(self, total=False):
+        print("stress_ml (GPa, xx, yy, zz, xy, xz, yz):", self.results["stress_ml"])
+        print("stress_zbl(GPa, xx, yy, zz, xy, xz, yz):", self.results['stress_zbl'])
 
 def elastic_properties(C):
     Kv = C[:3,:3].mean()

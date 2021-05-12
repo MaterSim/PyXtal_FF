@@ -7,6 +7,7 @@ from optparse import OptionParser
 from ase.build import bulk
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
 from ase.md.verlet import VelocityVerlet
+from ase.md.langevin import Langevin
 from ase import units
 from pyxtal_ff import PyXtal_FF
 from pyxtal_ff.calculator import PyXtalFFCalculator
@@ -36,13 +37,14 @@ ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
 ff.run(mode='predict', mliap=options.file)
 calc = PyXtalFFCalculator(ff=ff)
 
-si = bulk('Si', 'diamond', a=5.459, cubic=True)
+si = bulk('Si', 'diamond', a=5.659, cubic=True)
 si = si*5
 print("MD simulation for ", len(si), " atoms")
 si.set_calculator(calc)
 
-MaxwellBoltzmannDistribution(si, 300*units.kB)
-dyn = VelocityVerlet(si, 1*units.fs)  # 2 fs time step.
+MaxwellBoltzmannDistribution(si, 1000*units.kB)
+dyn = Langevin(si, timestep=5 * units.fs, temperature_K=1000, friction=0.02)
+#dyn = VelocityVerlet(si, 5*units.fs)  # 2 fs time step.
 t0 = time()
 for i in range(10):
     dyn.run(steps=1)

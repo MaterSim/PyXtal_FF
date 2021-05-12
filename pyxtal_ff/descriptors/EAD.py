@@ -168,7 +168,7 @@ class EAD:
                 self.d['dxdr'][seq_count:seq_count+n_seq] = d['dxdr']
                 self.d['seq'][seq_count:seq_count+n_seq] = d['seq']
             if self.stress:
-                self.d['rdxdr'][seq_count:seq_count+n_seq] = -d['rdxdr']/vol
+                self.d['rdxdr'][seq_count:seq_count+n_seq] = d['rdxdr']/vol
             
             if self.derivative:
                 seq_count += n_seq

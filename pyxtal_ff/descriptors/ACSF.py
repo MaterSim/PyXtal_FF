@@ -304,7 +304,7 @@ class ACSF:
             self.all_G['dxdr'] = np.asarray(self.all_G['dxdr'])
             self.all_G['seq'] = np.asarray(self.all_G['seq'])
             if self.stress:
-                self.all_G['rdxdr'] = -np.asarray(self.all_G['rdxdr'])/vol
+                self.all_G['rdxdr'] = np.asarray(self.all_G['rdxdr'])/vol
             else:
                 self.all_G['rdxdr'] = None
         return self.all_G

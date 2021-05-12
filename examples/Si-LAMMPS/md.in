@@ -1,5 +1,5 @@
-# Run NPT MD simulation for Si at 500 K.
-variable nsteps index 100 #0
+# Run NPT MD simulation for Si at 1000 K.
+variable nsteps index 1000000
 
 # NOTE: These are not intended to represent real materials
 
@@ -11,23 +11,24 @@ boundary        p p p
 atom_modify     sort 0 0.0
 
 #read_data Si.data
-lattice  	diamond 5.43
+lattice  	diamond 5.6
 region		box block 0 5 0 5 0 5
 create_box	1 box
 create_atoms	1 box
-mass		1 29.0
+mass		1 28.0855
 
 # temperature
-variable t equal 500.
-
+variable temp equal 2000.
 
 # Potential
-#pair_style mliap model nn Si-snap/NN_weights.txt descriptor sna Si-snap/DescriptorParam.txt
-pair_style mliap model nn Si-so3/NN_weights.txt descriptor so3 Si-so3/DescriptorParam.txt
-pair_coeff * * Si Si
+pair_style hybrid/overlay &
+mliap model nn Si-snap-zbl/NN_weights.txt &
+descriptor sna Si-snap-zbl/DescriptorParam.txt &
+zbl 2.0 4.0
+pair_coeff 1 1 zbl 14.0 14.0
+pair_coeff * * mliap Si
 
 # Set-up output
-
 compute  eatom all pe/atom
 compute  energy all reduce sum c_eatom
 
@@ -35,18 +36,16 @@ compute  satom all stress/atom NULL
 compute  str all reduce sum c_satom[1] c_satom[2] c_satom[3]
 variable press equal (c_str[1]+c_str[2]+c_str[3])/(3*vol)
 
-thermo_style    custom step temp epair c_energy etotal press v_press
-thermo          10
+thermo_style    custom step temp epair c_energy etotal press v_press lx ly lz pxx pyy pzz pxy pxz pyz
+thermo          100
 thermo_modify norm yes
 
-# Set up NVE run
-
-timestep 0.5e-3
+timestep 1e-3
 neighbor 1.0 bin
-neigh_modify once no every 1 delay 0 check yes
+#neigh_modify once no every 1 delay 0 check yes
+neigh_modify every 1 delay 1 check yes
 
 # Run MD
-
-velocity all create $t 5287287 loop geom
-fix 1 all npt temp ${t} ${t} 0.2 iso 0.0 0.0 2
+velocity all create ${temp} 5287287 #loop geom
+fix 1 all npt temp ${temp} ${temp} 0.2 iso 0.0 0.0 2.0
 run ${nsteps}

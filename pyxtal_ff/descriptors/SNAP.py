@@ -222,7 +222,7 @@ class SO4_Bispectrum:
                  'elements':list(atoms.symbols), 'seq':self.seq}
 
             if self.stress is True:
-                x['rdxdr'] = self._bstress.real/vol
+                x['rdxdr'] = -self._bstress.real/vol
             else:
                 x['rdxdr'] = None
 
@@ -230,7 +230,7 @@ class SO4_Bispectrum:
             x = {'x':self._blist.real, 'dxdr': None, 'elements':list(atoms.symbols)}
 
             if self.stress is True:
-                x['rdxdr'] = self._bstress.real/vol
+                x['rdxdr'] = -self._bstress.real/vol
             else:
                 x['rdxdr'] = None
 
