@@ -731,7 +731,7 @@ if  __name__ == "__main__":
     stress = options.stress
 
     start1 = time.time()
-    f = SO3(nmax=nmax, lmax=lmax, rcut=rcut, alpha=alpha, derivative=True, stress=False, cutoff_function='unity')
+    f = SO3(nmax=nmax, lmax=lmax, rcut=rcut, alpha=alpha, derivative=True, stress=False, cutoff_function='cosine')
     x = f.calculate(test)
     start2 = time.time()
     print('x', x['x'])
