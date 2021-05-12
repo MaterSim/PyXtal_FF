@@ -15,7 +15,8 @@ class PyXtalFFCalculator(Calculator):
     implemented_properties = ['energy', 'forces', 'stress']
     nolabel = True
 
-    def __init__(self, **kwargs):
+    def __init__(self, style='ase', **kwargs):
+        self.style = style
         Calculator.__init__(self, **kwargs)
 
     def calculate(self, atoms=None,
@@ -58,7 +59,10 @@ class PyXtalFFCalculator(Calculator):
         self.results['stress_ml'] = stress 
 
         # ase counts the stress differently
-        self.results['stress'] = -(stress * units.GPa + base_stress)[[0, 1, 2, 5, 4, 3]]
+        if self.style == 'ase':
+            self.results['stress'] = -(stress * units.GPa + base_stress)[[0, 1, 2, 5, 4, 3]]
+        else:
+            self.results['stress'] = self.results['stress_zbl'] + self.results['stress_ml']
 
     def __str__(self):
         s = "\nASE calculator with pyxtal_ff force field\n"
