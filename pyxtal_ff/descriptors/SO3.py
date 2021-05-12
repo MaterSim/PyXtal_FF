@@ -734,6 +734,6 @@ if  __name__ == "__main__":
     f = SO3(nmax=nmax, lmax=lmax, rcut=rcut, alpha=alpha, derivative=True, stress=False, cutoff_function='unity')
     x = f.calculate(test)
     start2 = time.time()
-    print('x', x['dxdr'])
+    print('x', x['x'])
     #print('dxdr', x['dxdr'])
     print('calculation time {}'.format(start2-start1))
