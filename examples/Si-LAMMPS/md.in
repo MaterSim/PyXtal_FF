@@ -1,5 +1,6 @@
 # Run NPT MD simulation for Si at 1000 K.
-variable nsteps index 1000000
+variable nsteps index 10000
+variable temp equal 1500.
 
 # NOTE: These are not intended to represent real materials
 
@@ -11,20 +12,18 @@ boundary        p p p
 atom_modify     sort 0 0.0
 
 #read_data Si.data
-lattice  	diamond 5.6
+lattice  	diamond 5.4
 region		box block 0 5 0 5 0 5
 create_box	1 box
 create_atoms	1 box
 mass		1 28.0855
 
-# temperature
-variable temp equal 2000.
 
 # Potential
 pair_style hybrid/overlay &
 mliap model nn Si-snap-zbl/NN_weights.txt &
 descriptor sna Si-snap-zbl/DescriptorParam.txt &
-zbl 2.0 4.0
+zbl 1.5 2.0
 pair_coeff 1 1 zbl 14.0 14.0
 pair_coeff * * mliap Si
 
@@ -36,7 +35,7 @@ compute  satom all stress/atom NULL
 compute  str all reduce sum c_satom[1] c_satom[2] c_satom[3]
 variable press equal (c_str[1]+c_str[2]+c_str[3])/(3*vol)
 
-thermo_style    custom step temp epair c_energy etotal press v_press lx ly lz pxx pyy pzz pxy pxz pyz
+thermo_style    custom step temp epair c_energy etotal press lx pxx pxy
 thermo          100
 thermo_modify norm yes
 

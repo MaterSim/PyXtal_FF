@@ -21,28 +21,31 @@ if True:
                   'weights': {'Si': 1.0},
                   'Rc': 5.0,
                   'parameters': {'lmax': 3},
-                  'base_potential': {'inner': 2.0, 'outer': 4.0}, #zbl potential
+                  'base_potential': {'inner': 1.0, 'outer': 2.0}, #zbl potential
                   'ncpu': 1,
                  }
 else:
+    # Not working so far
     folder = 'Si-so3-zbl/'
     descriptor = {'type': 'SO3',
-                  #'weights': {'Si': 1.0},
+                  'weights': {'Si': 1.0},
                   'Rc': 5.0,
                   'parameters': {'lmax': 4, 'nmax': 3},
+                  'base_potential': {'inner': 1.0, 'outer': 2.0}, #zbl potential
                   'ncpu': 1,
                  }
 
 
 model = {'system' : ['Si'],
-         'hiddenlayers': [16, 16],
+         'hiddenlayers': [12, 12],
          'path': folder,
-         'restart': folder + '16-16-checkpoint.pth',
+         #'restart': folder + '12-12-checkpoint.pth',
          'optimizer': {'method': 'lbfgs'},
          'force_coefficient': 2e-2,
          'stress_coefficient': 2e-3,
+         "stress_group": ["Elastic"],
          'alpha': 1e-6,
-         'epoch': 4000,
+         'epoch': 1000,
          }
 
 ff = PyXtal_FF(descriptors=descriptor, model=model)

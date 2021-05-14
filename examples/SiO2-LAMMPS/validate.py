@@ -48,6 +48,6 @@ for calc in [calc_pff, calc_lmp]:
     print("Energy: {:8.3f} eV".format(si.get_potential_energy()))
     print("Forces (eV/A)")
     print(si.get_forces())
-    print("Stresses (GPa)")
+    print("Stresses (eV/A3)")
     print(si.get_stress())
 

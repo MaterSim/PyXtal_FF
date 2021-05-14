@@ -337,8 +337,9 @@ class NeuralNetwork():
                 a = np.ravel(_Stress*eV2GPa)
                 b = np.array(data2['stress'])
                 #if self.mean_absolute_error(a[2:], b[2:]) > 1.5:
-                #    print('{:12s} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}'.format(formula, a[0], a[1], a[2], a[3], a[4], a[5]))
-                #    print('{:12s} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}'.format('DFT:',  b[0], b[1], b[2], b[3], b[4], b[5]))
+                #print('{:12s} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}'.format(formula, a[0], a[1], a[2], a[3], a[4], a[5]))
+                #print('{:12s} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f} {:6.3f}'.format('DFT:',  b[0], b[1], b[2], b[3], b[4], b[5]))
+                #import sys; sys.exit()
 
 
         db.close()
@@ -658,7 +659,9 @@ class NeuralNetwork():
                 _e = model(_x).sum()
                 #energy += _e.detach().numpy() 
                 energies[count:count+len(_x)] = model(_x).detach().numpy().reshape([len(_x)])
+                #print(element, model(_x).detach().numpy())
                 count += len(_x)
+
                 
                 if bforce:
                     dedx = torch.autograd.grad(_e, _x)[0]
@@ -681,7 +684,6 @@ class NeuralNetwork():
                     if bforce == False:
                         dedx = torch.autograd.grad(_e, _x)[0]
                     stress += -torch.einsum("ik, ikl->l", dedx, _rdxdr).numpy()
-
         return energies, force, stress*eV2GPa
 
 

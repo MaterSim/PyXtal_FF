@@ -16,7 +16,7 @@ if True:
 else:
     des, folder = "so3", "Si-so3"
 
-mliap  = folder + "/16-16-checkpoint.pth"
+mliap  = folder + "/12-12-checkpoint.pth"
 lmpiap = folder + "/NN_weights.txt"
 lmpdes = folder + "/DescriptorParam.txt"
 
@@ -24,8 +24,6 @@ lmpdes = folder + "/DescriptorParam.txt"
 # initial silicon crystal
 si = bulk('Si', 'diamond', a=5.0, cubic=True)
 si.positions[0,0] += (random() - 0.5)
-#si.write('1.vasp', format='vasp', vasp5=True, direct=True)
-#si = read('1.vasp', format='vasp')
 
 # ase pyxtal_ff calculator
 ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
@@ -45,7 +43,7 @@ lmp = lammps(lammps_name, cmd_args, comm)
 parameters = ["mass 1 28.0855",
               "pair_style hybrid/overlay &",
               "mliap model nn " + lmpiap + " descriptor " + des + " " + lmpdes + " &",
-              "zbl 2.0 4.0",
+              "zbl 1.5 2.0",
               "pair_coeff 1 1 zbl 14.0 14.0",
               "pair_coeff * * mliap Si",
               ]
@@ -53,8 +51,7 @@ parameters = ["mass 1 28.0855",
 calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
 
 # check for single configuration
-for i in range(100):
-    #si = bulk('Si', 'diamond', a=5.0, cubic=True)
+for i in range(10):
     si = bulk('Si', 'diamond', a=5.2, cubic=True)
     si.positions[0,0] += (random() - 0.5)
     eng = []
@@ -65,14 +62,6 @@ for i in range(100):
         eng.append(si.get_potential_energy())
         force.append(si.get_forces())
         stress.append(si.get_stress())
-        #print(calc)
-        #print("Energy: {:8.3f} eV".format(si.get_potential_energy()))
-        #print("Forces (eV/A)")
-        #print(si.get_forces())
-        #print("Stresses (GPa)")
-        #print(si.get_stress())
-        #if j == 0:
-        #    calc.print_stresses()
 
     e_diff = eng[0]-eng[1]
     f_diff = np.linalg.norm((force[0] - force[1]).flatten())

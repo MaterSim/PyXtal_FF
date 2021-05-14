@@ -15,7 +15,7 @@ import warnings
 warnings.simplefilter("ignore")
 
 des, folder = "sna", "Si-snap-zbl"
-mliap  = folder + "/16-16-checkpoint.pth"
+mliap  = folder + "/12-12-checkpoint.pth"
 lmpiap = folder + "/NN_weights.txt"
 lmpdes = folder + "/DescriptorParam.txt"
 
