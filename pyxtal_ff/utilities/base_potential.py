@@ -187,7 +187,8 @@ def calculate_ZBL(i, ri, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, I
         dphi_ddij = (-0.18175 * 3.19980 * exp1 - 0.50986 * 0.94229 * exp2 - \
                       0.28022 * 0.40290 * exp3 - 0.02817 * 0.20162 * exp4) * a_inv
         dE2_ddij = kZiZj * dij_inv * dphi_ddij
-        dE_ddij = dE1_ddij + dE2_ddij + dSA + dSB
+        dE_ddij = dE1_ddij + dE2_ddij
+        dE_ddij[ids2] += dSA[ids2] + dSB[ids2]
 
         dRij_dRm = np.zeros([len(dij), 3, total_atoms])
         i_dRij_dRm = np.zeros([len(dij), 3, total_atoms])
