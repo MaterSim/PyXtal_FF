@@ -21,10 +21,6 @@ lmpiap = folder + "/NN_weights.txt"
 lmpdes = folder + "/DescriptorParam.txt"
 
 
-# initial silicon crystal
-si = bulk('Si', 'diamond', a=5.0, cubic=True)
-si.positions[0,0] += (random() - 0.5)
-
 # ase pyxtal_ff calculator
 ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
 ff.run(mode='predict', mliap=mliap)
@@ -51,13 +47,14 @@ parameters = ["mass 1 28.0855",
 calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
 
 # check for single configuration
-for i in range(10):
-    si = bulk('Si', 'diamond', a=5.2, cubic=True)
-    si.positions[0,0] += (random() - 0.5)
+for i in range(100):
+    #si = bulk('Si', 'diamond', a=5.469, cubic=True)*2
+    si = bulk('Si', 'diamond', a=5.2, cubic=True) #*2
+    si.positions += 0.25*(np.random.random_sample([len(si),3])-0.5)
     eng = []
     force = []
     stress = []
-    for j, calc in enumerate([calc_pff, calc_lmp]):
+    for j, calc in enumerate([calc_lmp, calc_pff]):
         si.set_calculator(calc)
         eng.append(si.get_potential_energy())
         force.append(si.get_forces())
@@ -65,9 +62,15 @@ for i in range(10):
 
     e_diff = eng[0]-eng[1]
     f_diff = np.linalg.norm((force[0] - force[1]).flatten())
-    s_diff = np.linalg.norm((stress[0] - stress[1]).flatten())
+    s_diff = np.linalg.norm((stress[0] - stress[1]).flatten())/units.GPa
 
     print("{:3d} {:8.3f} eV {:8.3f} GPa {:8.3f} {:8.3f} {:8.3f}".format(i, eng[0], -stress[0][0]/units.GPa, e_diff, f_diff, s_diff))
-    if abs(e_diff) > 1e-2:
+    if abs(e_diff) > 1e-2 or f_diff > 1e-2 or s_diff > 1e-2:
+        print("eng: ", eng[0], eng[1])
+        print("Forces from LAMMPS and PyXtal_FF")
+        for f1, f2 in zip(force[0], force[1]):
+            print("{:8.3f} {:8.3f} {:8.3f} -> {:8.3f} {:8.3f} {:8.3f} -> {:8.3f} {:8.3f} {:8.3f}".format(*f1, *f2, *(f1-f2)))
+        print("\n Breakdown of Pyxtal_FF")
+        calc.print_all()
         break
 
