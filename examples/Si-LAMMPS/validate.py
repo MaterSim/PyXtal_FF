@@ -46,6 +46,7 @@ parameters = ["mass 1 28.0855",
 
 calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
 
+np.random.seed(0)
 # check for single configuration
 for i in range(100):
     #si = bulk('Si', 'diamond', a=5.469, cubic=True)*2
