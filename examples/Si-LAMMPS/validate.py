@@ -70,8 +70,37 @@ for i in range(100):
         print("eng: ", eng[0], eng[1])
         print("Forces from LAMMPS and PyXtal_FF")
         for f1, f2 in zip(force[0], force[1]):
-            print("{:8.3f} {:8.3f} {:8.3f} -> {:8.3f} {:8.3f} {:8.3f} -> {:8.3f} {:8.3f} {:8.3f}".format(*f1, *f2, *(f1-f2)))
+            print("{:8.4f} {:8.4f} {:8.4f} -> {:8.4f} {:8.4f} {:8.4f} -> {:8.4f} {:8.4f} {:8.4f}".format(*f1, *f2, *(f1-f2)))
         print("\n Breakdown of Pyxtal_FF")
         calc.print_all()
-        break
 
+        print("\n Breakdown of LAMMPS")
+        parameters = ["mass 1 28.0855",
+              "pair_style mliap model nn " + lmpiap + " descriptor " + des + " " + lmpdes,
+              "pair_coeff * * Si Si",
+              ]
+
+        calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
+        si.set_calculator(calc_lmp)
+        eng1 = si.get_potential_energy()
+        f1s = si.get_forces()
+        s1 = -si.get_stress()/units.GPa
+
+        parameters = ["mass 1 28.0855",
+              "pair_style zbl 1.5 2.0",
+              "pair_coeff 1 1 14.0 14.0",
+              ]
+
+        calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
+        si.set_calculator(calc_lmp)
+        eng2 = si.get_potential_energy()
+        f2s = si.get_forces()
+        s2 = -si.get_stress()/units.GPa
+        print("energy_ml (eV):", eng1)
+        print("energy_zbl(eV):", eng2)
+        print("Forces")
+        for f1, f2 in zip(f1s, f2s):
+            print("{:8.3f} {:8.3f} {:8.3f} -> {:8.3f} {:8.3f} {:8.3f}".format(*f1, *f2))
+        print("stress_ml (GPa, xx, yy, zz, xy, xz, yz):", s1[[0,1,2,5,4,3]])
+        print("stress_zbl(GPa, xx, yy, zz, xy, xz, yz):", s2[[0,1,2,5,4,3]])
+        break
