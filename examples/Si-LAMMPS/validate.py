@@ -48,8 +48,7 @@ calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
 
 np.random.seed(0)
 # check for single configuration
-for i in range(100):
-    #si = bulk('Si', 'diamond', a=5.469, cubic=True)*2
+for i in range(10):
     si = bulk('Si', 'diamond', a=4.5, cubic=True)*2
     si.positions += 0.25*(np.random.random_sample([len(si),3])-0.5)
     eng = []

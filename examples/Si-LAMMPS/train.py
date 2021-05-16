@@ -21,7 +21,7 @@ if True:
                   'weights': {'Si': 1.0},
                   'Rc': 5.0,
                   'parameters': {'lmax': 3},
-                  'base_potential': {'inner': 1.0, 'outer': 2.0}, #zbl potential
+                  'base_potential': {'inner': 1.5, 'outer': 2.0}, #zbl potential
                   'ncpu': 1,
                  }
 else:
@@ -31,7 +31,7 @@ else:
                   'weights': {'Si': 1.0},
                   'Rc': 5.0,
                   'parameters': {'lmax': 4, 'nmax': 3},
-                  'base_potential': {'inner': 1.0, 'outer': 2.0}, #zbl potential
+                  'base_potential': {'inner': 1.5, 'outer': 2.0}, #zbl potential
                   'ncpu': 1,
                  }
 

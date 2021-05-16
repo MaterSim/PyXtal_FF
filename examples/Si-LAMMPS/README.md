@@ -66,19 +66,19 @@ export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/scratch/qzhu/soft/lammps/src
 
 ## Validation between python-ASE and lammps results
 
-The `validate.py` will create a randomly perturbed silicon diamond structure. Then it will perform a single point energy calculation from both `Python-ASE` and `LAMMPS` calcuator for 100 randomly perturbed structures. The last three columns present the differences in energy, forces and stress tensors. Ideally, the values should be very close to zero.
+The `validate.py` will will perform a single point energy calculation from both `Python-ASE` and `LAMMPS` calcuator for 10 randomly perturbed structures. The last three columns present the differences in energy, forces and stress tensors. Ideally, the values should be very close to zero.
 ```
 $ python validate.py 
-  0  -42.260 eV   17.729 GPa   -0.000    0.000    0.000
-  1  -42.217 eV   17.732 GPa    0.000    0.000    0.000
-  2  -42.257 eV   17.730 GPa   -0.000    0.000    0.000
-  3  -42.266 eV   17.729 GPa   -0.000    0.000    0.000
-  4  -41.976 eV   17.734 GPa   -0.000    0.000    0.000
-  5  -40.524 eV   17.057 GPa   -0.000    0.000    0.000
-  6  -41.971 eV   17.734 GPa   -0.000    0.000    0.000
-  7  -40.811 eV   17.278 GPa    0.000    0.000    0.000
-  8  -41.759 eV   17.709 GPa    0.000    0.000    0.000
-  9  -41.963 eV   17.733 GPa    0.000    0.000    0.000
+  0 -225.600 eV   16.530 GPa    0.000    0.000    0.000
+  1 -225.114 eV   15.536 GPa    0.000    0.000    0.000
+  2 -226.378 eV   16.421 GPa    0.000    0.000    0.000
+  3 -224.513 eV   16.342 GPa    0.000    0.000    0.000
+  4 -226.801 eV   15.229 GPa    0.000    0.000    0.000
+  5 -221.699 eV   17.420 GPa    0.000    0.000    0.000
+  6 -222.667 eV   17.318 GPa    0.000    0.000    0.000
+  7 -227.192 eV   16.611 GPa    0.000    0.000    0.000
+  8 -223.772 eV   17.718 GPa    0.000    0.000    0.000
+  9 -226.957 eV   18.243 GPa    0.000    0.000    0.000
 ```
 If you cannot get the similar results, please check your `LAMMPS` installation.
 
