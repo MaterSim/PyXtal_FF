@@ -39,7 +39,7 @@ lmp = lammps(lammps_name, cmd_args, comm)
 parameters = ["mass 1 28.0855",
               "pair_style hybrid/overlay &",
               "mliap model nn " + lmpiap + " descriptor " + des + " " + lmpdes + " &",
-              "zbl 1.5 2.0",
+              "zbl 1.0 2.0",
               "pair_coeff 1 1 zbl 14.0 14.0",
               "pair_coeff * * mliap Si",
               ]
@@ -50,7 +50,7 @@ np.random.seed(0)
 # check for single configuration
 for i in range(100):
     #si = bulk('Si', 'diamond', a=5.469, cubic=True)*2
-    si = bulk('Si', 'diamond', a=5.0, cubic=True)
+    si = bulk('Si', 'diamond', a=4.5, cubic=True)*2
     si.positions += 0.25*(np.random.random_sample([len(si),3])-0.5)
     eng = []
     force = []
@@ -64,7 +64,7 @@ for i in range(100):
     e_diff = eng[0]-eng[1]
     f_diff = np.linalg.norm((force[0] - force[1]).flatten())
     s_diff = np.linalg.norm((stress[0] - stress[1]).flatten())/units.GPa
-    calc.print_energy()
+    #calc.print_energy()
     print("{:3d} {:8.3f} eV {:8.3f} GPa {:8.3f} {:8.3f} {:8.3f}".format(i, eng[0], -stress[0][0]/units.GPa, e_diff, f_diff, s_diff))
     if abs(e_diff) > 1e-2 or f_diff > 1e-2 or s_diff > 1e-2:
         print("eng: ", eng[0], eng[1])
@@ -87,7 +87,7 @@ for i in range(100):
         s1 = -si.get_stress()/units.GPa
 
         parameters = ["mass 1 28.0855",
-              "pair_style zbl 1.5 2.0",
+              "pair_style zbl 1.0 2.0",
               "pair_coeff 1 1 14.0 14.0",
               ]
 

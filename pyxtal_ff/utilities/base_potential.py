@@ -43,6 +43,7 @@ class ZBL:
 
         rc = [(2.0+self.outer)/2.] * self.total_atoms
         neighbors = NeighborList(rc, self_interaction=False, bothways=False, skin=0.)
+        #neighbors = NeighborList(rc, self_interaction=False, bothways=True, skin=0)
         neighbors.update(crystal)
 
         self.result = {'energy': 0, 'force': np.zeros([self.total_atoms, 3]),
@@ -178,8 +179,10 @@ def calculate_ZBL(i, ri, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, I
                 
         # Collecting atomic energy
         energy[ids1] += SC[ids1] + Eij[ids1]
-        ids2 = (dij <= r_outer) & (dij > r_inner)
-        ids3 = (dij <= r_outer)
+        #ids2 = (dij <= r_outer) & (dij > r_inner)
+        #ids3 = (dij <= r_outer)
+        ids2 = (dij < r_outer) & (dij > r_inner)
+        ids3 = (dij < r_outer)
         energy[ids2] += SA[ids2] + SB[ids2]
 
         # Force
