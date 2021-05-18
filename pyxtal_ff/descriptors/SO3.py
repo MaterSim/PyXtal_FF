@@ -249,7 +249,7 @@ class SO3:
                     rdPjsum = np.sum(rdPj[ijlocs], axis=0)
                     # flatten into dplist and rdplist
                     self._dplist[seqloc] += (dPsum[tril_indices].flatten()).reshape(ncoefs,3)
-                    self._pstress[seqloc] += (rdPjsum[tril_indices].flatten()).reshape(ncoefs,3,3)
+                    self._pstress[seqloc] -= (rdPjsum[tril_indices].flatten()).reshape(ncoefs,3,3)
 
                 # get unique elements and store in feature vector
                 self._plist[i] = P[tril_indices].flatten()
@@ -260,7 +260,7 @@ class SO3:
                 ilocs = self.seq[:,0] == i
                 self._dplist[iiloc] -= np.sum(self._dplist[ilocs],axis=0)
                 rdPisum = np.sum(rdPi, axis=0)
-                self._pstress[iiloc] -= (rdPisum[tril_indices].flatten()).reshape(ncoefs,3,3)
+                self._pstress[iiloc] += (rdPisum[tril_indices].flatten()).reshape(ncoefs,3,3)
 
 
             x = {'x':self._plist, 'dxdr':self._dplist,
