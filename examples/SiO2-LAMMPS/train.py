@@ -6,6 +6,7 @@ descriptor = {'Rc': 4.9,
               'type': 'SNAP',
               'weights': {'Si': 14.0, 'O': 8.0},
               'parameters': {'lmax': 3},
+              'base_potential': {'inner': 1.0, 'outer': 2.0}, 
               'ncpu': 16,
               'N_train': 250,
              }

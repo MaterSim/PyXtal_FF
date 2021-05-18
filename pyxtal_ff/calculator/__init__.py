@@ -15,7 +15,8 @@ class PyXtalFFCalculator(Calculator):
     implemented_properties = ['energy', 'forces', 'stress']
     nolabel = True
 
-    def __init__(self, **kwargs):
+    def __init__(self, style='ase', **kwargs):
+        self.style = style
         Calculator.__init__(self, **kwargs)
 
     def calculate(self, atoms=None,
@@ -55,10 +56,18 @@ class PyXtalFFCalculator(Calculator):
         # ase uses: xx, yy, zz, yz, xz, xy
         # from GPa to eV/A^3
         self.results['stress_zbl'] = base_stress/units.GPa
+        self.results['energy_zbl'] = base_energy
+        self.results['forces_zbl'] = base_forces
         self.results['stress_ml'] = stress 
+        self.results['energy_ml'] = energies.sum()
+        self.results['forces_ml'] = forces
+
 
         # ase counts the stress differently
-        self.results['stress'] = -(stress * units.GPa + base_stress)[[0, 1, 2, 5, 4, 3]]
+        if self.style == 'ase':
+            self.results['stress'] = -(stress * units.GPa + base_stress)[[0, 1, 2, 5, 4, 3]]
+        else:
+            self.results['stress'] = self.results['stress_zbl'] + self.results['stress_ml']
 
     def __str__(self):
         s = "\nASE calculator with pyxtal_ff force field\n"
@@ -67,9 +76,24 @@ class PyXtalFFCalculator(Calculator):
     def __repr__(self):
         return str(self)
 
-    def print_stresses(self, total=False):
+    def print_stresses(self):
         print("stress_ml (GPa, xx, yy, zz, xy, xz, yz):", self.results["stress_ml"])
         print("stress_zbl(GPa, xx, yy, zz, xy, xz, yz):", self.results['stress_zbl'])
+
+    def print_energy(self):
+        print("energy_ml (eV):", self.results["energy_ml"])
+        print("energy_zbl(eV):", self.results['energy_zbl'])
+
+    def print_forces(self):
+        print("forces (eV/A)")
+        for f1, f2 in zip(self.results["forces_ml"], self.results['forces_zbl']):
+            print("{:8.3f} {:8.3f} {:8.3f} -> {:8.3f} {:8.3f} {:8.3f}".format(*f1, *f2))
+
+    def print_all(self):
+        self.print_energy()
+        self.print_forces()
+        self.print_stresses()
+
 
 def elastic_properties(C):
     Kv = C[:3,:3].mean()

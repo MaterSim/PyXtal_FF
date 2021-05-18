@@ -1,0 +1,67 @@
+LAMMPS (10 Feb 2021)
+# ---------- Initialize Simulation ---------------------
+clear
+units metal
+dimension 3
+boundary p p p
+atom_style atomic
+read_data Si.data
+Reading data file ...
+  orthogonal box = (0.0000000 0.0000000 0.0000000) to (5.0000000 5.0000000 5.0000000)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  8 atoms
+  read_data CPU = 0.000 seconds
+
+mass 1 2.0
+
+pair_style zbl 1.5 2.0
+pair_coeff 1 1 14.0 14.0
+variable e equal pe
+variable N equal count(all)
+thermo_style custom pe pxx pyy pzz pxy pxz pyz
+thermo 1
+dump 1 all custom 1 dump.myforce.* id type fx fy fz
+run 0
+WARNING: No fixes defined, atoms won't move (../verlet.cpp:54)
+Neighbor list info ...
+  update every 1 steps, delay 10 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 4
+  ghost atom cutoff = 4
+  binsize = 2, bins = 3 3 3
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair zbl, perpetual
+      attributes: half, newton on
+      pair build: half/bin/atomonly/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 4.310 | 4.310 | 4.310 Mbytes
+PotEng Pxx Pyy Pzz Pxy Pxz Pyz 
+ 0.058816957    11994.491    15731.382    13835.337    13130.866    12877.554    14212.334 
+Loop time of 5.12926e-07 on 1 procs for 0 steps with 8 atoms
+
+0.0% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0          | 0          | 0          |   0.0 |  0.00
+Neigh   | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 0          | 0          | 0          |   0.0 |  0.00
+Output  | 0          | 0          | 0          |   0.0 |  0.00
+Modify  | 0          | 0          | 0          |   0.0 |  0.00
+Other   |            | 5.129e-07  |            |       |100.00
+
+Nlocal:        8.00000 ave           8 max           8 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:        162.000 ave         162 max         162 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:        67.0000 ave          67 max          67 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 67
+Ave neighs/atom = 8.3750000
+Neighbor list builds = 0
+Dangerous builds = 0
+Total wall time: 0:00:00

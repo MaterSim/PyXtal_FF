@@ -43,7 +43,6 @@ class ZBL:
 
         rc = [(2.0+self.outer)/2.] * self.total_atoms
         neighbors = NeighborList(rc, self_interaction=False, bothways=False, skin=0.)
-        #neighbors = NeighborList(rc, self_interaction=False, bothways=True, skin=0)
         neighbors.update(crystal)
 
         self.result = {'energy': 0, 'force': np.zeros([self.total_atoms, 3]),
@@ -179,10 +178,8 @@ def calculate_ZBL(i, ri, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, I
                 
         # Collecting atomic energy
         energy[ids1] += SC[ids1] + Eij[ids1]
-        #ids2 = (dij <= r_outer) & (dij > r_inner)
-        #ids3 = (dij <= r_outer)
-        ids2 = (dij < r_outer) & (dij > r_inner)
-        ids3 = (dij < r_outer)
+        ids2 = (dij <= r_outer) & (dij > r_inner)
+        ids3 = (dij <= r_outer)
         energy[ids2] += SA[ids2] + SB[ids2]
 
         # Force
@@ -286,21 +283,17 @@ if __name__ == '__main__':
     np.set_printoptions(formatter={'float': '{: 0.6f}'.format})
 
     t0 = time.time()
-    #struc = read("MOD_NiMo.cif")
-    #struc = read("MOD_NiMo_real.cif")
-    for inner in [1.0, 1.5, 2.0, 2.5, 3.0]:
-        print("inner==================", inner)
-        for a in [2.0, 3.0, 4.0, 4.5, 5.0, 5.5]:
-            struc = bulk('Si', 'diamond', a=a, cubic=True)
-            zbl = ZBL(inner, 4.0)
-            d = zbl.calculate(struc)
-            energy = d['energy'] / len(struc)
-            forces = d['force']
-            stress = d['stress'] #* 1602176.6208
+    struc = read("Si.cif")
+    inner, outer = 1.5, 2.0
+    zbl = ZBL(inner, outer)
+    d = zbl.calculate(struc)
+    energy = d['energy']
+    forces = d['force']
+    stress = d['stress'] #* 1602176.6208
 
-            #print("Energy: ", energy)
-            #print("Force: ")
-            #print(forces)
-            print(a, "Stress: ", stress)
+    print("Energy: ", energy)
+    print("Force: ")
+    print(forces)
+    print("Stress: ", stress)
     t1 = time.time()
     print("\nTime: ", round(t1-t0, 6), "s")

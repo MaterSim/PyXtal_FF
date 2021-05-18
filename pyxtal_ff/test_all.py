@@ -79,8 +79,6 @@ descriptor_comp = {'type': 'Bispectrum',
 # model file
 bp_model = resource_filename("pyxtal_ff", "datasets/Si/PyXtal/bp-16-16-checkpoint.pth")
 
-
-
 class TestEAD(unittest.TestCase):
     struc = get_rotated_struc(nacl)
     rho0 = EAD(parameters=ead_params, Rc=rc, derivative=True).calculate(struc)
@@ -287,14 +285,14 @@ class TestCalculator(unittest.TestCase):
         C /= units.GPa
         self.assertTrue(abs(C[0,0]-124.5)<1.0)
 
-
 class TestZBL(unittest.TestCase):
     struc = nacl.copy()
-    d = ZBL(2.0, 7.0).calculate(struc)
+    d1 = ZBL(2.0, 7.0).calculate(struc)
+    d2 = ZBL(4.0, 4.5).calculate(struc)
 
     def test_ZBL(self):
-        tenergy = 4.4444502 / len(self.struc)
-        tforces = np.array(
+        tenergy1 = 4.4444502 / len(self.struc)
+        tforces1 = np.array(
                     [[-0.787367, -0.773506, -0.800989],
                      [-0.787367,  0.773506,  0.800989],
                      [ 0.787367, -0.800989,  0.773506],
@@ -303,15 +301,34 @@ class TestZBL(unittest.TestCase):
                      [ 0.814652,  0.80031,   0.828745],
                      [-0.814652, -0.828745,  0.80031 ],
                      [-0.814652,  0.828745, -0.80031]])
-        tstress = np.array([2861.0152, 2861.0152, 2861.0152, 0, 0, 0])
-        energy = self.d['energy'] / len(self.struc)
-        forces = self.d['force']
-        stress = self.d['stress'] * 1602176.6208
+        tstress1 = np.array([2861.0152, 2861.0152, 2861.0152, 0, 0, 0])
+        
+        tenergy2 = 3.9436037 / len(self.struc)
+        tforces2 = np.array(
+                    [[-0.781195, -0.767443, -0.794710],
+                     [-0.781195,  0.767443,  0.794710],
+                     [ 0.781195, -0.794710,  0.767443],
+                     [ 0.781195,  0.794710, -0.767443],
+                     [ 0.808353, -0.794122, -0.822338],
+                     [ 0.808353,  0.794122,  0.822338],
+                     [-0.808353, -0.822338,  0.794122],
+                     [-0.808353,  0.822338, -0.794122]])
+        tstress2 = np.array([2838.7443, 2838.7443, 2838.7443, 0, 0, 0])
 
-        self.assertTrue(abs(tenergy-energy) < 1e-7)
-        self.assertTrue(np.allclose(tforces, forces))
-        self.assertTrue(np.allclose(tstress, stress))
+        energy1 = self.d1['energy'] / len(self.struc)
+        forces1 = self.d1['force']
+        stress1 = self.d1['stress'] * 1602176.6208
+        energy2 = self.d2['energy'] / len(self.struc)
+        forces2 = self.d2['force']
+        stress2 = self.d2['stress'] * 1602176.6208
 
+        self.assertTrue(abs(tenergy1-energy1) < 1e-7)
+        self.assertTrue(np.allclose(tforces1, forces1))
+        self.assertTrue(np.allclose(tstress1, stress1))
+
+        self.assertTrue(abs(tenergy2-energy2) < 1e-7)
+        self.assertTrue(np.allclose(tforces2, forces2))
+        self.assertTrue(np.allclose(tstress2, stress2))
 
 class TestRegression(unittest.TestCase):
     model = {'system' : system,
@@ -374,7 +391,6 @@ class TestRegression(unittest.TestCase):
         self.struc.get_potential_energy()
         self.struc.get_stress()
 
-
 class TestRegressionComp(unittest.TestCase):
 
     model = {'system' : system,
@@ -392,7 +408,6 @@ class TestRegressionComp(unittest.TestCase):
     def test_lr_comp(self):
         self.ff._model['order'] = 1
         (train_stat, _) = self.ff.run(mode='train', TrainData=TrainData)
-
 
 if __name__ == '__main__':
 
