@@ -11,7 +11,7 @@ from pyxtal_ff.calculator.lammpslib import LAMMPSlib
 import warnings
 warnings.simplefilter("ignore")
 
-if True:
+if False:
     des, folder = "sna", "Si-snap-zbl"
     mliap  = folder + "/12-12-checkpoint.pth"
     lmpiap = folder + "/NN_weights.txt"

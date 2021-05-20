@@ -1,11 +1,9 @@
-# Example of SNAP\_NN model for elemental silicon
+# Example of SNAP(SO3)\_NN model for elemental silicon
 
 ## Remark
 This is an example to train the neural networks model based on the SNAP/SO3 descriptor based on an online [dataset](https://github.com/materialsvirtuallab/mlearn/tree/master/data/Si)
 
-Note that the [zbl potential](https://lammps.sandia.gov/doc/pair_zbl.html) is included during the training.
-
-At the moment, SO3 descriptor is disabled.
+Note that the [zbl potential](https://lammps.sandia.gov/doc/pair_zbl.html) is included during the training for sna.
 
 Last updated by Qiang Zhu on 2021/05/14.
 
