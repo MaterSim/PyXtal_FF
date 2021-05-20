@@ -11,7 +11,7 @@ from pyxtal_ff.calculator.lammpslib import LAMMPSlib
 import warnings
 warnings.simplefilter("ignore")
 
-if False: #True:
+if True:
     des, folder = "sna", "Si-snap-zbl"
     mliap  = folder + "/12-12-checkpoint.pth"
     lmpiap = folder + "/NN_weights.txt"
@@ -34,6 +34,7 @@ else:
               "pair_coeff * * Si",
               ]
 
+print("Testing", des, folder)
 
 # ase pyxtal_ff calculator
 ff = PyXtal_FF(model={'system': ["Si"]}, logo=False)
@@ -55,9 +56,9 @@ calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
 np.random.seed(0)
 # check for single configuration
 for i in range(10):
-    #si = bulk('Si', 'diamond', a=4.5, cubic=True)#*2
-    si = bulk('Si', 'diamond', a=5.469, cubic=True)#*2
-    si.positions += 0.00025*(np.random.random_sample([len(si),3])-0.5)
+    a = 4.5 + np.random.random()
+    si = bulk('Si', 'diamond', a=a, cubic=True)*2
+    si.positions += 0.025*(np.random.random_sample([len(si),3])-0.5)
     eng = []
     force = []
     stress = []
@@ -92,7 +93,7 @@ for i in range(10):
         f1s = si.get_forces()
         s1 = -si.get_stress()/units.GPa
         
-        if des == 'snap':
+        if des == 'sna':
             parameters = ["mass 1 28.0855",
                   "pair_style zbl 1.0 2.0",
                   "pair_coeff 1 1 14.0 14.0",
