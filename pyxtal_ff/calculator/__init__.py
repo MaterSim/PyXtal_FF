@@ -40,7 +40,9 @@ class PyXtalFFCalculator(Calculator):
             base_stress = base_results['stress'] # eV/A^3
             base_energies = base_results['energies']
         else:
-            base_energy, base_forces, base_stress = 0., 0., 0.
+            base_energy = 0
+            base_forces = np.zeros([len(atoms), 3])
+            base_stress = np.zeros([6])
             base_energies = 0.
 
         desp = compute_descriptor(self.parameters.ff._descriptors, atoms)

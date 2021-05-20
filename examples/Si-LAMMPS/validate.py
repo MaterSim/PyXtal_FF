@@ -11,14 +11,28 @@ from pyxtal_ff.calculator.lammpslib import LAMMPSlib
 import warnings
 warnings.simplefilter("ignore")
 
-if True:
+if False: #True:
     des, folder = "sna", "Si-snap-zbl"
+    mliap  = folder + "/12-12-checkpoint.pth"
+    lmpiap = folder + "/NN_weights.txt"
+    lmpdes = folder + "/DescriptorParam.txt"
+    # the pair style command to appear in lammps
+    parameters = ["mass 1 28.0855",
+              "pair_style hybrid/overlay &",
+              "mliap model nn " + lmpiap + " descriptor " + des + " " + lmpdes + " &",
+              "zbl 1.0 2.0",
+              "pair_coeff 1 1 zbl 14.0 14.0",
+              "pair_coeff * * mliap Si",
+              ]
 else:
     des, folder = "so3", "Si-so3"
-
-mliap  = folder + "/12-12-checkpoint.pth"
-lmpiap = folder + "/NN_weights.txt"
-lmpdes = folder + "/DescriptorParam.txt"
+    mliap  = folder + "/12-12-checkpoint.pth"
+    lmpiap = folder + "/NN_weights.txt"
+    lmpdes = folder + "/DescriptorParam.txt"
+    parameters = ["mass 1 28.0855",
+              "pair_style mliap model nn " + lmpiap + " descriptor " + des + " " + lmpdes,
+              "pair_coeff * * Si",
+              ]
 
 
 # ase pyxtal_ff calculator
@@ -35,22 +49,15 @@ cmd_args = ['-echo', 'log', '-log', log_file,
 lmp = lammps(lammps_name, cmd_args, comm)
 
 
-# the pair style command to appear in lammps
-parameters = ["mass 1 28.0855",
-              "pair_style hybrid/overlay &",
-              "mliap model nn " + lmpiap + " descriptor " + des + " " + lmpdes + " &",
-              "zbl 1.0 2.0",
-              "pair_coeff 1 1 zbl 14.0 14.0",
-              "pair_coeff * * mliap Si",
-              ]
 
 calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
 
 np.random.seed(0)
 # check for single configuration
 for i in range(10):
-    si = bulk('Si', 'diamond', a=4.5, cubic=True)*2
-    si.positions += 0.25*(np.random.random_sample([len(si),3])-0.5)
+    #si = bulk('Si', 'diamond', a=4.5, cubic=True)#*2
+    si = bulk('Si', 'diamond', a=5.469, cubic=True)#*2
+    si.positions += 0.00025*(np.random.random_sample([len(si),3])-0.5)
     eng = []
     force = []
     stress = []
@@ -69,7 +76,7 @@ for i in range(10):
         print("eng: ", eng[0], eng[1])
         print("Forces from LAMMPS and PyXtal_FF")
         for f1, f2 in zip(force[0], force[1]):
-            print("{:8.4f} {:8.4f} {:8.4f} -> {:8.4f} {:8.4f} {:8.4f} -> {:8.4f} {:8.4f} {:8.4f}".format(*f1, *f2, *(f1-f2)))
+            print("{:8.3f} {:8.3f} {:8.3f} -> {:8.3f} {:8.3f} {:8.3f} -> {:8.3f} {:8.3f} {:8.3f}".format(*f1, *f2, *(f1-f2)))
         print("\n Breakdown of Pyxtal_FF")
         calc.print_all()
 
@@ -84,17 +91,22 @@ for i in range(10):
         eng1 = si.get_potential_energy()
         f1s = si.get_forces()
         s1 = -si.get_stress()/units.GPa
+        
+        if des == 'snap':
+            parameters = ["mass 1 28.0855",
+                  "pair_style zbl 1.0 2.0",
+                  "pair_coeff 1 1 14.0 14.0",
+                  ]
 
-        parameters = ["mass 1 28.0855",
-              "pair_style zbl 1.0 2.0",
-              "pair_coeff 1 1 14.0 14.0",
-              ]
-
-        calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
-        si.set_calculator(calc_lmp)
-        eng2 = si.get_potential_energy()
-        f2s = si.get_forces()
-        s2 = -si.get_stress()/units.GPa
+            calc_lmp = LAMMPSlib(lmp=lmp, lmpcmds=parameters)
+            si.set_calculator(calc_lmp)
+            eng2 = si.get_potential_energy()
+            f2s = si.get_forces()
+            s2 = -si.get_stress()/units.GPa
+        else:
+            eng2 = 0
+            f2s = np.zeros([len(si), 3])
+            s2 = np.zeros([6])
         print("energy_ml (eV):", eng1)
         print("energy_zbl(eV):", eng2)
         print("Forces")
