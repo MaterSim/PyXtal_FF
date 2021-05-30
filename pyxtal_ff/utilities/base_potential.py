@@ -103,7 +103,7 @@ class ZBL:
                     self.result['energies'].append(energy)
             else:
                 if self.atomic_energy:
-                    self.result['energies'].append(energy)
+                    self.result['energies'].append(0.)
         
         if self.atomic_energy:
             self.result['_energies'] = np.array(self.result['energies'])
@@ -137,7 +137,7 @@ def calculate_ZBL(i, ri, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, I
     IDs: int array [j]
         The indices of neighbors centering about atom i.
     """
-    ids1 = (dij <= r_outer)
+    ids1 = (dij < r_outer)
 
     if True not in ids1:
         return 0., np.zeros([total_atoms, 3]), np.zeros([3,3])
@@ -210,7 +210,7 @@ def calculate_ZBL(i, ri, rij, dij, Zi, Zj, r_outer, r_inner, ABC, total_atoms, I
             stress[_i, count, :, :] += np.einsum('i,j->ij', i_force[count,_i,:], ri)
             stress[_j, count, :, :] += np.einsum('i,j->ij', j_force[count,_j,:], rij[count]+ri)
         
-        stress = -1 * np.einsum('ijkl->kl', stress[:, (dij <= r_outer)])
+        stress = -1 * np.einsum('ijkl->kl', stress[:, (dij < r_outer)])
             
         return np.sum(energy), forces, stress
 
