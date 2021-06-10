@@ -47,7 +47,8 @@ First, follow the steps below to install LAMMPS-MLIAP and python wrapper
 
 ```
 $ git clone https://github.com/macstein/lammps.git
-$ git checkout mliap_so3
+$ cd lammps/
+$ git checkout mliap_so3_ver2
 $ cd lammps/src
 $ make yes-snap
 $ make yes-mliap
