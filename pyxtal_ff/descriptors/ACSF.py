@@ -3,6 +3,7 @@ from ase.neighborlist import NeighborList
 from itertools import combinations, combinations_with_replacement
 from .cutoff import Cutoff
 
+
 class ACSF:
     """A class for calculating Behler-Parrinello symmetry functions.
     
@@ -258,13 +259,9 @@ class ACSF:
                         if self.stress:
                             rGiPrime = rG4iP
                     else:
-                        #GiPrime_seq = np.append(GiPrime_seq, seq, axis=0)
                         GiPrime = np.append(GiPrime, G4iP, axis=1)
                         if self.stress:
                             rGiPrime = np.append(rGiPrime, rG4iP, axis=1)
-                #print(seq.shape, G4iP.shape, rG4iP.shape)
-                #print(GiPrime_seq.shape, GiPrime.shape, rGiPrime.shape)
- 
 
             if self.G5_parameters is not None:
                 G5i = calculate_G5(Rij, IDs, jks, atomic_numbers, type_set2,
@@ -408,7 +405,7 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
     cutoff = Cutoff(parameters['cutoff'])
     n1, n2, m, l = len(Rs), len(etas), len(Rij), len(type_set)
     js, N = IDs, len(atomic_numbers)
-     # QZ: the block to get the unique neighbors
+    # QZ: the block to get the unique neighbors
     unique_js = np.unique(IDs)
     if i not in unique_js:
         unique_js = np.append(i, unique_js)
@@ -434,21 +431,25 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
     term_1_and_2 = term_1_and_2.reshape([n1*n2, m])
 
     dRij_dRm = np.zeros([m, 3, N1])
+    i_dRij_dRm = np.zeros([m, 3, N1])
+    j_dRij_dRm = np.zeros([m, 3, N1])
     for mm, _m in enumerate(unique_js):
         mm_list = _m * np.ones([m, 1], dtype=int)
-        dRij_dRm[:,:,mm] = dRij_dRm_norm(Rij, np.hstack((ij_list, mm_list)))
+        dRij_dRm[:,:,mm], i_dRij_dRm[:,:,mm], j_dRij_dRm[:,:,mm] = \
+                dRij_dRm_norm(Rij, np.hstack((ij_list, mm_list)))
     
     # [d, m, 3, N1]
     G2ip0 = np.einsum('ij,jkl->ijkl', term_1_and_2, dRij_dRm)
+    i_G2ip0 = np.einsum('ij,jkl->ijkl', term_1_and_2, i_dRij_dRm)
+    j_G2ip0 = np.einsum('ij,jkl->ijkl', term_1_and_2, j_dRij_dRm)
 
     rG2ip0 = np.zeros([n1*n2, len(ij_list), 3, N1, 3])
     for mm, ij in enumerate(ij_list):
-        #j = ij[1]
         _j = np.where(unique_js==ij[1])[0][0]
-        tmp = G2ip0[:,mm,:,:] #S,N1,3 -> S,3 * 3 -> S*3*3 
-        rG2ip0[:,mm,:,_i,:] += np.einsum('ij,k->ijk', tmp[:,:,_i], Ri)
-        rG2ip0[:,mm,:,_j,:] += np.einsum('ij,k->ijk', tmp[:,:,_j], Rij[mm]+Ri)
-
+        i_tmp = i_G2ip0[:,mm,:,:] # S, N1, 3 -> S, 3*3 -> S*3*3 
+        j_tmp = j_G2ip0[:,mm,:,:]
+        rG2ip0[:,mm,:,_i,:] += np.einsum('ij,k->ijk', i_tmp[:,:,_i], Ri)
+        rG2ip0[:,mm,:,_j,:] += np.einsum('ij,k->ijk', j_tmp[:,:,_j], Rij[mm]+Ri)
 
     # Decompose G2 Prime by species
     if Gtype == 'wACSF':
@@ -456,7 +457,6 @@ def calculate_G2Prime(Rij, Ri, i, IDs, atomic_numbers, type_set, Rc, parameters,
 
         G2Prime =  np.zeros([N1, n1*n2, 3]) # This is the final output
         rG2Prime = np.zeros([N1, n1*n2, 3, 3]) # This is the final output
- 
         for id, j_type in enumerate(type_set):
             ids = select_rows(j_ids, j_type)
             Z = j_ids[ids][0]
@@ -514,6 +514,11 @@ def calculate_G4(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
     cutoff = Cutoff(parameters['cutoff'])
     n1, n2, n3, n4, l = len(Rs), len(etas), len(lamBdas), len(zetas), len(type_set)
     jk = len(jks)  #m1
+    if jk == 0: # For dimer
+        if Gtype == 'wACSF':
+            return np.zeros([n1*n2*n3*n4])
+        else:
+            return np.zeros([n1*n2*n3*n4*l])
     
     rij = Rij[jks[:,0]] # [m1, 3]
     rik = Rij[jks[:,1]] # [m1, 3]
@@ -548,12 +553,10 @@ def calculate_G4(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
     if Gtype == 'wACSF':
         G4 = np.zeros([n1*n2*n3*n4])
         jk_ids = atomic_numbers[IDs[jks]]
- 
         for id, jk_type in enumerate(type_set):
             ids = select_rows(jk_ids, jk_type)
             Z1Z2 = np.prod(jk_ids[ids[0]])
             G4 += Z1Z2*np.sum(results[:, ids], axis=1)
-
     else:
         G4 = np.zeros([n1*n2*n3*n4*l])
         jk_ids = atomic_numbers[IDs[jks]] 
@@ -601,30 +604,25 @@ def calculate_G5(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
     lamBdas = parameters['lambda']
     cutoff = Cutoff(parameters['cutoff'])
     n1, n2, n3, n4, l = len(Rs), len(etas), len(lamBdas), len(zetas), len(type_set)
-    jk = len(jks)  #m1
+    jk = len(jks)  # m1
+    if jk == 0: # For dimer
+        if Gtype == 'wACSF':
+            return np.zeros([n1*n2*n3*n4])
+        else:
+            return np.zeros([n1*n2*n3*n4*l])
     
     rij = Rij[jks[:,0]] # [m1, 3]
     rik = Rij[jks[:,1]] # [m1, 3]
-    #rjk = rik - rij     # [m1, 3]
     R2ij0 = np.sum(rij**2., axis=1) 
     R2ik0 = np.sum(rik**2., axis=1) 
-    
-    #R2jk0 = np.sum(rjk**2., axis=1) 
-    
     R1ij0 = np.sqrt(R2ij0) # m1
     R1ik0 = np.sqrt(R2ik0) # m1
-    #R1jk0 = np.sqrt(R2jk0) # m1
-
     R2ij = R2ij0 - Rs[:, np.newaxis]**2  # n1*m1
     R2ik = R2ik0 - Rs[:, np.newaxis]**2  # n1*m1
-    
-    #R2jk = R2jk0 - Rs[:, np.newaxis]**2  # n1*m1
     
     R1ij = R1ij0 - Rs[:, np.newaxis] # n1*m1
     R1ik = R1ik0 - Rs[:, np.newaxis] # n1*m1
     
-    #R1jk = R1jk0 - Rs[:, np.newaxis] # n1*m1
- 
     powers = 2. ** (1.-zetas) #n4
     cos_ijk = np.sum(rij*rik, axis=1)/R1ij0/R1ik0 # m1 array
     term1 = 1. + np.einsum('i,j->ij', lamBdas, cos_ijk) # n3*m1
@@ -646,7 +644,6 @@ def calculate_G5(Rij, IDs, jks, atomic_numbers, type_set, Rc, parameters, Gtype)
             ids = select_rows(jk_ids, jk_type)
             Z1Z2 = np.prod(jk_ids[ids[0]])
             G5 += Z1Z2*np.sum(results[:, ids], axis=1)
-
     else:
         G5 = np.zeros([n1*n2*n3*n4*l])
         jk_ids = atomic_numbers[IDs[jks]] 
@@ -707,6 +704,11 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     N1 = len(unique_js)
     _i = np.where(unique_js==i)[0][0]
 
+    if jks.shape[0] == 0: # For dimer
+        if Gtype == 'wACSF':
+            return seq, np.zeros([N1, n1*n2*n3*n4, 3]), np.zeros([N1, n1*n2*n3*n4, 3, 3])
+        else:
+            return seq, np.zeros([N1, n1*n2*n3*n4*l, 3]), np.zeros([N1, n1*n2*n3*n4*l, 3, 3])
 
     ijk_list = i * np.ones([jk, 3], dtype=int)
     ijk_list[:,1] = IDs[jks[:,0]]
@@ -729,7 +731,7 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     R1ik = R1ik0 - Rs[:, np.newaxis] # n1*m1
     R1jk = R1jk0 - Rs[:, np.newaxis] # n1*m1
  
-    cos_ijk = np.sum(rij * rik, axis=1) / R1ij0/ R1ik0 # m1 array
+    cos_ijk = np.sum(rij * rik, axis=1) / R1ij0 / R1ik0 # m1 array
 
     dfcij = cutoff.calculate_derivative(R1ij0, Rc)
     dfcjk = cutoff.calculate_derivative(R1jk0, Rc)
@@ -745,48 +747,120 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     g41 = np.exp(np.einsum('i,jk->ijk', -etas, (R2ij+R2jk+R2ik))) # n2*n1*m1
     g41 = np.einsum('ijk,lmk->ijlmk', term2, g41) # n4*n3*n2**n1*m1
     g41 = np.einsum('i,ijklm->ijklm', powers, g41) # n4*n3*n2*n1*m1
-    
     lamBda_zeta = np.einsum('i,j->ij', zetas, lamBdas) # n4*n3
-    (dRij_dRm, dRik_dRm, dRjk_dRm) = dRijk_dRm(rij, rik, rjk, ijk_list, unique_js) # m1*3*N1
+    
+    (dRij_dRm, dRik_dRm, dRjk_dRm,
+     i_dRij_dRm, i_dRik_dRm, j_dRjk_dRm,
+     j_dRij_dRm, k_dRik_dRm, k_dRjk_dRm) = dRijk_dRm(rij, rik, rjk, ijk_list, unique_js) # m1*3*N1
+    
     Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, dRij_dRm) + \
                np.einsum('i,ijk->ijk', R1ik0, dRik_dRm) + \
-               np.einsum('i,ijk->ijk', R1jk0, dRjk_dRm) 
+               np.einsum('i,ijk->ijk', R1jk0, dRjk_dRm)
+
+    i_Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, i_dRij_dRm) + \
+                 np.einsum('i,ijk->ijk', R1ik0, i_dRik_dRm) + \
+                 np.einsum('i,ijk->ijk', R1jk0, dRjk_dRm) 
+
+    j_Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, j_dRij_dRm) + \
+                 np.einsum('i,ijk->ijk', R1ik0, dRik_dRm) + \
+                 np.einsum('i,ijk->ijk', R1jk0, j_dRjk_dRm)
+
+    k_Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, dRij_dRm) + \
+                 np.einsum('i,ijk->ijk', R1ik0, k_dRik_dRm) + \
+                 np.einsum('i,ijk->ijk', R1jk0, k_dRjk_dRm)
+
     dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, dRij_dRm, dRik_dRm)
-    dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, dcos) # n4*n3*3*m1*N1
-    dcos = np.broadcast_to(dcos, (n2,)+(n4,n3,jk,3,N1))
-    dcos = np.transpose(dcos, (1,2,0,3,4,5))
-    cost = np.einsum('i,jk->jik', 2 * etas, term1) #n3*n2*m1
-    cost = np.einsum('ijk,klm->ijklm', cost, Rijk_dRm) # n3*n2*m1*3*N1
-    cost = np.broadcast_to(cost, (n4,)+(n3,n2,jk,3,N1))
-    g42 = np.einsum('l,ijklmn->ijklmn', fcij*fcik*fcjk, dcos-cost) # n4*n3*n2*m*3*N1
+    i_dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, i_dRij_dRm, i_dRik_dRm)
+    j_dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, j_dRij_dRm, dRik_dRm)
+    k_dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, dRij_dRm, k_dRik_dRm)
     
+    dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, dcos) # n4*n3*3*m1*N1
+    i_dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, i_dcos)
+    j_dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, j_dcos)
+    k_dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, k_dcos)
+
+    dcos = np.broadcast_to(dcos, (n2,)+(n4,n3,jk,3,N1))
+    i_dcos = np.broadcast_to(i_dcos, (n2,)+(n4,n3,jk,3,N1))
+    j_dcos = np.broadcast_to(j_dcos, (n2,)+(n4,n3,jk,3,N1))
+    k_dcos = np.broadcast_to(k_dcos, (n2,)+(n4,n3,jk,3,N1))
+    
+    dcos = np.transpose(dcos, (1,2,0,3,4,5))
+    i_dcos = np.transpose(i_dcos, (1,2,0,3,4,5))
+    j_dcos = np.transpose(j_dcos, (1,2,0,3,4,5))
+    k_dcos = np.transpose(k_dcos, (1,2,0,3,4,5))
+
+    cost = np.einsum('i,jk->jik', 2 * etas, term1) #n3*n2*m1
+    
+    i_cost = np.einsum('ijk,klm->ijklm', cost, i_Rijk_dRm)
+    j_cost = np.einsum('ijk,klm->ijklm', cost, j_Rijk_dRm)
+    k_cost = np.einsum('ijk,klm->ijklm', cost, k_Rijk_dRm)
+    cost = np.einsum('ijk,klm->ijklm', cost, Rijk_dRm) # n3*n2*m1*3*N1
+    
+    cost = np.broadcast_to(cost, (n4,)+(n3,n2,jk,3,N1))
+    i_cost = np.broadcast_to(i_cost, (n4,)+(n3,n2,jk,3,N1))
+    j_cost = np.broadcast_to(j_cost, (n4,)+(n3,n2,jk,3,N1))
+    k_cost = np.broadcast_to(k_cost, (n4,)+(n3,n2,jk,3,N1))
+    
+    g42 = np.einsum('l,ijklmn->ijklmn', fcij*fcik*fcjk, dcos-cost) # n4*n3*n2*m*3*N1
+    i_g42 = np.einsum('l,ijklmn->ijklmn', fcij*fcik*fcjk, i_dcos-i_cost)
+    j_g42 = np.einsum('l,ijklmn->ijklmn', fcij*fcik*fcjk, j_dcos-j_cost) 
+    k_g42 = np.einsum('l,ijklmn->ijklmn', fcij*fcik*fcjk, k_dcos-k_cost) 
+
     g43 = np.einsum('i,ijk->ijk', dfcij*fcik*fcjk, dRij_dRm) + \
           np.einsum('i,ijk->ijk', fcij*dfcik*fcjk, dRik_dRm) + \
           np.einsum('i,ijk->ijk', fcij*fcik*dfcjk, dRjk_dRm)
-    g43 = np.einsum('ij,jkl->ijkl', term1, g43) # n3*m1*3*N1
-    g43 = np.broadcast_to(g43, (n4, n2,)+(n3,jk,3,N1))
-    g43 = np.transpose(g43, (0,2,1,3,4,5))
+    i_g43 = np.einsum('i,ijk->ijk', dfcij*fcik*fcjk, i_dRij_dRm) + \
+            np.einsum('i,ijk->ijk', fcij*dfcik*fcjk, i_dRik_dRm) + \
+            np.einsum('i,ijk->ijk', fcij*fcik*dfcjk, dRjk_dRm)
+    j_g43 = np.einsum('i,ijk->ijk', dfcij*fcik*fcjk, j_dRij_dRm) + \
+            np.einsum('i,ijk->ijk', fcij*dfcik*fcjk, dRik_dRm) + \
+            np.einsum('i,ijk->ijk', fcij*fcik*dfcjk, j_dRjk_dRm)
+    k_g43 = np.einsum('i,ijk->ijk', dfcij*fcik*fcjk, dRij_dRm) + \
+            np.einsum('i,ijk->ijk', fcij*dfcik*fcjk, k_dRik_dRm) + \
+            np.einsum('i,ijk->ijk', fcij*fcik*dfcjk, k_dRjk_dRm)
 
+    g43 = np.einsum('ij,jkl->ijkl', term1, g43) # n3*m1*3*N1
+    i_g43 = np.einsum('ij,jkl->ijkl', term1, i_g43)
+    j_g43 = np.einsum('ij,jkl->ijkl', term1, j_g43)
+    k_g43 = np.einsum('ij,jkl->ijkl', term1, k_g43)
+    
+    g43 = np.broadcast_to(g43, (n4, n2,)+(n3,jk,3,N1))
+    i_g43 = np.broadcast_to(i_g43, (n4, n2,)+(n3,jk,3,N1))
+    j_g43 = np.broadcast_to(j_g43, (n4, n2,)+(n3,jk,3,N1))
+    k_g43 = np.broadcast_to(k_g43, (n4, n2,)+(n3,jk,3,N1))
+
+    g43 = np.transpose(g43, (0,2,1,3,4,5))
+    i_g43 = np.transpose(i_g43, (0,2,1,3,4,5))
+    j_g43 = np.transpose(j_g43, (0,2,1,3,4,5))
+    k_g43 = np.transpose(k_g43, (0,2,1,3,4,5))
+    
     # [n4, n3, n2, n1, m] * [n4, n3, n2, m, 3, N1] -> [n4, n3, n2, n1, m, 3, N1] -> [S, m, 3, N1] 
     G4ip0 = np.einsum('ijklm, ijkmno->ijklmno', g41, g42+g43,\
                       optimize='greedy').reshape([n1*n2*n3*n4, jk, 3, N1])
+    i_G4ip0 = np.einsum('ijklm, ijkmno->ijklmno', g41, i_g42+i_g43,\
+                          optimize='greedy').reshape([n1*n2*n3*n4, jk, 3, N1])
+    j_G4ip0 = np.einsum('ijklm, ijkmno->ijklmno', g41, j_g42+j_g43,\
+                          optimize='greedy').reshape([n1*n2*n3*n4, jk, 3, N1])
+    k_G4ip0 = np.einsum('ijklm, ijkmno->ijklmno', g41, k_g42+k_g43,\
+                          optimize='greedy').reshape([n1*n2*n3*n4, jk, 3, N1])
+    
     # [S, m, 3, N1] * [m, 3] -> [S, m, 3, N1, 3] 
     # partition the dxdr to each i, j, k
     rG4ip0 = np.zeros([n1*n2*n3*n4, len(ijk_list), 3, N1, 3])
     for mm, ijk in enumerate(ijk_list):
-        #j,k = ijk[1], ijk[2]
         _j = np.where(unique_js==ijk[1])[0][0]
         _k = np.where(unique_js==ijk[2])[0][0]
-        tmp = G4ip0[:,mm,:,:] #S,N,3 -> S,3 * 3 -> S*3*3 
-        rG4ip0[:,mm,:,_i,:] += np.einsum('ij,k->ijk', tmp[:,:,_i], Ri)
-        rG4ip0[:,mm,:,_j,:] += np.einsum('ij,k->ijk', tmp[:,:,_j], rij[mm]+Ri)
-        rG4ip0[:,mm,:,_k,:] += np.einsum('ij,k->ijk', tmp[:,:,_k], rik[mm]+Ri)
+        i_tmp = i_G4ip0[:,mm,:,:] # S,N,3 -> S, 3*3 -> S*3*3 
+        j_tmp = j_G4ip0[:,mm,:,:] 
+        k_tmp = k_G4ip0[:,mm,:,:] 
+        rG4ip0[:,mm,:,_i,:] += np.einsum('ij,k->ijk', i_tmp[:,:,_i], Ri)
+        rG4ip0[:,mm,:,_j,:] += np.einsum('ij,k->ijk', j_tmp[:,:,_j], rij[mm]+Ri)
+        rG4ip0[:,mm,:,_k,:] += np.einsum('ij,k->ijk', k_tmp[:,:,_k], rik[mm]+Ri)
 
     # Decompose G4 Prime by species
     if Gtype == 'wACSF':
         G4Prime = np.zeros([N1, n1*n2*n3*n4, 3])
         rG4Prime = np.zeros([N1, n1*n2*n3*n4, 3, 3])
-
         jk_ids = atomic_numbers[IDs[jks]]
         for id, jk_type in enumerate(type_set):
             ids = select_rows(jk_ids, jk_type)
@@ -797,7 +871,6 @@ def calculate_G4Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     else:
         G4Prime = np.zeros([N1, n1*n2*n3*n4*l, 3])
         rG4Prime = np.zeros([N1, n1*n2*n3*n4*l, 3, 3])
-
         jk_ids = atomic_numbers[IDs[jks]] 
         for id, jk_type in enumerate(type_set):
             ids = select_rows(jk_ids, jk_type)
@@ -858,6 +931,11 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     N1 = len(unique_js)
     _i = np.where(unique_js==i)[0][0]
 
+    if jks.shape[0] == 0: # For dimer
+        if Gtype == 'wACSF':
+            return seq, np.zeros([N1, n1*n2*n3*n4, 3]), np.zeros([N1, n1*n2*n3*n4, 3, 3])
+        else:
+            return seq, np.zeros([N1, n1*n2*n3*n4*l, 3]), np.zeros([N1, n1*n2*n3*n4*l, 3, 3])
 
     ijk_list = i * np.ones([jk, 3], dtype=int)
     ijk_list[:,1] = IDs[jks[:,0]]
@@ -869,24 +947,18 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
 
     R2ij0 = np.sum(rij**2., axis=1) 
     R2ik0 = np.sum(rik**2., axis=1) 
-    #R2jk0 = np.sum(rjk**2., axis=1) 
     R1ij0 = np.sqrt(R2ij0) # m1
     R1ik0 = np.sqrt(R2ik0) # m1
-    #R1jk0 = np.sqrt(R2jk0) # m1
     R2ij = R2ij0 - Rs[:, np.newaxis]**2  # n1*m1
     R2ik = R2ik0 - Rs[:, np.newaxis]**2  # n1*m1
-    #R2jk = R2jk0 - Rs[:, np.newaxis]**2  # n1*m1
     R1ij = R1ij0 - Rs[:, np.newaxis] # n1*m1
     R1ik = R1ik0 - Rs[:, np.newaxis] # n1*m1
-    #R1jk = R1jk0 - Rs[:, np.newaxis] # n1*m1
  
     cos_ijk = np.sum(rij * rik, axis=1) / R1ij0/ R1ik0 # m1 array
 
     dfcij = cutoff.calculate_derivative(R1ij0, Rc)
-    #dfcjk = CosinePrime(R1jk0, Rc)
     dfcik = cutoff.calculate_derivative(R1ik0, Rc)
     fcij = cutoff.calculate(R1ij0, Rc)
-    #fcjk = Cosine(R1jk0, Rc)
     fcik = cutoff.calculate(R1ik0, Rc)
 
     powers = 2. ** (1.-zetas) #n4
@@ -898,39 +970,101 @@ def calculate_G5Prime(Rij, Ri, i, IDs, jks, atomic_numbers, type_set, Rc,
     g51 = np.einsum('i,ijklm->ijklm', powers, g51) # n4*n3*n2*n1*m1
     
     lamBda_zeta = np.einsum('i,j->ij', zetas, lamBdas) # n4*n3
-    (dRij_dRm, dRik_dRm, dRjk_dRm) = dRijk_dRm(rij, rik, rjk, ijk_list, unique_js) # m1*3*N1
+    (dRij_dRm, dRik_dRm, dRjk_dRm,
+     i_dRij_dRm, i_dRik_dRm, j_dRjk_dRm,
+     j_dRij_dRm, k_dRik_dRm, k_dRjk_dRm) = dRijk_dRm(rij, rik, rjk, ijk_list, unique_js) # m1*3*N1
+
     Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, dRij_dRm) + \
                np.einsum('i,ijk->ijk', R1ik0, dRik_dRm)
-               #np.einsum('i,ijk->ijk', R1jk0, dRjk_dRm) 
+    i_Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, i_dRij_dRm) + \
+                 np.einsum('i,ijk->ijk', R1ik0, i_dRik_dRm)
+    j_Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, j_dRij_dRm) + \
+                 np.einsum('i,ijk->ijk', R1ik0, dRik_dRm)
+    k_Rijk_dRm = np.einsum('i,ijk->ijk', R1ij0, dRij_dRm) + \
+                 np.einsum('i,ijk->ijk', R1ik0, k_dRik_dRm)
+
     dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, dRij_dRm, dRik_dRm)
+    i_dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, i_dRij_dRm, i_dRik_dRm)
+    j_dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, j_dRij_dRm, dRik_dRm)
+    k_dcos = dcosijk_dRm(rij, rik, ijk_list, unique_js, dRij_dRm, k_dRik_dRm)
+
     dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, dcos) # n4*n3*3*m1*N1
+    i_dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, i_dcos)
+    j_dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, j_dcos)
+    k_dcos = np.einsum('ij,klm->ijklm', lamBda_zeta, k_dcos)
+
     dcos = np.broadcast_to(dcos, (n2,)+(n4,n3,jk,3,N1))
+    i_dcos = np.broadcast_to(i_dcos, (n2,)+(n4,n3,jk,3,N1))
+    j_dcos = np.broadcast_to(j_dcos, (n2,)+(n4,n3,jk,3,N1))
+    k_dcos = np.broadcast_to(k_dcos, (n2,)+(n4,n3,jk,3,N1))
+
     dcos = np.transpose(dcos, (1,2,0,3,4,5))
+    i_dcos = np.transpose(i_dcos, (1,2,0,3,4,5))
+    j_dcos = np.transpose(j_dcos, (1,2,0,3,4,5))
+    k_dcos = np.transpose(k_dcos, (1,2,0,3,4,5))
+
     cost = np.einsum('i,jk->jik', 2 * etas, term1) #n3*n2*m1
+
+    i_cost = np.einsum('ijk,klm->ijklm', cost, i_Rijk_dRm)
+    j_cost = np.einsum('ijk,klm->ijklm', cost, j_Rijk_dRm)
+    k_cost = np.einsum('ijk,klm->ijklm', cost, k_Rijk_dRm)
     cost = np.einsum('ijk,klm->ijklm', cost, Rijk_dRm) # n3*n2*m1*3*N1
+    
     cost = np.broadcast_to(cost, (n4,)+(n3,n2,jk,3,N1))
+    i_cost = np.broadcast_to(i_cost, (n4,)+(n3,n2,jk,3,N1))
+    j_cost = np.broadcast_to(j_cost, (n4,)+(n3,n2,jk,3,N1))
+    k_cost = np.broadcast_to(k_cost, (n4,)+(n3,n2,jk,3,N1))
+
     g52 = np.einsum('l,ijklmn->ijklmn', fcij*fcik, dcos-cost) # n4*n3*n2*m*3*N1
+    i_g52 = np.einsum('l,ijklmn->ijklmn', fcij*fcik, i_dcos-i_cost)
+    j_g52 = np.einsum('l,ijklmn->ijklmn', fcij*fcik, j_dcos-j_cost)
+    k_g52 = np.einsum('l,ijklmn->ijklmn', fcij*fcik, k_dcos-k_cost)
     
     g53 = np.einsum('i,ijk->ijk', dfcij*fcik, dRij_dRm) + \
           np.einsum('i,ijk->ijk', fcij*dfcik, dRik_dRm)
+    i_g53 = np.einsum('i,ijk->ijk', dfcij*fcik, i_dRij_dRm) + \
+            np.einsum('i,ijk->ijk', fcij*dfcik, i_dRik_dRm)
+    j_g53 = np.einsum('i,ijk->ijk', dfcij*fcik, j_dRij_dRm) + \
+            np.einsum('i,ijk->ijk', fcij*dfcik, dRik_dRm)
+    k_g53 = np.einsum('i,ijk->ijk', dfcij*fcik, dRij_dRm) + \
+            np.einsum('i,ijk->ijk', fcij*dfcik, k_dRik_dRm)
+
     g53 = np.einsum('ij,jkl->ijkl', term1, g53) # n3*m1*3*N1
+    i_g53 = np.einsum('ij,jkl->ijkl', term1, i_g53)
+    j_g53 = np.einsum('ij,jkl->ijkl', term1, j_g53)
+    k_g53 = np.einsum('ij,jkl->ijkl', term1, k_g53)
+
     g53 = np.broadcast_to(g53, (n4, n2,)+(n3,jk,3,N1))
+    i_g53 = np.broadcast_to(i_g53, (n4, n2,)+(n3,jk,3,N1))
+    j_g53 = np.broadcast_to(j_g53, (n4, n2,)+(n3,jk,3,N1))
+    k_g53 = np.broadcast_to(k_g53, (n4, n2,)+(n3,jk,3,N1))
+
     g53 = np.transpose(g53, (0,2,1,3,4,5))
+    i_g53 = np.transpose(i_g53, (0,2,1,3,4,5))
+    j_g53 = np.transpose(j_g53, (0,2,1,3,4,5))
+    k_g53 = np.transpose(k_g53, (0,2,1,3,4,5))
 
     G5ip0 = np.einsum('ijklm, ijkmno->ijklmno', g51, g52+g53,\
                       optimize='greedy').reshape([n1*n2*n3*n4, jk, 3, N1])
+    i_G5ip0 = np.einsum('ijklm, ijkmno->ijklmno', g51, i_g52+i_g53,\
+                          optimize='greedy').reshape([n1*n2*n3*n4, jk, 3, N1])
+    j_G5ip0 = np.einsum('ijklm, ijkmno->ijklmno', g51, j_g52+j_g53,\
+                          optimize='greedy').reshape([n1*n2*n3*n4, jk, 3, N1])
+    k_G5ip0 = np.einsum('ijklm, ijkmno->ijklmno', g51, k_g52+k_g53,\
+                          optimize='greedy').reshape([n1*n2*n3*n4, jk, 3, N1])
 
     # [S, m, 3, N1] * [m, 3] -> [S, m, 3, N1, 3] 
     # partition the dxdr to each i, j, k
     rG5ip0 = np.zeros([n1*n2*n3*n4, len(ijk_list), 3, N1, 3])
     for mm, ijk in enumerate(ijk_list):
-        #j,k = ijk[1], ijk[2]
         _j = np.where(unique_js==ijk[1])[0][0]
         _k = np.where(unique_js==ijk[2])[0][0]
-        tmp = G5ip0[:,mm,:,:] #S,N,3 -> S,3 * 3 -> S*3*3 
-        rG5ip0[:,mm,:,_i,:] += np.einsum('ij,k->ijk', tmp[:,:,_i], Ri)
-        rG5ip0[:,mm,:,_j,:] += np.einsum('ij,k->ijk', tmp[:,:,_j], rij[mm]+Ri)
-        rG5ip0[:,mm,:,_k,:] += np.einsum('ij,k->ijk', tmp[:,:,_k], rik[mm]+Ri)
+        i_tmp = i_G5ip0[:,mm,:,:] # S, N, 3 -> S, 3*3 -> S*3*3 
+        j_tmp = i_G5ip0[:,mm,:,:] 
+        k_tmp = i_G5ip0[:,mm,:,:] 
+        rG5ip0[:,mm,:,_i,:] += np.einsum('ij,k->ijk', i_tmp[:,:,_i], Ri)
+        rG5ip0[:,mm,:,_j,:] += np.einsum('ij,k->ijk', j_tmp[:,:,_j], rij[mm]+Ri)
+        rG5ip0[:,mm,:,_k,:] += np.einsum('ij,k->ijk', k_tmp[:,:,_k], rik[mm]+Ri)
 
     # Decompose G4 Prime by species
     if Gtype == 'wACSF':
@@ -974,15 +1108,22 @@ def dRij_dRm_norm(Rij, ijm_list):
         The derivative of pair atoms w.r.t. atom m in x, y, z directions.
     """
     dRij_m = np.zeros([len(Rij), 3])
+    i_dRij_m = np.zeros([len(Rij), 3])
+    j_dRij_m = np.zeros([len(Rij), 3])
     R1ij = np.linalg.norm(Rij, axis=1).reshape([len(Rij),1])
+    
     l1 = (ijm_list[:,2]==ijm_list[:,0])
     dRij_m[l1, :] = -Rij[l1]/R1ij[l1]
+    i_dRij_m[l1, :] = -Rij[l1]/R1ij[l1]
+
     l2 = (ijm_list[:,2]==ijm_list[:,1])
     dRij_m[l2, :] = Rij[l2]/R1ij[l2]
+    j_dRij_m[l2, :] = Rij[l2]/R1ij[l2]
+
     l3 = (ijm_list[:,0]==ijm_list[:,1])
     dRij_m[l3, :] = 0
     
-    return dRij_m
+    return dRij_m, i_dRij_m, j_dRij_m
 
 
 def dcosijk_dRm(Rij, Rik, ijk_list, m_list, dRij_dRm, dRik_dRm):
@@ -1012,21 +1153,23 @@ def dcosijk_dRm(Rij, Rik, ijk_list, m_list, dRij_dRm, dRik_dRm):
     ik_list = ijk_list[:,[0,2]]
     dcos = np.zeros([len(Rij), 3, m])
 
-    #for mm in range(m):
     for mm, _m in enumerate(m_list):
         mm_list = _m * np.ones([len(Rij), 1], dtype=int)
-        #mm_list = mm * np.ones([len(Rij), 1], dtype=int)
+
         dRij_dRm_v = dRij_dRm_vector(np.append(ij_list, mm_list, axis=1))
         dRik_dRm_v = dRij_dRm_vector(np.append(ik_list, mm_list, axis=1))
         term10 = np.einsum('i,ij->ij', rDijDik, Rik) # jk*3 arrray
+        
         dcos[:,:,mm] += np.einsum('ij,i->ij', term10, dRij_dRm_v)
         term20 = np.einsum('i,ij->ij', rDijDik, Rij) # jk*3 array
         dcos[:,:,mm] += np.einsum('ij,i->ij', term20, dRik_dRm_v)
+
         term30 = Rij_Rik*rDijDik/Dij # jk*3
         dcos[:,:,mm] -= np.einsum('i,ij->ij', term30, dRij_dRm[:,:,mm])
+
         term40 = Rij_Rik*rDijDik/Dik # jk*3
         dcos[:,:,mm] -= np.einsum('i,ij->ij', term40, dRik_dRm[:,:,mm]) # jk*3*m
-        
+    
     return dcos
 
 
@@ -1078,21 +1221,32 @@ def dRijk_dRm(Rij, Rik, Rjk, ijk_list, m):
     dRij_dRm = np.zeros([len(Rij), 3, len(m)])
     dRik_dRm = np.zeros([len(Rij), 3, len(m)])
     dRjk_dRm = np.zeros([len(Rij), 3, len(m)])
+
+    i_dRij_dRm = np.zeros([len(Rij), 3, len(m)])
+    i_dRik_dRm = np.zeros([len(Rij), 3, len(m)])
+
+    j_dRij_dRm = np.zeros([len(Rij), 3, len(m)])
+    j_dRjk_dRm = np.zeros([len(Rij), 3, len(m)])
+
+    k_dRik_dRm = np.zeros([len(Rij), 3, len(m)])
+    k_dRjk_dRm = np.zeros([len(Rij), 3, len(m)])
+    
     ij_list = ijk_list[:,[0,1]]
     ik_list = ijk_list[:,[0,2]]
     jk_list = ijk_list[:,[1,2]]
     
-    #for mm in m:
     for mm, _m in enumerate(m):
         mm_list = _m * np.ones([len(Rij), 1], dtype=int)
-        dRij_dRm[:,:,mm] = dRij_dRm_norm(Rij, np.append(ij_list, mm_list, 
-                                         axis=1))
-        dRik_dRm[:,:,mm] = dRij_dRm_norm(Rik, np.append(ik_list, mm_list, 
-                                         axis=1))
-        dRjk_dRm[:,:,mm] = dRij_dRm_norm(Rjk, np.append(jk_list, mm_list,
-                                         axis=1))
+        dRij_dRm[:,:,mm], i_dRij_dRm[:,:,mm], j_dRij_dRm[:,:,mm] = dRij_dRm_norm(Rij, np.append(ij_list, mm_list, 
+                                                                   axis=1))
+        dRik_dRm[:,:,mm], i_dRik_dRm[:,:,mm], k_dRik_dRm[:,:,mm] = dRij_dRm_norm(Rik, np.append(ik_list, mm_list, 
+                                                                   axis=1))
+        dRjk_dRm[:,:,mm], j_dRjk_dRm[:,:,mm], k_dRjk_dRm[:,:,mm] = dRij_dRm_norm(Rjk, np.append(jk_list, mm_list,
+                                                                   axis=1))
         
-    return (dRij_dRm, dRik_dRm, dRjk_dRm)
+    return (dRij_dRm, dRik_dRm, dRjk_dRm,
+            i_dRij_dRm, i_dRik_dRm, j_dRjk_dRm,
+            j_dRij_dRm, k_dRik_dRm, k_dRjk_dRm)
 
 
 ########################### Auxiliary Functions ###############################
@@ -1129,7 +1283,6 @@ def select_rows(data, row_pattern):
 
 ################################### Test ######################################
     
-
 if __name__ == '__main__':
     import time
     from ase.build import bulk
@@ -1145,19 +1298,9 @@ if __name__ == '__main__':
     for a in [5.0]: #, 5.4, 5.8]:
         si = bulk('Si', 'diamond', a=a, cubic=True)
         cell = si.get_cell()
-        #cell[0,1] += 0.2
+        cell[0,1] += 0.2
         si.set_cell(cell)
         print(si.get_cell())
-
-        #bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, atom_weighted=False)
-        #des = bp.calculate(si, system=[14])
-        
-        #print("G:", des['x'][0])
-        #print("Sequence", des['seq'][0])
-        #print("GPrime", des['dxdr'][0])
-        #print("GPrime", des['dxdr'][0,:,2,:])
-        #print("GPrime", des['dxdr'][0,:,4,:])
-        #print(np.einsum('ijklm->klm', des['rdxdr']))
 
         bp = ACSF(symmetry, Rc=Rc, derivative=True, stress=True, cutoff='cosine', atom_weighted=True)
         des = bp.calculate(si, system=[14])
@@ -1165,6 +1308,3 @@ if __name__ == '__main__':
         print("G:", des['x'][0])
         print("Sequence", des['seq'][0])
         print("GPrime", des['dxdr'].shape)
-        #print("GPrime", des['dxdr'][0,:,0,:])
-        #print("GPrime", des['dxdr'][0,:,2,:])
-        #print("GPrime", des['dxdr'][0,:,4,:])
