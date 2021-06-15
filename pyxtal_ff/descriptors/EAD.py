@@ -159,7 +159,7 @@ class EAD:
             Rij = Rj - Ri
             Dij = np.sqrt(np.sum(Rij**2, axis=1))
 
-            d = calculate_eamd(i, self.total_atoms, Rij, Dij, Z, IDs, self.Rc, 
+            d = calculate_eamd(i, self.total_atoms, Ri, Rij, Dij, Z, IDs, self.Rc, 
                                self.parameters, self.derivative, self.stress)
             
             self.d['x'][i] = d['x']
@@ -178,7 +178,7 @@ class EAD:
         return self.d
 
 
-def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
+def calculate_eamd(i, m, ri, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
     """ Calculate the EAD for a center atom i.
     
     Parameters
@@ -187,6 +187,8 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
         The i-th atom center.
     m: int
         The total atoms in the crystal unit cell.
+    ri: array [3]
+        The position of atom i.
     rij: array [j, 3]
         The vector distances of atom i to neighbors j.
     dij: array [j]
@@ -237,7 +239,7 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
     uN = len(unique_js)
     _i = np.where(unique_js==i)[0][0]
 
-    term1, d_term1 = get_xyz(unique_js, rij, ij_list, L, derivative=derivative) # [j, D3], [j, uN, 3, l]
+    term1, d_term1, i_d_term1, j_d_term1 = get_xyz(unique_js, rij, ij_list, L, derivative=derivative) # [j, D3], [j, uN, 3, l]
 
     d0 = dij - Rs[:, np.newaxis]
     d02 = d0 ** 2 # [d1, j]
@@ -253,7 +255,9 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
         dterm0 = np.einsum('k, ijk->ijk', Z, term2_1).reshape([d1*d2, j]) # [d2*d1, j]
         dterm11 = np.einsum('ij, j->ij', dterm0, fc).reshape([d1*d2, j]) # [d2*d1, j]
         dterm1 = np.einsum('ij, jklm->jmilk', dterm11, d_term1) # [j, D3, d2*d1, 3, uN]
-
+        i_dterm1 = np.einsum('ij, jklm->jmilk', dterm11, i_d_term1) 
+        j_dterm1 = np.einsum('ij, jklm->jmilk', dterm11, j_d_term1) 
+        
         dterm20 = np.einsum('ij, ki->jki', term1, dterm0) # [D3, d2*d1, j]
         dterm21 = cutoff.calculate_derivative(dij, Rc) # [j]
         _dterm22 = np.einsum('ij,j->ij', d0, fc) # [d1, j]
@@ -262,23 +266,31 @@ def calculate_eamd(i, m, rij, dij, Z, IDs, Rc, parameters, derivative, stress):
         dterm24 = np.einsum('ijk, jk->ijk', dterm20, dterm23) # [D3, d2*d1, j]
         
         dRij_dRm = np.zeros([j, 3, uN])
+        i_dRij_dRm = np.zeros([j, 3, uN])
+        j_dRij_dRm = np.zeros([j, 3, uN])
         for mm, _m in enumerate(unique_js):
             mm_list = _m * np.ones([j, 1], dtype=int)
-            dRij_dRm[:,:,mm] = dRij_dRm_norm(rij, np.hstack((ij_list, mm_list))) # [j, 3, uN]
+            dRij_dRm[:,:,mm], i_dRij_dRm[:,:,mm], j_dRij_dRm[:,:,mm] = \
+                    dRij_dRm_norm(rij, np.hstack((ij_list, mm_list))) # [j, 3, uN]
 
         dterm2 = np.einsum('ijk, klm->kijlm', dterm24, dRij_dRm) # [j, D3, d2*d1, 3, uN]
-
+        i_dterm2 = np.einsum('ijk, klm->kijlm', dterm24, i_dRij_dRm) # [j, D3, d2*d1, 3, uN]
+        j_dterm2 = np.einsum('ijk, klm->kijlm', dterm24, j_dRij_dRm) # [j, D3, d2*d1, 3, uN]
+        
         dphi_dRm = dterm1 + dterm2 # [j, D3, d2*d1, 3, uN]
+        i_dphi_dRm = i_dterm1 + i_dterm2 
+        j_dphi_dRm = j_dterm1 + j_dterm2 
+        
         dterm = np.einsum('ij, hijkl->ijkl', term.reshape([term.shape[0], d2*d1]), dphi_dRm) # [D3, d2*d1, 3, uN]
-    
+
         if stress:
             _RDXDR = np.zeros([term.shape[0], d2*d1, 3, uN, 3])  # [D3, d2*d1, 3, uN, 3]
             for count, ij in enumerate(ij_list):
-                #_j = ij[1]
                 _j = np.where(unique_js==ij[1])[0][0]
-                tmp = dphi_dRm[count, :, :, :, _j]
-                _RDXDR[:, :, :, _j, :] += np.einsum('ijk,l->ijkl', tmp, rij[count])
-            
+                i_tmp = i_dphi_dRm[count, :, :, :]
+                j_tmp = j_dphi_dRm[count, :, :, :]
+                _RDXDR[:, :, :, _i, :] += np.einsum('ijk,l->ijkl', i_tmp[:,:,:,_i], ri)
+                _RDXDR[:, :, :, _j, :] += np.einsum('ijk,l->ijkl', j_tmp[:,:,:,_j], rij[count]+ri)
             sterm = np.einsum('ij, ijklm->ijklm', term.reshape([term.shape[0], d2*d1]), _RDXDR)
 
     count = 0
@@ -362,14 +374,17 @@ def get_xyz(unique_js, rij, ij_list, L, derivative):
     xyz = np.ones([len(rij), 3, l])
     if derivative:
         dxyz = np.zeros([len(rij), uN, 3, l])
+        i_dxyz = np.zeros([len(rij), uN, 3, l])
+        j_dxyz = np.zeros([len(rij), uN, 3, l])
     
-    dij_dmlist = dij_dm_list(unique_js, ij_list) # [j, uN]
+    dij_dmlist, i_dij_dmlist, j_dij_dmlist = dij_dm_list(unique_js, ij_list) # [j, uN]
 
     for i in range(1, l):
         xyz[:, L_list[i-1][0], i] = RIJ[:, L_list[i-1][1]]
-        if derivative:
-            dxyz[:, :, L_list[i-1][0], i] = np.einsum('ij,ik->ijk', dij_dmlist, 
-                                                      dRIJ[:, L_list[i-1][1]]) # [j, uN], [j, l] -> [j, uN, l]
+        if derivative: # [j, uN], [j, l] -> [j, uN, l]
+            dxyz[:, :, L_list[i-1][0], i] = np.einsum('ij,ik->ijk', dij_dmlist, dRIJ[:, L_list[i-1][1]]) 
+            i_dxyz[:, :, L_list[i-1][0], i] = np.einsum('ij,ik->ijk', i_dij_dmlist, dRIJ[:, L_list[i-1][1]])
+            j_dxyz[:, :, L_list[i-1][0], i] = np.einsum('ij,ik->ijk', j_dij_dmlist, dRIJ[:, L_list[i-1][1]])
 
     result = xyz[:, 0, :] * xyz[:, 1, :] * xyz[:, 2, :] * normalize[:l] # [j, l]
     
@@ -378,12 +393,23 @@ def get_xyz(unique_js, rij, ij_list, L, derivative):
         d_result[:, :, 0, :] = np.einsum('ijk,ik->ijk', dxyz[:, :, 0, :], xyz[:, 1, :]*xyz[:, 2, :])
         d_result[:, :, 1, :] = np.einsum('ijk,ik->ijk', dxyz[:, :, 1, :], xyz[:, 0, :]*xyz[:, 2, :])
         d_result[:, :, 2, :] = np.einsum('ijk,ik->ijk', dxyz[:, :, 2, :], xyz[:, 0, :]*xyz[:, 1, :])
-
         d_result = np.einsum('ijkl,l->ijkl', d_result, normalize[:l])
-        
-        return result, d_result
+
+        i_d_result = np.zeros_like(dxyz) # [j, uN, 3, l]
+        i_d_result[:, :, 0, :] = np.einsum('ijk,ik->ijk', i_dxyz[:, :, 0, :], xyz[:, 1, :]*xyz[:, 2, :])
+        i_d_result[:, :, 1, :] = np.einsum('ijk,ik->ijk', i_dxyz[:, :, 1, :], xyz[:, 0, :]*xyz[:, 2, :])
+        i_d_result[:, :, 2, :] = np.einsum('ijk,ik->ijk', i_dxyz[:, :, 2, :], xyz[:, 0, :]*xyz[:, 1, :])
+        i_d_result = np.einsum('ijkl,l->ijkl', i_d_result, normalize[:l])
+
+        j_d_result = np.zeros_like(dxyz) # [j, uN, 3, l]
+        j_d_result[:, :, 0, :] = np.einsum('ijk,ik->ijk', j_dxyz[:, :, 0, :], xyz[:, 1, :]*xyz[:, 2, :])
+        j_d_result[:, :, 1, :] = np.einsum('ijk,ik->ijk', j_dxyz[:, :, 1, :], xyz[:, 0, :]*xyz[:, 2, :])
+        j_d_result[:, :, 2, :] = np.einsum('ijk,ik->ijk', j_dxyz[:, :, 2, :], xyz[:, 0, :]*xyz[:, 1, :])
+        j_d_result = np.einsum('ijkl,l->ijkl', j_d_result, normalize[:l])
+       
+        return result, d_result, i_d_result, j_d_result
     else:
-        return result, None
+        return result, None, None, None
 
 
 def dij_dm_list(unique_js, ij_list):
@@ -403,22 +429,25 @@ def dij_dm_list(unique_js, ij_list):
     """
     uN = len(unique_js)
     result = np.zeros([len(ij_list), uN])
+    i_result = np.zeros([len(ij_list), uN])
+    j_result = np.zeros([len(ij_list), uN])
 
     ijm_list = np.zeros([len(ij_list), 3, uN], dtype=int)
-    
-    ijm_list[:, -1, :] = unique_js #np.arange(uN)
+    ijm_list[:, -1, :] = unique_js 
     ijm_list[:, :2, :] = np.broadcast_to(ij_list[...,None], ij_list.shape+(uN,))
 
     arr = (ijm_list[:, 2, :] == ijm_list[:, 0, :])
     result[arr] = -1
+    i_result[arr] = -1
 
     arr = (ijm_list[:, 2, :] == ijm_list[:, 1, :])
     result[arr] = 1
+    j_result[arr] = 1
 
-    arr = (ijm_list[:, 0, :] == ijm_list[:, 1, :])  # This condition doesn't seem
-    result[arr] = 0                                 # to contribute anything
+    arr = (ijm_list[:, 0, :] == ijm_list[:, 1, :])  
+    result[arr] = 0                                 
 
-    return result # [j, uN]
+    return result, i_result, j_result # [j, uN]
 
 
 def dRij_dRm_norm(Rij, ijm_list):
@@ -438,16 +467,22 @@ def dRij_dRm_norm(Rij, ijm_list):
         The derivative of pair atoms w.r.t. atom m in x, y, z directions.
     """
     dRij_m = np.zeros([len(Rij), 3])
-
+    i_dRij_m = np.zeros([len(Rij), 3])
+    j_dRij_m = np.zeros([len(Rij), 3])
     R1ij = np.linalg.norm(Rij, axis=1).reshape([len(Rij),1])
+
     l1 = (ijm_list[:,2]==ijm_list[:,0])
     dRij_m[l1, :] = -Rij[l1]/R1ij[l1]
+    i_dRij_m[l1, :] = -Rij[l1]/R1ij[l1]
+
     l2 = (ijm_list[:,2]==ijm_list[:,1])
     dRij_m[l2, :] = Rij[l2]/R1ij[l2]
+    j_dRij_m[l2, :] = Rij[l2]/R1ij[l2]
+
     l3 = (ijm_list[:,0]==ijm_list[:,1])
     dRij_m[l3, :] = 0
     
-    return dRij_m
+    return dRij_m, i_dRij_m, j_dRij_m
 
     
 if __name__ == '__main__':
@@ -468,8 +503,8 @@ if __name__ == '__main__':
         bp = EAD(parameters1, Rc=Rc, derivative=True, stress=True, cutoff='cosine')
         des = bp.calculate(si)
         
-        print("G:", des['x'][0])
+        print("G:", des['x'])
         print("GPrime")
-        print(des['dxdr'][0:5,:,2])
+        print(des['dxdr'])
         #print(des['rdxdr'][0:8, -1, :, :])
         #pprint(np.einsum('ijklm->klm', des['rdxdr']))
