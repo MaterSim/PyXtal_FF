@@ -641,7 +641,7 @@ def parse_traj(structure_file):
         try:
             # PyXtal_FF: XX  YY  ZZ  XY  XZ  YZ
             # ASE      : xx  yy  zz  yz  xz  xy
-            stress = traj.get_stress()
+            stress = traj.get_stress()/units.GPa # eV/A^3 to GPa
             stress = [stress[0], stress[1], stress[2],
                       stress[5], stress[4], stress[3]]
         except:
