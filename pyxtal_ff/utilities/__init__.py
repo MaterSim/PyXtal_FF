@@ -634,6 +634,7 @@ def parse_traj(structure_file):
     from ase.io.trajectory import Trajectory
     data = []
     out_traj = Trajectory(structure_file)
+
     for traj in out_traj:
         structure = sort(traj)
         energy = traj.get_potential_energy()
@@ -641,9 +642,8 @@ def parse_traj(structure_file):
         try:
             # PyXtal_FF: XX  YY  ZZ  XY  XZ  YZ
             # ASE      : xx  yy  zz  yz  xz  xy
-            stress = traj.get_stress()/units.GPa # eV/A^3 to GPa
-            stress = [stress[0], stress[1], stress[2],
-                      stress[5], stress[4], stress[3]]
+            # eV/A^3 to GPa
+            stress = -(traj.get_stress()/units.GPa)[[0, 1, 2, 5, 4, 3]]
         except:
             stress = None
         xjson = {'structure':structure,
@@ -652,4 +652,5 @@ def parse_traj(structure_file):
                  'stress':stress,
                  'group':'random'}
         data.append(xjson)
+
     return data
