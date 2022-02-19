@@ -744,4 +744,4 @@ def parse_dat(structure_files):
                 data.append(xdata)
                 mode = None
 
-    return dataimport os
+    return data

@@ -46,12 +46,11 @@ Run the simulation with `Python` is not recommended for large scale systems. For
 First, follow the steps below to install LAMMPS-MLIAP and python wrapper
 
 ```
-$ git clone https://github.com/macstein/lammps.git
+$ git clone https://github.com/lammps/lammps.git
 $ cd lammps/
-$ git checkout mliap_so3_ver2
 $ cd lammps/src
-$ make yes-snap
-$ make yes-mliap
+$ make yes-ml-snap
+$ make yes-ml-iap
 $ make yes-python
 $ make mpi -j 8 mode=shlib  
 $ make install-python
