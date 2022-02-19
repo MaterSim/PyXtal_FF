@@ -75,7 +75,9 @@ class Database():#MutableSequence):
             self.base_potential = None
 
         if storage:
-            if os.path.isdir(structure_file) or structure_file.find('json') > 0:
+            if os.path.isdir(structure_file):
+                fmt = 'dat'
+            elif structure_file.find('json') > 0:
                 fmt = 'json'
             elif structure_file.find('xyz') > 0:
                 fmt = 'xyz'
@@ -97,6 +99,8 @@ class Database():#MutableSequence):
                 data = parse_ase_db(structure_file)
             elif fmt == 'traj':
                 data = parse_traj(structure_file)
+            elif fmt == 'dat':
+                data = parse_dat(structure_file)
             else:
                 raise NotImplementedError('PyXtal_FF supports only json, vasp-out, and xyz formats')
             print("{:d} structures have been loaded.".format(len(data)))
@@ -599,7 +603,9 @@ def parse_ase_db(db_path, N=None, Random=False):
 
         for i, row in enumerate(db.select()):
             structure = db.get_atoms(row.id)
-            if "stress" in row.data:
+            if "dft_stress" in row.data:
+                stress = row.data["dft_stress"]
+            elif "stress" in row.data:
                 stress = row.data["stress"]
             else:
                 stress = None
@@ -654,3 +660,88 @@ def parse_traj(structure_file):
         data.append(xjson)
 
     return data
+
+def parse_dat(structure_files):
+    import glob
+    data = []
+
+    files = glob.glob(structure_files+'*.dat')
+    for file in files:
+        file_str = file.split('/')
+        lines = open(file, 'r').readlines()
+        if file_str[-1] == 'struct_info_1.dat':
+            group = 'random'
+        elif file_str[-1] in ['struct_info_2.dat', 'struct_info_3.dat']:
+            group = 'no_stress'
+        elif file_str[-1] == 'struct_info_4.dat':
+            group = 'with_stress'
+        elif file_str[-1] == 'struct_info_5.dat':
+            group = 'with_stress'
+
+        for i, line in enumerate(lines):
+            content = line.split()
+
+            if len(content) == 0:
+                if group == 'no_stress':
+                    stress = [0.]*6
+                    structure = Atoms(symbols=atoms, positions=positions, cell=cell, pbc=True)
+                    
+                    xdata = {'structure': structure,
+                             'energy': energy,
+                             'force': forces,
+                             'stress': stress,
+                             'group': group}
+                    data.append(xdata)
+                    mode = None
+                continue
+
+            if content[0] == 'STRUCTURE':
+                cell, atoms, positions, forces = [], [], [], []
+                continue
+
+            elif content[0] == 'CELL':
+                mode = 'stress' if content[1] == 'STRESS' else 'cell'
+                continue
+                
+            elif content[0] == 'ATOMIC':
+                mode = 'position' if content[1] == 'NAME' else 'force'
+                continue
+                
+            elif content[0] == 'TOTAL':
+                mode = 'energy'
+                continue
+
+            if mode == 'energy':
+                energy = float(line)
+
+            elif mode == 'cell':
+                cel = list(map(float, content))
+                cell.append(cel)
+
+            elif mode == 'position':
+                pos = list(map(float, content[1:]))
+                atoms.append(content[0])
+                positions.append(pos)
+
+            elif mode == 'force':
+                force = list(map(float, content[1:]))
+                forces.append(force)
+
+            elif mode == 'stress':
+                # Negative?
+                # Convert to kbar?
+                stress = list(map(float, content))#[[0, 3, 5, 1, 2, 4]]
+                #stress = [stress[0], stress[3], stress[5], stress[1], stress[2], stress[4]]
+                stress = [stress[0]*0.1, stress[3]*0.1, stress[5]*0.1, stress[1]*0.1, stress[2]*0.1, stress[4]*0.1]
+
+                structure = Atoms(symbols=atoms, positions=positions, cell=cell, pbc=True)
+                
+                xdata = {'structure': structure,
+                         'energy': energy,
+                         'force': forces,
+                         'stress': stress,
+                         'group': group}
+                data.append(xdata)
+                mode = None
+
+    return dataimport os

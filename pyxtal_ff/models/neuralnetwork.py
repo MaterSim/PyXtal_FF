@@ -372,8 +372,8 @@ class NeuralNetwork():
         print("    Energy RMSE   {:8.6f}".format(E_mse))
 
         # Plotting the energy results.
-        energy_str = 'Energy: r2({:.4f}), MAE({:.4f} {}/atom)'. \
-                     format(E_r2, E_mae, self.unit)
+        energy_str = 'Energy: r2({:.4f}), MAE({:.4f} {}/atom), {:d} data'. \
+                     format(E_r2, E_mae, self.unit, len(energy))
         plt.title(energy_str)
         plt.scatter(energy, _energy, label='Energy', s=5)
         plt.legend(loc=2)
@@ -399,8 +399,8 @@ class NeuralNetwork():
             length = 'A'
             if self.unit == 'Ha':
                 length == 'Bohr'
-            force_str = 'Force: r2({:.4f}), MAE({:.3f} {}/{})'. \
-                        format(F_r2, F_mae, self.unit, length)
+            force_str = 'Force: r2({:.4f}), MAE({:.3f} {}/{}), {:d} data'. \
+                        format(F_r2, F_mae, self.unit, length, len(force))
             plt.title(force_str)
             plt.scatter(force, _force, s=5, label='Force')
             plt.legend(loc=2)
@@ -425,8 +425,8 @@ class NeuralNetwork():
             print("    Stress RMSE    {:8.6f}".format(S_mse))
 
             # Plotting the stress results.
-            stress_str = 'Stress: r2({:.4f}), MAE({:.3f} GPa)'. \
-                        format(S_r2, S_mae)
+            stress_str = 'Stress: r2({:.4f}), MAE({:.3f} GPa), {:d} data'. \
+                        format(S_r2, S_mae, len(stress))
             plt.title(stress_str)
             plt.scatter(stress, _stress, s=5, label='Stress')
             plt.legend(loc=2)
