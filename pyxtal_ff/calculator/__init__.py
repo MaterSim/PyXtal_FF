@@ -115,11 +115,24 @@ def elastic_properties(C):
     vh = (vv+vr)/2   
     return Kv, Gv, Ev, vv, Kr, Gr, Er, vr, Kh, Gh, Eh, vh
 
-def optimize(atoms, sym=True, box=False, method='FIRE', fmax=0.01, steps=1000, logfile='ase.log'):
+def optimize(atoms, sym=True, box=False, P=0.0, method='FIRE', fmax=0.01, steps=1000, logfile='ase.log'):
+    """
+    Geometry relaxation
+
+    Args:
+        Atoms: ase atoms
+        sym: whether or not fix symmetry
+        box: whether or not relax box
+        P: external pressure in GPa
+        method: optimization method
+        fmax: toleration force
+        steps: maximum number of steps
+        logfile: output of the log file
+    """
     if sym:
         atoms.set_constraint(FixSymmetry(atoms))
     if box:
-        ecf = ExpCellFilter(atoms)
+        ecf = ExpCellFilter(atoms, scalar_pressure=P*units.GPa)
         if method == 'FIRE':
             dyn = FIRE(ecf, logfile=logfile)
         else:
