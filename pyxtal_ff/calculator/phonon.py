@@ -78,7 +78,7 @@ class Phonon(object):
 
         numbers = self._structure.numbers
         s_numbers = []
-        mult = np.linalg.det(self._supercell_matrix)
+        mult = int(round(np.linalg.det(self._supercell_matrix)))
         atom_id = 0
         disps = cell_with_disp.get_positions()
         for id, disp in enumerate(disps):
