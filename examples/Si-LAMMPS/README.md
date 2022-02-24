@@ -47,7 +47,6 @@ First, follow the steps below to install LAMMPS-MLIAP and python wrapper
 
 ```
 $ git clone https://github.com/lammps/lammps.git
-$ cd lammps/
 $ cd lammps/src
 $ make yes-ml-snap
 $ make yes-ml-iap
