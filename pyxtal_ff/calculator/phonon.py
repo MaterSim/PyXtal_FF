@@ -56,6 +56,7 @@ class Phonon(object):
         for i, cell in enumerate(cells_with_disp):
             if self._show_progress:
                 print('displacement {} / {}'.format(i+1, len(cells_with_disp)))
+            print(cell)
             forces = self.get_forces(cell)
             data_set['first_atoms'][i]['forces'] = forces
 
@@ -65,6 +66,40 @@ class Phonon(object):
         self._data_set = data_set
 
         return self._force_constants
+
+    def get_displaced_atoms(self):
+        """
+        Get the dispaced structures for further process
+
+        Return: 
+        A list of ASE atoms object
+        """
+
+        self.phonon = Phonopy(self._structure,
+                              self._supercell_matrix,
+                              primitive_matrix = self._primitive_matrix,
+                              is_symmetry = self._symmetrize)
+        self.phonon.get_displacement_dataset()
+        self.phonon.generate_displacements(distance=self._d) 
+        cells_with_disp = self.phonon.get_supercells_with_displacements()
+
+        supercells = []
+        numbers = self._structure.numbers
+        for cell_with_disp in cells_with_disp:
+            s_numbers = []
+            mult = int(round(np.linalg.det(self._supercell_matrix)))
+            atom_id = 0
+            disps = cell_with_disp.get_positions()
+            for id, disp in enumerate(disps):
+                s_numbers.append(numbers[atom_id])
+                if id%mult == (mult-1):
+                    atom_id += 1
+            
+            cell = self._structure.cell.dot(self._supercell_matrix)
+            supercell = Atoms(s_numbers, positions=disps, cell=cell, pbc=[1,1,1])
+            #supercell.write('tmp.vasp', format='vasp', vasp5=True, direct=True)
+            supercells.append(supercell)
+        return supercells
 
     def get_forces(self, cell_with_disp):
         """
