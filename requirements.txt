@@ -8,3 +8,4 @@ spglib>=1.12.1
 monty>=3.0.2
 seekpath>=1.9.5
 numba>=0.50.1
+pymatgen==2022.3.7
