@@ -6,7 +6,6 @@ from time import time
 from optparse import OptionParser
 from ase.build import bulk
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
-from ase.md.verlet import VelocityVerlet
 from ase.md.langevin import Langevin
 from ase import units
 from pyxtal_ff import PyXtal_FF
