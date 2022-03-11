@@ -6,10 +6,11 @@ on:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8]
+        python-version: [ 3.7, 3.8 ]
+        os: [ ubuntu-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v2
@@ -28,10 +29,11 @@ jobs:
           python -m pytest pyxtal_ff/test_all.py
 
   notebooks:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8]
+        python-version: [ 3.7, 3.8 ]
+        os: [ ubuntu-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v2
@@ -47,4 +49,4 @@ jobs:
           pip install .
       - name: Test notebooks with pytest
         run: |
-          pytest --nbmake ./examples
+          pytest --nbmake ./examples --nbmake-timeout=3600
