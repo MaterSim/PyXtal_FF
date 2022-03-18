@@ -13,6 +13,39 @@ Define the source of data
 
     TrainData = "pyxtal_ff/datasets/SiO2/OUTCAR_SiO2"
     
+At the moment, we accept the various formats:
+
+- ``ase.db``
+- ``json``
+- ``OUTCAR``
+ 
+In principle, one can easily write a utility function to follow the style as shown in the `utility section <https://pyxtal-ff.readthedocs.io/en/latest/pyxtal_ff.utilities.html#pyxtal_ff.utilities.parse_json>`_.
+
+Among all different formats, we recommend the use of `ase.db <https://wiki.fysik.dtu.dk/ase/ase/db/db.html>`_. Following ase db, you use need to add the following additional tags to each ``atoms`` object,
+
+.. code-block:: Python
+
+ 
+    from ase.db import connect
+
+    # Suppose you have the following variables
+    # - struc: ase atoms objects
+    # - eng: total DFT energy
+    # - forces: DFT Forces: N*3 array
+    # - stress: DFT Stress: 1*6 stress [in GPa, xx, yy, zz, xy, xz, yz]
+    # - db_name: the filename to store the information and pass to pyxtal_ff
+    
+    data = {'dft_energy': eng,      
+            'dft_force': forces,  
+            'dft_stress': stress,    
+            #'group': group,
+           }
+
+    with connect(db_name) as db:  
+        db.write(struc, data=data)
+        
+Note that different codes arrange the stress tensor in different order and unit. For PyXtal\_FF, we strictly use ``GPa`` and the order of ``[xx, yy, zz, xy, xz, yz]``.
+    
 Choosing the descriptor
 ------------------------
 Four types of descriptors are available (see `Atomic Descriptors <_background.html#atomic-descriptors>`_). 
