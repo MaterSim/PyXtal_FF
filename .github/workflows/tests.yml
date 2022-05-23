@@ -28,25 +28,25 @@ jobs:
         run: |
           python -m pytest pyxtal_ff/test_all.py
 
-  notebooks:
-    strategy:
-      matrix:
-        python-version: [ 3.7, 3.8 ]
-        os: [ ubuntu-latest, windows-latest ]
-    runs-on: ${{ matrix.os }}
+          #notebooks:
+          #  strategy:
+          #    matrix:
+          #      python-version: [ 3.7, 3.8 ]
+          #      os: [ ubuntu-latest, windows-latest ]
+          #  runs-on: ${{ matrix.os }}
 
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          python -m pip install -U pip
-          pip install pytest nbmake
-          pip install -r requirements.txt
-          pip install .
-      - name: Test notebooks with pytest
-        run: |
-          pytest --nbmake ./examples --nbmake-timeout=3600
+          #  steps:
+          #    - uses: actions/checkout@v2
+          #    - name: Set up Python ${{ matrix.python-version }}
+          #      uses: actions/setup-python@v2
+          #      with:
+          #        python-version: ${{ matrix.python-version }}
+          #    - name: Install dependencies
+          #      run: |
+          #        python -m pip install -U pip
+          #        pip install pytest nbmake
+          #        pip install -r requirements.txt
+          #        pip install .
+          #    - name: Test notebooks with pytest
+          #      run: |
+          #        pytest --nbmake ./examples --nbmake-timeout=3600
