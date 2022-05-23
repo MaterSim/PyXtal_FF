@@ -616,31 +616,32 @@ class NeuralNetwork():
             scale = (1 - 0) / (_drange[:, 1] - _drange[:, 0])
 
             e = np.where(np.array(descriptor['elements'])==element)[0]
-            ee0 = np.where(descriptor['seq'][:,0]==e[0])[0][0]
-            ee1 = np.where(descriptor['seq'][:,0]==e[-1])[0][-1]
+            if len(e) > 0:
+                ee0 = np.where(descriptor['seq'][:,0]==e[0])[0][0]
+                ee1 = np.where(descriptor['seq'][:,0]==e[-1])[0][-1]
 
-            i_size = list(descriptor['elements']).count(element) #number of atoms in type i
-            m_size = ee1-ee0+1# number of pairs
+                i_size = list(descriptor['elements']).count(element) #number of atoms in type i
+                m_size = ee1-ee0+1# number of pairs
 
-            d['x'][element] = torch.zeros([i_size, no_of_descriptors])
-            d['dxdr'][element] = torch.zeros([m_size, no_of_descriptors, 3], dtype=torch.float64) ####
-            d['rdxdr'][element] = torch.zeros([i_size, no_of_descriptors, 6])
+                d['x'][element] = torch.zeros([i_size, no_of_descriptors])
+                d['dxdr'][element] = torch.zeros([m_size, no_of_descriptors, 3], dtype=torch.float64) ####
+                d['rdxdr'][element] = torch.zeros([i_size, no_of_descriptors, 6])
 
-            if e.size > 0:
-                des = 0 + np.einsum('j,ij->ij', scale, (descriptor['x'][e[0]:e[-1]+1] - np.expand_dims(_drange[:, 0], 0)))
-                desp = np.einsum('j,ijk->ijk', scale, descriptor['dxdr'][ee0:ee1+1])
-                dess = np.einsum('j,ijk->ijk', scale, descriptor['rdxdr'][e[0]:e[-1]+1])
-                
-                d['x'][element] += torch.from_numpy(des)
-                d['seq'][element] = deepcopy(descriptor['seq'][ee0:ee1+1])
+                if e.size > 0:
+                    des = 0 + np.einsum('j,ij->ij', scale, (descriptor['x'][e[0]:e[-1]+1] - np.expand_dims(_drange[:, 0], 0)))
+                    desp = np.einsum('j,ijk->ijk', scale, descriptor['dxdr'][ee0:ee1+1])
+                    dess = np.einsum('j,ijk->ijk', scale, descriptor['rdxdr'][e[0]:e[-1]+1])
+                    
+                    d['x'][element] += torch.from_numpy(des)
+                    d['seq'][element] = deepcopy(descriptor['seq'][ee0:ee1+1])
 
-                if self.unit == 'eV':  
-                    d['dxdr'][element] += torch.from_numpy(desp)
-                    d['rdxdr'][element] += torch.from_numpy(dess)
-                else:
-                    d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
-                    d['rdxdr'][element] += torch.from_numpy(0.529177**3*desp)
-            d['seq'][element][:, 0] -= min(d['seq'][element][:, 0]) #adjust the initial position
+                    if self.unit == 'eV':  
+                        d['dxdr'][element] += torch.from_numpy(desp)
+                        d['rdxdr'][element] += torch.from_numpy(dess)
+                    else:
+                        d['dxdr'][element] += torch.from_numpy(0.529177 * desp)
+                        d['rdxdr'][element] += torch.from_numpy(0.529177**3*desp)
+                d['seq'][element][:, 0] -= min(d['seq'][element][:, 0]) #adjust the initial position
 
         x = d['x']
         if bforce:
