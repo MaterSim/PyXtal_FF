@@ -56,6 +56,7 @@ class PyXtalFFCalculator(Calculator):
 
         # pyxtal_ff and lammps uses: xx, yy, zz, xy, xz, yz
         # ase uses: xx, yy, zz, yz, xz, xy
+        # vasp uses: xx, yy, zz, xy, yz, zx
         # from eV/A^3 to GPa 
         self.results['stress_zbl'] = base_stress/units.GPa
         self.results['energy_zbl'] = base_energy

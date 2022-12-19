@@ -141,7 +141,7 @@ class PR():
                     _force.append(Force[m])
 
             if self.stress_coefficient and (db[str(i)]['group'] in self.stress_group):
-                true_stress = np.array(db[str(i)]['stress'])#.flat[[0,3,5,3,1,4,5,4,2]]
+                true_stress = np.ravel(db[str(i)]['stress'])#.flat[[0,3,5,3,1,4,5,4,2]]
                 Stress = np.ravel(Stress)
                 for m in range(len(true_stress)):
                     stress.append(true_stress[m])
@@ -707,6 +707,11 @@ class PR():
         
         for i in range(self.no_of_structures):
             data = db[str(i)]
+            #for key in data.keys():
+            #    if key in ['x', 'dxdr', 'rdxdr', 'seq', 'force']:
+            #        print(key, data[key].shape)
+            #    else:
+            #        print(key, data[key])
             #energy = np.array([data['energy']/len(data['elements'])])
             energy = np.array([data['energy']])
             w_energy = np.array([1.])
@@ -716,7 +721,7 @@ class PR():
                 w_force = np.array([self.force_coefficient]*len(force))
 
                 if self.stress_coefficient and (data['group'] in self.stress_group):     # energy + forces + stress
-                    stress = np.array(data['stress'])#.flat[[0,3,5,3,1,4,5,4,2]]
+                    stress = np.array(data['stress']).ravel()#.flat[[0,3,5,3,1,4,5,4,2]]
                     w_stress = np.array([self.stress_coefficient]*len(stress))
                     self.stress_components += 6
                     
