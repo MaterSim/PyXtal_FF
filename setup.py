@@ -38,7 +38,7 @@ setup(
         'numpy>=1.13.3', 
         'scipy>=1.6.1',
         'matplotlib>=2.0.0',
-        'ase>=3.20.1',
+        'ase>=3.22.1',
         'torch>=1.10.2',
         'phonopy==2.3.2', #tmp fix
         'spglib>=1.12.1',
