@@ -53,7 +53,7 @@ class PyXtal_FF():
                     {'lmax': 3}
                 + SO3
                     {'nmax': 1, 'lmax': 3, 'alpha': 2.0}
-                + SNAP
+                + SNAP (not in parameters, but in descriptors dict directly)
                     {'weights': {'Si': 1.0, 'O': 2.0},
                      'Rc': {'Si': 4.0, 'O': 5.0}
             - zbl: dict
