@@ -133,7 +133,7 @@ class Database():#MutableSequence):
             
         if _cpu == 1:
             for i, index in enumerate(lists):
-                d = compute_descriptor(function, self.base_potential, data[index])
+                d = compute_descriptor(function, data[index], base_potential=self.base_potential)
                 self.append(d)
                 self.length += 1
                 print('\r{:4d} out of {:4d}'.format(i+1, len(lists)), flush=True, end='')
@@ -143,7 +143,7 @@ class Database():#MutableSequence):
             _data = [data[item] for item in lists]
             failed_ids = []
             with Pool(_cpu) as p:
-                func = partial(compute_descriptor, function, self.base_potential)
+                func = partial(compute_descriptor, function, base_potential=self.base_potential)
                 for i, d in enumerate(p.imap_unordered(func, _data)):
                     try:
                         self.append(d)
@@ -157,7 +157,7 @@ class Database():#MutableSequence):
 
             # compute the missing structures in parallel calcs
             for id in failed_ids: 
-                d = compute_descriptor(function, self.base_potential , _data[id])
+                d = compute_descriptor(function, _data[id], base_potential=self.base_potential)
                 self.append(d)
                 self.length += 1
 
@@ -256,7 +256,7 @@ class Database():#MutableSequence):
     '''
 
 
-def compute_descriptor(function, base_potential, data):
+def compute_descriptor(function, data, base_potential=None):
     """ Compute descriptor for one structure. """
 
     if function['type'] in ['BehlerParrinello', 'ACSF']:
