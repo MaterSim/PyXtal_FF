@@ -23,9 +23,9 @@ copyright = '2019-, Qiang Zhu, Howard Yanxon, David Zagaceta'
 author = 'Qiang Zhu, Howard Yanxon, David Zagaceta'
 
 # The short X.Y version
-version = '0.2.2'
+version = '0.2.3'
 # The full version, including alpha/beta/rc tags
-release = 'Dec 2022'
+release = 'June 2023'
 
 
 # -- General configuration ---------------------------------------------------
