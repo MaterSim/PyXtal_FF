@@ -1,6 +1,6 @@
 from __future__ import division
 import numpy as np
-from ase.neighborlist import NeighborList, NewPrimitiveNeighborList
+from ase.neighborlist import NeighborList, PrimitiveNeighborList
 from optparse import OptionParser
 from scipy.special import sph_harm, spherical_in
 from ase import Atoms
@@ -32,8 +32,8 @@ class SO3:
         self._type = "SO3"
         self.cutoff_function = cutoff_function
         self.weight_on = weight_on
-        self.PrimitiveNeighborList = primitive
-        return
+        self.primitive = primitive
+        #return
 
     def __str__(self):
         s = "SO3 descriptor with Cutoff: {:6.3f}".format(self.rcut)
@@ -180,7 +180,7 @@ class SO3:
         '''
         attrs = list(vars(self).keys())
         for attr in attrs:
-            if attr not in {'_nmax', '_lmax', '_rcut', '_alpha', '_derivative', '_stress', '_cutoff_function', 'weight_on'}:
+            if attr not in {'_nmax', '_lmax', '_rcut', '_alpha', '_derivative', '_stress', '_cutoff_function', 'weight_on', 'primitive'}:
                 delattr(self, attr)
         return
 
@@ -324,11 +324,12 @@ class SO3:
             atom_ids = range(len(atoms))
 
         cutoffs = [self.rcut/2]*len(atoms)
-        if self.PrimitiveNeighborList:
-            nl = NewPrimitiveNeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
+        if self.primitive:
+            nl = PrimitiveNeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
+            nl.build(atoms.pbc, atoms.cell, atoms.get_scaled_positions())
         else:
             nl = NeighborList(cutoffs, self_interaction=False, bothways=True, skin=0.0)
-        nl.update(atoms)
+            nl.update(atoms)
 
         center_atoms = []
         neighbors = []
