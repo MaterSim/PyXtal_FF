@@ -81,7 +81,7 @@ class PR():
             self.d_max = db['0']['x'].shape[1]
         else:
             # d_max has to be less or equal than total descriptors.
-            assert self.d_max <= len(db['0']['x'].shape[1]),\
+            assert self.d_max <= db['0']['x'].shape[1],\
                     "d_max is larger than total descriptors."
 
         if self.stress_coefficient and (self.stress_group is None):

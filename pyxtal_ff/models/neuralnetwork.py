@@ -499,7 +499,9 @@ class NeuralNetwork():
                         for _m in range(n_atoms):
                             rows = np.where(seq[element][:,1]==_m)[0]
                             tmp[seq[element][rows, 0], _m, :, :] += dxdr[element][rows, :, :]
-                        _force -= torch.einsum("ik, ijkl->jl", dedx[element], torch.from_numpy(tmp)) 
+                        tmp_torch = torch.from_numpy(tmp)
+                        tmp_torch = tmp_torch.to(self.device)
+                        _force -= torch.einsum("ik, ijkl->jl", dedx[element], tmp_torch)
 
                     if self.stress_coefficient and (group in self.stress_group):
                         if self.force_coefficient is None:

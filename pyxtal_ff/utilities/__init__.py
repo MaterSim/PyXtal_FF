@@ -133,7 +133,7 @@ class Database():#MutableSequence):
             
         if _cpu == 1:
             for i, index in enumerate(lists):
-                d = self.compute(function, data[index])
+                d = compute_descriptor(function, data[index], base_potential=self.base_potential)
                 self.append(d)
                 self.length += 1
                 print('\r{:4d} out of {:4d}'.format(i+1, len(lists)), flush=True, end='')
@@ -143,7 +143,7 @@ class Database():#MutableSequence):
             _data = [data[item] for item in lists]
             failed_ids = []
             with Pool(_cpu) as p:
-                func = partial(self.compute, function)
+                func = partial(compute_descriptor, function, base_potential=self.base_potential)
                 for i, d in enumerate(p.imap_unordered(func, _data)):
                     try:
                         self.append(d)
@@ -157,13 +157,14 @@ class Database():#MutableSequence):
 
             # compute the missing structures in parallel calcs
             for id in failed_ids: 
-                d = self.compute(function, _data[id])
+                d = compute_descriptor(function, _data[id], base_potential=self.base_potential)
                 self.append(d)
                 self.length += 1
 
         print(f"\nSaving descriptor-feature data to {self.name}.dat\n")
 
   
+    '''
     def compute(self, function, data):
         """ Compute descriptor for one structure to the database. """
 
@@ -252,9 +253,10 @@ class Database():#MutableSequence):
         d['group'] = data['group']
 
         return d
+    '''
 
 
-def compute_descriptor(function, structure):
+def compute_descriptor(function, data, base_potential=None):
     """ Compute descriptor for one structure. """
 
     if function['type'] in ['BehlerParrinello', 'ACSF']:
@@ -263,7 +265,7 @@ def compute_descriptor(function, structure):
                  function['Rc'], 
                  function['force'],
                  function['stress'],
-                 function['cutoff'], False).calculate(structure)
+                 function['cutoff'], False).calculate(data['structure'])
 
     elif function['type'] in ['wACSF', 'wacsf']:
         from pyxtal_ff.descriptors.ACSF import ACSF
@@ -271,7 +273,7 @@ def compute_descriptor(function, structure):
                  function['Rc'], 
                  function['force'],
                  function['stress'],
-                 function['cutoff'], True).calculate(structure)
+                 function['cutoff'], True).calculate(data['structure'])
 
     elif function['type'] in ['SO4', 'Bispectrum', 'bispectrum']:
         from pyxtal_ff.descriptors.SO4 import SO4_Bispectrum
@@ -280,7 +282,7 @@ def compute_descriptor(function, structure):
                            derivative=True,
                            stress=True,
                            normalize_U=function['parameters']['normalize_U'],
-                           cutoff_function=function['cutoff']).calculate(structure)
+                           cutoff_function=function['cutoff']).calculate(data['structure'])
 
     elif function['type'] in ['SO3', 'SOAP', 'soap']:
         from pyxtal_ff.descriptors.SO3 import SO3
@@ -288,14 +290,14 @@ def compute_descriptor(function, structure):
                 function['parameters']['lmax'],
                 function['Rc'],
                 derivative=True,
-                stress=True).calculate(structure)
+                stress=True).calculate(data['structure'])
 
     elif function['type'] in ['EAD', 'ead']:
             from pyxtal_ff.descriptors.EAD import EAD
             d = EAD(function['parameters'],
                      function['Rc'],
                      True, True,
-                     function['cutoff']).calculate(structure)
+                     function['cutoff']).calculate(data['structure'])
 
     elif function['type'] in ['SNAP', 'snap']:
         from pyxtal_ff.descriptors.SNAP import SO4_Bispectrum
@@ -305,7 +307,7 @@ def compute_descriptor(function, structure):
                            derivative=True,
                            stress=True,
                            normalize_U=function['parameters']['normalize_U'],
-                           cutoff_function=function['cutoff']).calculate(structure)
+                           cutoff_function=function['cutoff']).calculate(data['structure'])
 
     else:
         msg = f"{function['type']} is not implemented"
@@ -320,6 +322,19 @@ def compute_descriptor(function, structure):
             rdxdr[_m, :, :, :] += np.einsum('ijkl->jkl', d['rdxdr'][ids, :, :, :])
         d['rdxdr'] = rdxdr.reshape([N, L, 9])[:, :, [0, 4, 8, 1, 2, 5]]
  
+    if base_potential:
+        base_d = base_potential.calculate(data['structure'])
+    else:
+        base_d = {'energy': 0., 'force': 0., 'stress': 0.}
+
+    d['energy'] = np.asarray(data['energy'] - base_d['energy'])
+    d['force'] = np.asarray(data['force']) - base_d['force']
+    if data['stress'] is not None:
+        d['stress'] = np.asarray(data['stress']) - base_d['stress'] / units.GPa
+    else:
+        d['stress'] = data['stress']
+    d['group'] = data['group']
+
     return d
 
 
