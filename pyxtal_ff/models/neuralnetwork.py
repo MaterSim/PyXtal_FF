@@ -308,13 +308,7 @@ class NeuralNetwork():
                     _Energy += _e
                     if self.force_coefficient:
                         dedx = torch.autograd.grad(_e, _x)[0]
-                        _dxdr = value['dxdr'][element]
-
-                        tmp = np.zeros([len(value['x'][element]), n_atoms, value['x'][element].shape[1], 3])
-                        for _m in range(n_atoms):
-                            rows = np.where(value['seq'][element][:,1]==_m)[0]
-                            tmp[value['seq'][element][rows, 0], _m, :, :] += _dxdr[rows, :, :]
-                        _Force -= torch.einsum("ik, ijkl->jl", dedx, torch.from_numpy(tmp)) 
+                        _Force -= torch.einsum("ik, ijkl->jl", dedx, value['dxdr'][element]) 
 
                     if self.stress_coefficient and (data2['group'] in self.stress_group):
                         if self.force_coefficient is None:
@@ -495,11 +489,7 @@ class NeuralNetwork():
 
                     if self.force_coefficient:
                         dedx[element] = torch.autograd.grad(_energy, _x, create_graph=True)[0]
-                        tmp = np.zeros([len(x[element]), n_atoms, x[element].shape[1], 3])
-                        for _m in range(n_atoms):
-                            rows = np.where(seq[element][:,1]==_m)[0]
-                            tmp[seq[element][rows, 0], _m, :, :] += dxdr[element][rows, :, :]
-                        _force -= torch.einsum("ik, ijkl->jl", dedx[element], torch.from_numpy(tmp)) 
+                        _force -= torch.einsum("ik, ijkl->jl", dedx[element], dxdr[element]) 
 
                     if self.stress_coefficient and (group in self.stress_group):
                         if self.force_coefficient is None:
@@ -1019,6 +1009,20 @@ class NeuralNetwork():
                     #d['seq'][element][:, 0] -= torch.min(d['seq'][element][:, 0]) #adjust the initial position
                         d['seq'][element][:, 0] -= np.min(d['seq'][element][:, 0]) #adjust the initial position
                 
+                x, dxdr, seq = d['x'], d['dxdr'], d['seq']
+                n_atoms = sum(len(value) for value in x.values())
+                new_dxdr = {}
+                for element in x.keys():
+                    if x[element].nelement() > 0:
+                        tmp = np.zeros([len(x[element]), n_atoms, x[element].shape[1], 3])
+                        for _m in range(n_atoms):
+                            rows = np.where(seq[element][:,1]==_m)[0]
+                            tmp[seq[element][rows, 0], _m, :, :] += dxdr[element][rows, :, :]
+                        new_dxdr[element] = torch.from_numpy(tmp)
+                    else:
+                        new_dxdr[element] = torch.empty((30,3), dtype=torch.float)
+                d['dxdr'] = new_dxdr
+
                 db2[str(i)] = d
                 
             db1.close()
